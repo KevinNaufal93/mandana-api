@@ -29,7 +29,4 @@ export const envValidationSchema = Joi.object({
 
   // Public base URL for media — dev: http://localhost:9000/<bucket>, prod: CDN base
   MEDIA_PUBLIC_URL: Joi.string().required(),
-
-  SEED_ADMIN_EMAIL: Joi.string().email().default('admin@mandana.com'),
-  SEED_ADMIN_PASSWORD: Joi.string().min(8).default('Admin1234!'),
 });

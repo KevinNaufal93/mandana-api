@@ -75,7 +75,9 @@ export class HomepageService {
           bedrooms: p.bedrooms,
           bathrooms: p.bathrooms,
           areaSqm: p.areaSqm,
+          area: p.area,
           city: p.city,
+          province: p.province,
           propertyType: p.propertyType
             ? { id: p.propertyType.id, name: p.propertyType.name, slug: p.propertyType.slug }
             : null,

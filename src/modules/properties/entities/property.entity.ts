@@ -57,8 +57,14 @@ export class Property extends BaseEntity {
   @Column({ type: 'varchar', length: 500, nullable: true })
   address!: string | null;
 
+  @Column({ type: 'varchar', length: 150, nullable: true })
+  area!: string | null;
+
   @Column({ type: 'varchar', length: 100, nullable: true })
   city!: string | null;
+
+  @Column({ type: 'varchar', length: 100, nullable: true })
+  province!: string | null;
 
   @Column({ type: 'decimal', precision: 9, scale: 6, nullable: true })
   latitude!: number | null;
