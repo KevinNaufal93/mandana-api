@@ -1,6 +1,7 @@
 import { NestFactory, Reflector } from '@nestjs/core';
 import {
   ClassSerializerInterceptor,
+  Logger,
   ValidationPipe,
   VersioningType,
 } from '@nestjs/common';
@@ -9,6 +10,8 @@ import helmet from 'helmet';
 import { AppModule } from './app.module';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import { TransformInterceptor } from './common/interceptors/transform.interceptor';
+
+const logger = new Logger('Bootstrap');
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -52,8 +55,8 @@ async function bootstrap() {
 
   const port = process.env.PORT ?? 3000;
   await app.listen(port);
-  console.log(`Application running on http://localhost:${port}`);
-  console.log(`Swagger docs at  http://localhost:${port}/docs`);
+  logger.log(`Application running on http://localhost:${port}`);
+  logger.log(`Swagger docs at  http://localhost:${port}/docs`);
 
   app.enableShutdownHooks();
 }

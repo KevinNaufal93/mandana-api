@@ -1,6 +1,8 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { Inject, Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
+import type { Cache } from 'cache-manager';
 import * as bcrypt from 'bcrypt';
 import { UsersService } from '../users/users.service';
 import { JwtPayload } from './interfaces/jwt-payload.interface';
@@ -12,6 +14,7 @@ export class AuthService {
     private readonly usersService: UsersService,
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
+    @Inject(CACHE_MANAGER) private readonly cacheManager: Cache,
   ) {}
 
   async login(email: string, password: string) {
@@ -31,7 +34,25 @@ export class AuthService {
   }
 
   async logout(userId: string) {
-    await this.usersService.updateRefreshToken(userId, null);
+    const ttlMs = this.parseDurationMs(
+      this.configService.getOrThrow<string>('jwt.accessExpiresIn'),
+    );
+    await Promise.all([
+      this.usersService.updateRefreshToken(userId, null),
+      this.cacheManager.set(`blacklist:${userId}`, Date.now(), ttlMs),
+    ]);
+  }
+
+  private parseDurationMs(duration: string): number {
+    const match = duration.match(/^(\d+)([smhd])$/);
+    if (!match) return 900_000;
+    const multipliers: Record<string, number> = {
+      s: 1_000,
+      m: 60_000,
+      h: 3_600_000,
+      d: 86_400_000,
+    };
+    return parseInt(match[1]) * multipliers[match[2]];
   }
 
   private async issueTokens(user: User) {

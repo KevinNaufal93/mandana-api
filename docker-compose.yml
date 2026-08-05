@@ -16,16 +16,66 @@ services:
       timeout: 5s
       retries: 5
 
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  minio:
+    image: minio/minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${S3_ACCESS_KEY}
+      MINIO_ROOT_PASSWORD: ${S3_SECRET_KEY}
+    volumes:
+      - minio_data:/data
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  createbuckets:
+    image: minio/mc
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+        mc alias set local http://minio:9000 ${S3_ACCESS_KEY} ${S3_SECRET_KEY};
+        mc mb --ignore-existing local/${S3_BUCKET};
+        mc anonymous set download local/${S3_BUCKET};
+        echo 'Bucket ready';
+      "
+
   api:
     build: .
     restart: unless-stopped
     env_file: .env
     environment:
       DATABASE_HOST: postgres
+      REDIS_HOST: redis
+      S3_ENDPOINT: http://minio:9000
     ports:
       - "${PORT:-3000}:3000"
     depends_on:
       postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
         condition: service_healthy
 
   # Optional: lightweight DB browser — remove in production
@@ -39,3 +89,5 @@ services:
 
 volumes:
   postgres_data:
+  redis_data:
+  minio_data:

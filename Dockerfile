@@ -2,7 +2,7 @@
 FROM node:22-alpine AS deps
 WORKDIR /app
 COPY package*.json ./
-RUN npm ci
+RUN npm install --legacy-peer-deps
 
 # ─── Stage 2: Build ───────────────────────────────────────────────────────────
 FROM node:22-alpine AS build
@@ -20,7 +20,7 @@ RUN addgroup -S appgroup && adduser -S appuser -G appgroup
 
 # Production deps only
 COPY package*.json ./
-RUN npm ci --omit=dev && npm cache clean --force
+RUN npm install --omit=dev --legacy-peer-deps && npm cache clean --force
 
 COPY --from=build /app/dist ./dist
 
