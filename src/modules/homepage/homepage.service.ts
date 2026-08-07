@@ -62,28 +62,7 @@ export class HomepageService {
           ? this.mediaService.buildImageDto(c.coverMediaAsset)
           : null,
       })),
-      recommendations: recs.map((r) => {
-        const p = r.property;
-        const cover = p.images?.find((img) => img.isCover) ?? p.images?.[0];
-        return {
-          id: p.id,
-          slug: p.slug,
-          title: p.title,
-          listingType: p.listingType,
-          price: p.price,
-          currency: p.currency,
-          bedrooms: p.bedrooms,
-          bathrooms: p.bathrooms,
-          areaSqm: p.areaSqm,
-          area: p.area,
-          city: p.city,
-          province: p.province,
-          propertyType: p.propertyType
-            ? { id: p.propertyType.id, name: p.propertyType.name, slug: p.propertyType.slug }
-            : null,
-          cover: cover ? { url: cover.url, alt: cover.alt } : null,
-        };
-      }),
+      recommendations: recs.map((r) => this.mapRecommendation(r)),
     };
 
     await this.cache.set(payload);
@@ -100,10 +79,36 @@ export class HomepageService {
     return saved;
   }
 
-  async getRecommendations(): Promise<HomepageRecommendation[]> {
-    return this.recRepo.find({
-      relations: { property: true },
+  async getRecommendations() {
+    const recs = await this.recRepo.find({
+      relations: { property: { images: true, propertyType: true } },
       order: { sortOrder: 'ASC' },
     });
+    return recs.map((r) => this.mapRecommendation(r));
+  }
+
+  /** Shared shape for a recommended property — public homepage + admin list. */
+  private mapRecommendation(r: HomepageRecommendation) {
+    const p = r.property;
+    const cover = p.images?.find((img) => img.isCover) ?? p.images?.[0];
+    return {
+      id: p.id,
+      slug: p.slug,
+      title: p.title,
+      listingType: p.listingType,
+      price: p.price,
+      currency: p.currency,
+      bedrooms: p.bedrooms,
+      bathrooms: p.bathrooms,
+      areaSqm: p.areaSqm,
+      area: p.area,
+      city: p.city,
+      province: p.province,
+      sortOrder: r.sortOrder,
+      propertyType: p.propertyType
+        ? { id: p.propertyType.id, name: p.propertyType.name, slug: p.propertyType.slug }
+        : null,
+      cover: cover ? { url: cover.url, alt: cover.alt } : null,
+    };
   }
 }
