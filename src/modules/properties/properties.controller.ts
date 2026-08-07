@@ -16,6 +16,7 @@ import {
 import { FileInterceptor } from '@nestjs/platform-express';
 import {
   ApiBearerAuth,
+  ApiBody,
   ApiConsumes,
   ApiOperation,
   ApiTags,
@@ -100,6 +101,18 @@ export class PropertiesAdminController {
   @Post(':id/images')
   @ApiOperation({ summary: 'Upload and attach an image to a property' })
   @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      required: ['file'],
+      properties: {
+        file: { type: 'string', format: 'binary', description: 'Image file (JPEG, PNG, or WebP, max 20 MB)' },
+        alt: { type: 'string', description: 'Alt text for accessibility' },
+        sortOrder: { type: 'integer', default: 0 },
+        isCover: { type: 'boolean', default: false, description: 'Marks as cover; clears existing cover' },
+      },
+    },
+  })
   @UseInterceptors(FileInterceptor('file'))
   addImage(
     @Param('id', ParseUUIDPipe) id: string,

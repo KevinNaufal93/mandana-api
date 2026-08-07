@@ -11,7 +11,7 @@ import {
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { ApiBearerAuth, ApiConsumes, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiBody, ApiConsumes, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { UserRole } from '../users/enums/user-role.enum';
 import { MediaService } from './media.service';
@@ -27,6 +27,17 @@ export class MediaController {
   @Post('upload')
   @ApiOperation({ summary: 'Upload an image and generate responsive variants' })
   @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      required: ['file', 'purpose'],
+      properties: {
+        file: { type: 'string', format: 'binary', description: 'Image file (JPEG, PNG, or WebP, max 20 MB)' },
+        purpose: { type: 'string', enum: ['hero', 'cover'], description: 'Determines which responsive widths are generated' },
+        alt: { type: 'string', description: 'Alt text for accessibility' },
+      },
+    },
+  })
   @UseInterceptors(FileInterceptor('file'))
   upload(
     @UploadedFile() file: Express.Multer.File,
