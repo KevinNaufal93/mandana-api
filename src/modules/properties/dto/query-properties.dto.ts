@@ -3,6 +3,7 @@ import { Transform, Type } from 'class-transformer';
 import {
   IsBoolean,
   IsEnum,
+  IsInt,
   IsNumber,
   IsOptional,
   IsString,
@@ -10,6 +11,7 @@ import {
 } from 'class-validator';
 import { PaginationQueryDto } from '../../../common/dto/pagination-query.dto';
 import { ListingType } from '../enums/listing-type.enum';
+import { PropertySort } from '../enums/property-sort.enum';
 
 export class QueryPropertiesDto extends PaginationQueryDto {
   @ApiPropertyOptional({ enum: ListingType })
@@ -46,4 +48,16 @@ export class QueryPropertiesDto extends PaginationQueryDto {
   @Transform(({ value }: { value: unknown }) => value === 'true' || value === true)
   @IsBoolean()
   isFeatured?: boolean;
+
+  @ApiPropertyOptional({ minimum: 0 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  minBedrooms?: number;
+
+  @ApiPropertyOptional({ enum: PropertySort, default: PropertySort.NEWEST })
+  @IsOptional()
+  @IsEnum(PropertySort)
+  sort?: PropertySort;
 }

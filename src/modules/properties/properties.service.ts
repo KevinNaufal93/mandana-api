@@ -16,6 +16,7 @@ import { UpdatePropertyDto } from './dto/update-property.dto';
 import { AddPropertyImageDto } from './dto/add-property-image.dto';
 import { UpdatePropertyImageDto } from './dto/update-property-image.dto';
 import { PropertyStatus } from './enums/property-status.enum';
+import { PropertySort } from './enums/property-sort.enum';
 import { PaginatedResult } from '../../common/interfaces/paginated-result.interface';
 import { MediaService } from '../media/media.service';
 import { HomepageCacheService } from '../homepage/homepage-cache.service';
@@ -36,7 +37,7 @@ export class PropertiesService {
   // ─── Public endpoints ───────────────────────────────────────────────────────
 
   async findAll(query: QueryPropertiesDto): Promise<PaginatedResult<Property>> {
-    const { page, limit, listingType, city, propertyTypeSlug, minPrice, maxPrice, isFeatured } = query;
+    const { page, limit, listingType, city, propertyTypeSlug, minPrice, maxPrice, isFeatured, minBedrooms, sort } = query;
 
     const qb = this.propertiesRepo
       .createQueryBuilder('p')
@@ -51,9 +52,18 @@ export class PropertiesService {
     if (minPrice !== undefined) qb.andWhere('p.price >= :minPrice', { minPrice });
     if (maxPrice !== undefined) qb.andWhere('p.price <= :maxPrice', { maxPrice });
     if (isFeatured !== undefined) qb.andWhere('p.isFeatured = :isFeatured', { isFeatured });
+    if (minBedrooms !== undefined) qb.andWhere('p.bedrooms >= :minBedrooms', { minBedrooms });
 
+    const orderMap = {
+      [PropertySort.NEWEST]:     ['p.createdAt', 'DESC'],
+      [PropertySort.OLDEST]:     ['p.createdAt', 'ASC'],
+      [PropertySort.PRICE_ASC]:  ['p.price', 'ASC'],
+      [PropertySort.PRICE_DESC]: ['p.price', 'DESC'],
+    } as const;
+
+    const [col, dir] = orderMap[sort ?? PropertySort.NEWEST];
     const offset = (page - 1) * limit;
-    qb.orderBy('p.createdAt', 'DESC').skip(offset).take(limit);
+    qb.orderBy(col, dir).skip(offset).take(limit);
 
     const [data, total] = await qb.getManyAndCount();
 
