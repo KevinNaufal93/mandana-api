@@ -14,7 +14,8 @@ services:
       POSTGRES_DB: ${DATABASE_NAME}
     volumes:
       - postgres_data:/var/lib/postgresql/data
-    # No host port — reachable only on the compose network as "postgres"
+    ports:
+      - "127.0.0.1:5432:5432" # loopback only — reach via SSH tunnel, never public
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${DATABASE_USER} -d ${DATABASE_NAME}"]
       interval: 10s
