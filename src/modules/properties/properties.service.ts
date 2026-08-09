@@ -37,7 +37,7 @@ export class PropertiesService {
   // ─── Public endpoints ───────────────────────────────────────────────────────
 
   async findAll(query: QueryPropertiesDto): Promise<PaginatedResult<Property>> {
-    const { page, limit, listingType, city, propertyTypeSlug, minPrice, maxPrice, isFeatured, minBedrooms, sort } = query;
+    const { page, limit, listingType, city, propertyTypeSlug, minPrice, maxPrice, isFeatured, minBedrooms, sort, search } = query;
 
     const qb = this.propertiesRepo
       .createQueryBuilder('p')
@@ -46,6 +46,12 @@ export class PropertiesService {
       .leftJoinAndSelect('p.propertyType', 'pt')
       .where('p.status = :status', { status: PropertyStatus.PUBLISHED });
 
+    if (search) {
+      qb.andWhere(
+        `to_tsvector('simple', COALESCE(p.title,'') || ' ' || COALESCE(p.city,'') || ' ' || COALESCE(p.province,'') || ' ' || COALESCE(p.area,'') || ' ' || COALESCE(p.address,'') || ' ' || COALESCE(p.description,'')) @@ websearch_to_tsquery('simple', :search)`,
+        { search },
+      );
+    }
     if (listingType) qb.andWhere('p.listingType = :listingType', { listingType });
     if (city) qb.andWhere('LOWER(p.city) LIKE :city', { city: `%${city.toLowerCase()}%` });
     if (propertyTypeSlug) qb.andWhere('pt.slug = :propertyTypeSlug', { propertyTypeSlug });
@@ -100,9 +106,10 @@ export class PropertiesService {
     if (status) qb.andWhere('p.status = :status', { status });
     if (listingType) qb.andWhere('p.listingType = :listingType', { listingType });
     if (search) {
-      qb.andWhere('(LOWER(p.title) LIKE :search OR LOWER(p.slug) LIKE :search)', {
-        search: `%${search.toLowerCase()}%`,
-      });
+      qb.andWhere(
+        `to_tsvector('simple', COALESCE(p.title,'') || ' ' || COALESCE(p.city,'') || ' ' || COALESCE(p.province,'') || ' ' || COALESCE(p.area,'') || ' ' || COALESCE(p.address,'') || ' ' || COALESCE(p.description,'')) @@ websearch_to_tsquery('simple', :search)`,
+        { search },
+      );
     }
     if (propertyTypeId) qb.andWhere('p.propertyTypeId = :propertyTypeId', { propertyTypeId });
 

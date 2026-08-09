@@ -14,6 +14,11 @@ import { ListingType } from '../enums/listing-type.enum';
 import { PropertySort } from '../enums/property-sort.enum';
 
 export class QueryPropertiesDto extends PaginationQueryDto {
+  @ApiPropertyOptional({ description: 'Full-text search across title, description, address, area, city, province' })
+  @IsOptional()
+  @IsString()
+  search?: string;
+
   @ApiPropertyOptional({ enum: ListingType })
   @IsOptional()
   @IsEnum(ListingType)
