@@ -18,6 +18,7 @@ import { MediaModule } from './modules/media/media.module';
 import { HeroModule } from './modules/hero/hero.module';
 import { CollectionsModule } from './modules/collections/collections.module';
 import { HomepageModule } from './modules/homepage/homepage.module';
+import { AmenitiesModule } from './modules/amenities/amenities.module';
 
 @Module({
   imports: [
@@ -58,6 +59,7 @@ import { HomepageModule } from './modules/homepage/homepage.module';
     HeroModule,
     CollectionsModule,
     HomepageModule,
+    AmenitiesModule,
   ],
   providers: [
     // Global JWT guard: all routes protected by default; @Public() opts out

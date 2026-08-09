@@ -10,8 +10,17 @@ import {
   ParseUUIDPipe,
   Patch,
   Post,
+  UploadedFile,
+  UseInterceptors,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { FileInterceptor } from '@nestjs/platform-express';
+import {
+  ApiBearerAuth,
+  ApiBody,
+  ApiConsumes,
+  ApiOperation,
+  ApiTags,
+} from '@nestjs/swagger';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { UserRole } from './enums/user-role.enum';
@@ -40,17 +49,19 @@ export class UsersAdminController {
   }
 
   @Post()
-  @ApiOperation({ summary: 'Create a new admin or editor user (requires existing admin token)' })
+  @ApiOperation({
+    summary:
+      'Create a new admin or editor user (requires existing admin token)',
+  })
   create(@Body() dto: CreateUserDto) {
     return this.usersService.createUser(dto);
   }
 
   @Patch(':id')
-  @ApiOperation({ summary: 'Update user name, role, active status, or password' })
-  update(
-    @Param('id', ParseUUIDPipe) id: string,
-    @Body() dto: UpdateUserDto,
-  ) {
+  @ApiOperation({
+    summary: 'Update user name, role, active status, or password',
+  })
+  update(@Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdateUserDto) {
     return this.usersService.updateUser(id, dto);
   }
 
@@ -65,5 +76,31 @@ export class UsersAdminController {
       throw new BadRequestException('You cannot delete your own account');
     }
     await this.usersService.removeUser(id);
+  }
+
+  @Post(':id/photo')
+  @ApiOperation({
+    summary: 'Upload/replace the agent photo shown on property detail pages',
+  })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      required: ['file'],
+      properties: {
+        file: {
+          type: 'string',
+          format: 'binary',
+          description: 'Image file (JPEG, PNG, or WebP, max 20 MB)',
+        },
+      },
+    },
+  })
+  @UseInterceptors(FileInterceptor('file'))
+  setPhoto(
+    @Param('id', ParseUUIDPipe) id: string,
+    @UploadedFile() file: Express.Multer.File,
+  ) {
+    return this.usersService.setPhoto(id, file);
   }
 }

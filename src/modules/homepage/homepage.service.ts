@@ -6,6 +6,7 @@ import { HomepageCacheService } from './homepage-cache.service';
 import { HeroService } from '../hero/hero.service';
 import { CollectionsService } from '../collections/collections.service';
 import { MediaService } from '../media/media.service';
+import { PropertyMapper } from '../properties/property.mapper';
 import { SetRecommendationsDto } from './dto/set-recommendations.dto';
 
 const CAROUSEL_INTERVAL_MS = 5000;
@@ -18,6 +19,7 @@ export class HomepageService {
     private readonly heroService: HeroService,
     private readonly collectionsService: CollectionsService,
     private readonly mediaService: MediaService,
+    private readonly propertyMapper: PropertyMapper,
     private readonly cache: HomepageCacheService,
   ) {}
 
@@ -29,7 +31,9 @@ export class HomepageService {
       this.heroService.findActive(),
       this.collectionsService.findHomepage(),
       this.recRepo.find({
-        relations: { property: { images: true, propertyType: true } },
+        relations: {
+          property: { images: { mediaAsset: true }, propertyType: true },
+        },
         order: { sortOrder: 'ASC' },
       }),
     ]);
@@ -69,10 +73,15 @@ export class HomepageService {
     return payload;
   }
 
-  async setRecommendations(dto: SetRecommendationsDto): Promise<HomepageRecommendation[]> {
+  async setRecommendations(
+    dto: SetRecommendationsDto,
+  ): Promise<HomepageRecommendation[]> {
     await this.recRepo.clear();
     const recs = dto.items.map((item) =>
-      this.recRepo.create({ propertyId: item.propertyId, sortOrder: item.sortOrder }),
+      this.recRepo.create({
+        propertyId: item.propertyId,
+        sortOrder: item.sortOrder,
+      }),
     );
     const saved = await this.recRepo.save(recs);
     await this.cache.bust();
@@ -81,7 +90,9 @@ export class HomepageService {
 
   async getRecommendations() {
     const recs = await this.recRepo.find({
-      relations: { property: { images: true, propertyType: true } },
+      relations: {
+        property: { images: { mediaAsset: true }, propertyType: true },
+      },
       order: { sortOrder: 'ASC' },
     });
     return recs.map((r) => this.mapRecommendation(r));
@@ -89,26 +100,9 @@ export class HomepageService {
 
   /** Shared shape for a recommended property — public homepage + admin list. */
   private mapRecommendation(r: HomepageRecommendation) {
-    const p = r.property;
-    const cover = p.images?.find((img) => img.isCover) ?? p.images?.[0];
     return {
-      id: p.id,
-      slug: p.slug,
-      title: p.title,
-      listingType: p.listingType,
-      price: p.price,
-      currency: p.currency,
-      bedrooms: p.bedrooms,
-      bathrooms: p.bathrooms,
-      areaSqm: p.areaSqm,
-      area: p.area,
-      city: p.city,
-      province: p.province,
+      ...this.propertyMapper.toCard(r.property),
       sortOrder: r.sortOrder,
-      propertyType: p.propertyType
-        ? { id: p.propertyType.id, name: p.propertyType.name, slug: p.propertyType.slug }
-        : null,
-      cover: cover ? { url: cover.url, alt: cover.alt } : null,
     };
   }
 }

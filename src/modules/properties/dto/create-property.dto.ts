@@ -1,5 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
+  IsArray,
   IsBoolean,
   IsEnum,
   IsNumber,
@@ -16,12 +17,19 @@ import { ListingType } from '../enums/listing-type.enum';
 import { PropertyStatus } from '../enums/property-status.enum';
 
 export class CreatePropertyDto {
-  @ApiProperty({ example: 'villa-canggu-bali', description: 'URL-safe slug, unique' })
+  @ApiPropertyOptional({
+    example: 'villa-canggu-bali',
+    description:
+      'URL-safe slug, unique. Auto-generated from title when omitted.',
+  })
+  @IsOptional()
   @IsString()
   @MinLength(2)
   @MaxLength(255)
-  @Matches(/^[a-z0-9-]+$/, { message: 'slug must be lowercase alphanumeric with hyphens' })
-  slug!: string;
+  @Matches(/^[a-z0-9-]+$/, {
+    message: 'slug must be lowercase alphanumeric with hyphens',
+  })
+  slug?: string;
 
   @ApiProperty({ example: 'Villa Canggu Bali' })
   @IsString()
@@ -122,4 +130,18 @@ export class CreatePropertyDto {
   @IsOptional()
   @IsUUID()
   propertyTypeId?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Agent (User) UUID shown on the detail page. Defaults to the creating admin.',
+  })
+  @IsOptional()
+  @IsUUID()
+  agentId?: string;
+
+  @ApiPropertyOptional({ type: [String], description: 'Amenity UUIDs' })
+  @IsOptional()
+  @IsArray()
+  @IsUUID('4', { each: true })
+  amenityIds?: string[];
 }

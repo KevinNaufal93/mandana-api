@@ -33,4 +33,25 @@ export class UpdateUserDto {
   @MinLength(8)
   @MaxLength(128)
   password?: string;
+
+  @ApiPropertyOptional({
+    example: 'Agen Independen',
+    description: 'Public title shown on the agent card',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  title?: string;
+
+  @ApiPropertyOptional({ example: '08777123456' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(30)
+  phone?: string;
+
+  @ApiPropertyOptional({ example: '+628777123456' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(30)
+  whatsapp?: string;
 }

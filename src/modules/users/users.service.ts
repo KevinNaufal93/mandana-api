@@ -10,12 +10,14 @@ import { User } from './entities/user.entity';
 import { UserRole } from './enums/user-role.enum';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
+import { MediaService } from '../media/media.service';
 
 @Injectable()
 export class UsersService {
   constructor(
     @InjectRepository(User)
     private readonly usersRepository: Repository<User>,
+    private readonly mediaService: MediaService,
   ) {}
 
   findByEmail(email: string): Promise<User | null> {
@@ -54,10 +56,20 @@ export class UsersService {
 
   async createUser(dto: CreateUserDto): Promise<User> {
     const existing = await this.findByEmail(dto.email);
-    if (existing) throw new ConflictException(`Email '${dto.email}' is already in use`);
+    if (existing)
+      throw new ConflictException(`Email '${dto.email}' is already in use`);
 
     const passwordHash = await bcrypt.hash(dto.password, 10);
-    return this.create({ email: dto.email, name: dto.name, passwordHash, role: dto.role });
+    const user = this.usersRepository.create({
+      email: dto.email,
+      name: dto.name,
+      passwordHash,
+      role: dto.role,
+      title: dto.title ?? null,
+      phone: dto.phone ?? null,
+      whatsapp: dto.whatsapp ?? null,
+    });
+    return this.usersRepository.save(user);
   }
 
   async updateUser(id: string, dto: UpdateUserDto): Promise<User> {
@@ -69,6 +81,9 @@ export class UsersService {
     if (dto.password !== undefined) {
       user.passwordHash = await bcrypt.hash(dto.password, 10);
     }
+    if (dto.title !== undefined) user.title = dto.title ?? null;
+    if (dto.phone !== undefined) user.phone = dto.phone ?? null;
+    if (dto.whatsapp !== undefined) user.whatsapp = dto.whatsapp ?? null;
 
     return this.usersRepository.save(user);
   }
@@ -76,5 +91,15 @@ export class UsersService {
   async removeUser(id: string): Promise<void> {
     const user = await this.findByIdOrFail(id);
     await this.usersRepository.remove(user);
+  }
+
+  async setPhoto(id: string, file: Express.Multer.File): Promise<User> {
+    const user = await this.findByIdOrFail(id);
+    const asset = await this.mediaService.upload(file, {
+      purpose: 'cover',
+      alt: user.name,
+    });
+    user.photoMediaAssetId = asset.id;
+    return this.usersRepository.save(user);
   }
 }

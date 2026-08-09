@@ -2,8 +2,10 @@ import {
   Column,
   Entity,
   ManyToOne,
+  ManyToMany,
   OneToMany,
   JoinColumn,
+  JoinTable,
   Index,
 } from 'typeorm';
 import { BaseEntity } from '../../../common/entities/base.entity';
@@ -11,6 +13,8 @@ import { ListingType } from '../enums/listing-type.enum';
 import { PropertyStatus } from '../enums/property-status.enum';
 import { PropertyType } from './property-type.entity';
 import { PropertyImage } from './property-image.entity';
+import { User } from '../../users/entities/user.entity';
+import { Amenity } from '../../amenities/entities/amenity.entity';
 
 @Entity('properties')
 export class Property extends BaseEntity {
@@ -51,7 +55,13 @@ export class Property extends BaseEntity {
   @Column({ type: 'int', nullable: true })
   bathrooms!: number | null;
 
-  @Column({ name: 'area_sqm', type: 'numeric', precision: 10, scale: 2, nullable: true })
+  @Column({
+    name: 'area_sqm',
+    type: 'numeric',
+    precision: 10,
+    scale: 2,
+    nullable: true,
+  })
   areaSqm!: number | null;
 
   @Column({ type: 'varchar', length: 500, nullable: true })
@@ -84,4 +94,19 @@ export class Property extends BaseEntity {
 
   @OneToMany(() => PropertyImage, (img) => img.property, { cascade: true })
   images!: PropertyImage[];
+
+  @ManyToOne(() => User, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'agent_id' })
+  agent!: User | null;
+
+  @Column({ name: 'agent_id', nullable: true, type: 'uuid' })
+  agentId!: string | null;
+
+  @ManyToMany(() => Amenity)
+  @JoinTable({
+    name: 'property_amenities',
+    joinColumn: { name: 'property_id', referencedColumnName: 'id' },
+    inverseJoinColumn: { name: 'amenity_id', referencedColumnName: 'id' },
+  })
+  amenities!: Amenity[];
 }

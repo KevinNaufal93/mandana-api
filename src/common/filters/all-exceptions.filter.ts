@@ -7,6 +7,10 @@ import {
   Logger,
 } from '@nestjs/common';
 import { Request, Response } from 'express';
+import { QueryFailedError } from 'typeorm';
+
+/** Postgres error code for a unique constraint violation. */
+const POSTGRES_UNIQUE_VIOLATION = '23505';
 
 @Catch()
 export class AllExceptionsFilter implements ExceptionFilter {
@@ -17,13 +21,21 @@ export class AllExceptionsFilter implements ExceptionFilter {
     const response = ctx.getResponse<Response>();
     const request = ctx.getRequest<Request>();
 
-    const status =
-      exception instanceof HttpException
+    const isUniqueViolation =
+      exception instanceof QueryFailedError &&
+      (exception as unknown as { code?: string }).code ===
+        POSTGRES_UNIQUE_VIOLATION;
+
+    const status = isUniqueViolation
+      ? HttpStatus.CONFLICT
+      : exception instanceof HttpException
         ? exception.getStatus()
         : HttpStatus.INTERNAL_SERVER_ERROR;
 
-    const message =
-      exception instanceof HttpException
+    // Never echo the raw Postgres detail — it exposes column names/values.
+    const message = isUniqueViolation
+      ? 'Resource already exists'
+      : exception instanceof HttpException
         ? exception.getResponse()
         : 'Internal server error';
 

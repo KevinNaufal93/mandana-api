@@ -1,14 +1,17 @@
 import {
+  BadRequestException,
   ConflictException,
   Injectable,
   NotFoundException,
   Optional,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { Property } from './entities/property.entity';
 import { PropertyType } from './entities/property-type.entity';
 import { PropertyImage } from './entities/property-image.entity';
+import { Amenity } from '../amenities/entities/amenity.entity';
+import { User } from '../users/entities/user.entity';
 import { QueryPropertiesDto } from './dto/query-properties.dto';
 import { QueryAdminPropertiesDto } from './dto/query-admin-properties.dto';
 import { CreatePropertyDto } from './dto/create-property.dto';
@@ -20,6 +23,22 @@ import { PropertySort } from './enums/property-sort.enum';
 import { PaginatedResult } from '../../common/interfaces/paginated-result.interface';
 import { MediaService } from '../media/media.service';
 import { HomepageCacheService } from '../homepage/homepage-cache.service';
+import {
+  PropertyMapper,
+  PropertyCard,
+  PropertyDetail,
+} from './property.mapper';
+import { resolveUniqueSlug } from '../../common/utils/slugify';
+
+const DETAIL_RELATIONS = {
+  images: { mediaAsset: true },
+  propertyType: true,
+  amenities: true,
+  agent: { photoMediaAsset: true },
+} as const;
+
+const SIMILAR_DEFAULT_LIMIT = 4;
+const SIMILAR_MAX_LIMIT = 12;
 
 @Injectable()
 export class PropertiesService {
@@ -30,14 +49,29 @@ export class PropertiesService {
     private readonly propertyTypesRepo: Repository<PropertyType>,
     @InjectRepository(PropertyImage)
     private readonly propertyImagesRepo: Repository<PropertyImage>,
+    @InjectRepository(Amenity)
+    private readonly amenitiesRepo: Repository<Amenity>,
     private readonly mediaService: MediaService,
+    private readonly mapper: PropertyMapper,
     @Optional() private readonly cache?: HomepageCacheService,
   ) {}
 
   // ─── Public endpoints ───────────────────────────────────────────────────────
 
   async findAll(query: QueryPropertiesDto): Promise<PaginatedResult<Property>> {
-    const { page, limit, listingType, city, propertyTypeSlug, minPrice, maxPrice, isFeatured, minBedrooms, sort, search } = query;
+    const {
+      page,
+      limit,
+      listingType,
+      city,
+      propertyTypeSlug,
+      minPrice,
+      maxPrice,
+      isFeatured,
+      minBedrooms,
+      sort,
+      search,
+    } = query;
 
     const qb = this.propertiesRepo
       .createQueryBuilder('p')
@@ -52,18 +86,27 @@ export class PropertiesService {
         { search },
       );
     }
-    if (listingType) qb.andWhere('p.listingType = :listingType', { listingType });
-    if (city) qb.andWhere('LOWER(p.city) LIKE :city', { city: `%${city.toLowerCase()}%` });
-    if (propertyTypeSlug) qb.andWhere('pt.slug = :propertyTypeSlug', { propertyTypeSlug });
-    if (minPrice !== undefined) qb.andWhere('p.price >= :minPrice', { minPrice });
-    if (maxPrice !== undefined) qb.andWhere('p.price <= :maxPrice', { maxPrice });
-    if (isFeatured !== undefined) qb.andWhere('p.isFeatured = :isFeatured', { isFeatured });
-    if (minBedrooms !== undefined) qb.andWhere('p.bedrooms >= :minBedrooms', { minBedrooms });
+    if (listingType)
+      qb.andWhere('p.listingType = :listingType', { listingType });
+    if (city)
+      qb.andWhere('LOWER(p.city) LIKE :city', {
+        city: `%${city.toLowerCase()}%`,
+      });
+    if (propertyTypeSlug)
+      qb.andWhere('pt.slug = :propertyTypeSlug', { propertyTypeSlug });
+    if (minPrice !== undefined)
+      qb.andWhere('p.price >= :minPrice', { minPrice });
+    if (maxPrice !== undefined)
+      qb.andWhere('p.price <= :maxPrice', { maxPrice });
+    if (isFeatured !== undefined)
+      qb.andWhere('p.isFeatured = :isFeatured', { isFeatured });
+    if (minBedrooms !== undefined)
+      qb.andWhere('p.bedrooms >= :minBedrooms', { minBedrooms });
 
     const orderMap = {
-      [PropertySort.NEWEST]:     ['p.createdAt', 'DESC'],
-      [PropertySort.OLDEST]:     ['p.createdAt', 'ASC'],
-      [PropertySort.PRICE_ASC]:  ['p.price', 'ASC'],
+      [PropertySort.NEWEST]: ['p.createdAt', 'DESC'],
+      [PropertySort.OLDEST]: ['p.createdAt', 'ASC'],
+      [PropertySort.PRICE_ASC]: ['p.price', 'ASC'],
       [PropertySort.PRICE_DESC]: ['p.price', 'DESC'],
     } as const;
 
@@ -79,22 +122,72 @@ export class PropertiesService {
     };
   }
 
-  async findBySlug(slug: string): Promise<Property> {
+  async findBySlug(slug: string): Promise<PropertyDetail> {
     const property = await this.propertiesRepo.findOne({
       where: { slug, status: PropertyStatus.PUBLISHED },
-      relations: { images: { mediaAsset: true }, propertyType: true },
+      relations: DETAIL_RELATIONS,
     });
     if (!property) throw new NotFoundException(`Property '${slug}' not found`);
-    return this.toPropertyResponse(property);
+    return this.mapper.toDetail(property);
   }
 
   findAllTypes(): Promise<PropertyType[]> {
     return this.propertyTypesRepo.find({ order: { name: 'ASC' } });
   }
 
+  async findSimilar(
+    slug: string,
+    limit = SIMILAR_DEFAULT_LIMIT,
+  ): Promise<PropertyCard[]> {
+    const boundedLimit = Math.min(Math.max(limit, 1), SIMILAR_MAX_LIMIT);
+
+    const source = await this.propertiesRepo.findOne({
+      where: { slug, status: PropertyStatus.PUBLISHED },
+    });
+    if (!source) throw new NotFoundException(`Property '${slug}' not found`);
+
+    // TypeORM's paginated (take + joined relations) query builder can only
+    // ORDER BY an aliased SELECT expression, not an arbitrary raw fragment —
+    // so the score has to be `addSelect`-ed under an alias first.
+    const qb = this.propertiesRepo
+      .createQueryBuilder('p')
+      .leftJoinAndSelect('p.images', 'img')
+      .leftJoinAndSelect('img.mediaAsset', 'imgAsset')
+      .leftJoinAndSelect('p.propertyType', 'pt')
+      .addSelect(
+        `(
+          CASE WHEN :typeId::uuid IS NOT NULL AND p.propertyTypeId = :typeId THEN 3 ELSE 0 END
+          + CASE WHEN :city::text IS NOT NULL AND LOWER(p.city) = LOWER(:city) THEN 2 ELSE 0 END
+          + CASE WHEN :area::text IS NOT NULL AND LOWER(p.area) = LOWER(:area) THEN 1 ELSE 0 END
+          + CASE WHEN p.price BETWEEN :priceLow AND :priceHigh THEN 2 ELSE 0 END
+        )`,
+        'score',
+      )
+      .where('p.status = :status', { status: PropertyStatus.PUBLISHED })
+      .andWhere('p.id <> :id', { id: source.id })
+      .andWhere('p.listingType = :listingType', {
+        listingType: source.listingType,
+      })
+      .orderBy('score', 'DESC')
+      .addOrderBy('p.createdAt', 'DESC')
+      .setParameters({
+        typeId: source.propertyTypeId,
+        city: source.city,
+        area: source.area,
+        priceLow: Number(source.price) * 0.7,
+        priceHigh: Number(source.price) * 1.3,
+      })
+      .take(boundedLimit);
+
+    const similar = await qb.getMany();
+    return similar.map((p) => this.mapper.toCard(p));
+  }
+
   // ─── Admin CRUD ─────────────────────────────────────────────────────────────
 
-  async adminFindAll(query: QueryAdminPropertiesDto): Promise<PaginatedResult<Property>> {
+  async adminFindAll(
+    query: QueryAdminPropertiesDto,
+  ): Promise<PaginatedResult<Property>> {
     const { page, limit, status, listingType, search, propertyTypeId } = query;
 
     const qb = this.propertiesRepo
@@ -104,14 +197,16 @@ export class PropertiesService {
       .leftJoinAndSelect('p.propertyType', 'pt');
 
     if (status) qb.andWhere('p.status = :status', { status });
-    if (listingType) qb.andWhere('p.listingType = :listingType', { listingType });
+    if (listingType)
+      qb.andWhere('p.listingType = :listingType', { listingType });
     if (search) {
       qb.andWhere(
         `to_tsvector('simple', COALESCE(p.title,'') || ' ' || COALESCE(p.city,'') || ' ' || COALESCE(p.province,'') || ' ' || COALESCE(p.area,'') || ' ' || COALESCE(p.address,'') || ' ' || COALESCE(p.description,'')) @@ websearch_to_tsquery('simple', :search)`,
         { search },
       );
     }
-    if (propertyTypeId) qb.andWhere('p.propertyTypeId = :propertyTypeId', { propertyTypeId });
+    if (propertyTypeId)
+      qb.andWhere('p.propertyTypeId = :propertyTypeId', { propertyTypeId });
 
     const offset = (page - 1) * limit;
     qb.orderBy('p.createdAt', 'DESC').skip(offset).take(limit);
@@ -124,21 +219,24 @@ export class PropertiesService {
     };
   }
 
-  async adminFindOne(id: string): Promise<Property> {
+  async adminFindOne(id: string): Promise<PropertyDetail> {
     const property = await this.propertiesRepo.findOne({
       where: { id },
-      relations: { images: { mediaAsset: true }, propertyType: true },
+      relations: DETAIL_RELATIONS,
     });
     if (!property) throw new NotFoundException(`Property ${id} not found`);
-    return this.toPropertyResponse(property);
+    return this.mapper.toDetail(property);
   }
 
-  async create(dto: CreatePropertyDto): Promise<Property> {
-    const existing = await this.propertiesRepo.findOne({ where: { slug: dto.slug } });
-    if (existing) throw new ConflictException(`Slug '${dto.slug}' already exists`);
+  async create(dto: CreatePropertyDto, currentUser: User): Promise<Property> {
+    const slug = await resolveUniqueSlug(
+      this.propertiesRepo,
+      dto.slug ?? dto.title,
+    );
+    const amenities = await this.resolveAmenities(dto.amenityIds);
 
     const property = this.propertiesRepo.create({
-      slug: dto.slug,
+      slug,
       title: dto.title,
       description: dto.description ?? null,
       listingType: dto.listingType,
@@ -156,6 +254,8 @@ export class PropertiesService {
       longitude: dto.longitude ?? null,
       isFeatured: dto.isFeatured ?? false,
       propertyTypeId: dto.propertyTypeId ?? null,
+      agentId: dto.agentId ?? currentUser.id,
+      ...(amenities !== undefined && { amenities }),
     });
 
     const saved = await this.propertiesRepo.save(property);
@@ -166,15 +266,26 @@ export class PropertiesService {
   async update(id: string, dto: UpdatePropertyDto): Promise<Property> {
     const property = await this.adminFindOneRaw(id);
 
-    if (dto.slug && dto.slug !== property.slug) {
-      const conflict = await this.propertiesRepo.findOne({ where: { slug: dto.slug } });
-      if (conflict) throw new ConflictException(`Slug '${dto.slug}' already exists`);
+    if (dto.slug !== undefined && dto.slug !== property.slug) {
+      if (property.status === PropertyStatus.PUBLISHED) {
+        throw new ConflictException(
+          'Cannot change the slug of a published property; unpublish it first',
+        );
+      }
     }
+    const slug =
+      dto.slug !== undefined && dto.slug !== property.slug
+        ? await resolveUniqueSlug(this.propertiesRepo, dto.slug, id)
+        : undefined;
+
+    const amenities = await this.resolveAmenities(dto.amenityIds);
 
     Object.assign(property, {
-      ...(dto.slug !== undefined && { slug: dto.slug }),
+      ...(slug !== undefined && { slug }),
       ...(dto.title !== undefined && { title: dto.title }),
-      ...(dto.description !== undefined && { description: dto.description ?? null }),
+      ...(dto.description !== undefined && {
+        description: dto.description ?? null,
+      }),
       ...(dto.listingType !== undefined && { listingType: dto.listingType }),
       ...(dto.status !== undefined && { status: dto.status }),
       ...(dto.price !== undefined && { price: dto.price }),
@@ -189,7 +300,11 @@ export class PropertiesService {
       ...(dto.latitude !== undefined && { latitude: dto.latitude ?? null }),
       ...(dto.longitude !== undefined && { longitude: dto.longitude ?? null }),
       ...(dto.isFeatured !== undefined && { isFeatured: dto.isFeatured }),
-      ...(dto.propertyTypeId !== undefined && { propertyTypeId: dto.propertyTypeId ?? null }),
+      ...(dto.propertyTypeId !== undefined && {
+        propertyTypeId: dto.propertyTypeId ?? null,
+      }),
+      ...(dto.agentId !== undefined && { agentId: dto.agentId }),
+      ...(amenities !== undefined && { amenities }),
     });
 
     const saved = await this.propertiesRepo.save(property);
@@ -212,7 +327,10 @@ export class PropertiesService {
   ): Promise<PropertyImage> {
     await this.adminFindOneRaw(propertyId);
 
-    const asset = await this.mediaService.upload(file, { purpose: 'cover', alt: dto.alt });
+    const asset = await this.mediaService.upload(file, {
+      purpose: 'cover',
+      alt: dto.alt,
+    });
 
     const isCover = dto.isCover ?? false;
     if (isCover) {
@@ -283,18 +401,47 @@ export class PropertiesService {
     return property;
   }
 
-  private async findImageOrFail(propertyId: string, imageId: string): Promise<PropertyImage> {
+  private async findImageOrFail(
+    propertyId: string,
+    imageId: string,
+  ): Promise<PropertyImage> {
     const image = await this.propertyImagesRepo.findOne({
       where: { id: imageId, propertyId },
     });
-    if (!image) throw new NotFoundException(`Image ${imageId} not found on property ${propertyId}`);
+    if (!image)
+      throw new NotFoundException(
+        `Image ${imageId} not found on property ${propertyId}`,
+      );
     return image;
+  }
+
+  /** Loads amenities by id and validates every id exists; returns undefined when not supplied. */
+  private async resolveAmenities(
+    amenityIds?: string[],
+  ): Promise<Amenity[] | undefined> {
+    if (amenityIds === undefined) return undefined;
+    if (amenityIds.length === 0) return [];
+
+    const found = await this.amenitiesRepo.findBy({ id: In(amenityIds) });
+    if (found.length !== amenityIds.length) {
+      const foundIds = new Set(found.map((a) => a.id));
+      const missing = amenityIds.filter((id) => !foundIds.has(id));
+      throw new BadRequestException(
+        `Unknown amenity id(s): ${missing.join(', ')}`,
+      );
+    }
+    return found;
   }
 
   private toImageResponse(img: PropertyImage): PropertyImage {
     if (img.mediaAsset) {
       const dto = this.mediaService.buildImageDto(img.mediaAsset);
-      return Object.assign(img, { url: dto.url, srcset: dto.srcset, width: dto.width, height: dto.height });
+      return Object.assign(img, {
+        url: dto.url,
+        srcset: dto.srcset,
+        width: dto.width,
+        height: dto.height,
+      });
     }
     return img;
   }

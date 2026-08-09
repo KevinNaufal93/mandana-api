@@ -8,6 +8,7 @@ import { HomepageAdminController } from './homepage-admin.controller';
 import { HeroModule } from '../hero/hero.module';
 import { CollectionsModule } from '../collections/collections.module';
 import { MediaModule } from '../media/media.module';
+import { PropertiesModule } from '../properties/properties.module';
 
 @Module({
   imports: [
@@ -15,6 +16,7 @@ import { MediaModule } from '../media/media.module';
     HeroModule,
     CollectionsModule,
     MediaModule,
+    PropertiesModule,
   ],
   providers: [HomepageService, HomepageCacheService],
   controllers: [HomepageController, HomepageAdminController],

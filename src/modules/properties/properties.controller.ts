@@ -19,11 +19,14 @@ import {
   ApiBody,
   ApiConsumes,
   ApiOperation,
+  ApiQuery,
   ApiTags,
 } from '@nestjs/swagger';
 import { Public } from '../../common/decorators/public.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { UserRole } from '../users/enums/user-role.enum';
+import { User } from '../users/entities/user.entity';
 import { PropertiesService } from './properties.service';
 import { QueryPropertiesDto } from './dto/query-properties.dto';
 import { QueryAdminPropertiesDto } from './dto/query-admin-properties.dto';
@@ -41,9 +44,29 @@ export class PropertiesController {
   constructor(private readonly propertiesService: PropertiesService) {}
 
   @Get()
-  @ApiOperation({ summary: 'List published properties with filters and pagination' })
+  @ApiOperation({
+    summary: 'List published properties with filters and pagination',
+  })
   findAll(@Query() query: QueryPropertiesDto) {
     return this.propertiesService.findAll(query);
+  }
+
+  @Get(':slug/similar')
+  @ApiOperation({
+    summary:
+      'Get properties similar to the given one (same listing type, ranked by type/city/area/price proximity)',
+  })
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+    type: Number,
+    description: 'Default 4, max 12',
+  })
+  findSimilar(@Param('slug') slug: string, @Query('limit') limit?: string) {
+    return this.propertiesService.findSimilar(
+      slug,
+      limit ? Number(limit) : undefined,
+    );
   }
 
   @Get(':slug')
@@ -63,7 +86,9 @@ export class PropertiesAdminController {
   constructor(private readonly propertiesService: PropertiesService) {}
 
   @Get()
-  @ApiOperation({ summary: 'List all properties with filters (admin, all statuses)' })
+  @ApiOperation({
+    summary: 'List all properties with filters (admin, all statuses)',
+  })
   findAll(@Query() query: QueryAdminPropertiesDto) {
     return this.propertiesService.adminFindAll(query);
   }
@@ -75,9 +100,12 @@ export class PropertiesAdminController {
   }
 
   @Post()
-  @ApiOperation({ summary: 'Create a new property listing' })
-  create(@Body() dto: CreatePropertyDto) {
-    return this.propertiesService.create(dto);
+  @ApiOperation({
+    summary:
+      'Create a new property listing (agent defaults to the creating admin)',
+  })
+  create(@Body() dto: CreatePropertyDto, @CurrentUser() currentUser: User) {
+    return this.propertiesService.create(dto, currentUser);
   }
 
   @Patch(':id')
@@ -106,10 +134,18 @@ export class PropertiesAdminController {
       type: 'object',
       required: ['file'],
       properties: {
-        file: { type: 'string', format: 'binary', description: 'Image file (JPEG, PNG, or WebP, max 20 MB)' },
+        file: {
+          type: 'string',
+          format: 'binary',
+          description: 'Image file (JPEG, PNG, or WebP, max 20 MB)',
+        },
         alt: { type: 'string', description: 'Alt text for accessibility' },
         sortOrder: { type: 'integer', default: 0 },
-        isCover: { type: 'boolean', default: false, description: 'Marks as cover; clears existing cover' },
+        isCover: {
+          type: 'boolean',
+          default: false,
+          description: 'Marks as cover; clears existing cover',
+        },
       },
     },
   })
