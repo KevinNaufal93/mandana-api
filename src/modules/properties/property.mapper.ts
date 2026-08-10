@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { Property } from './entities/property.entity';
 import { PropertyImage } from './entities/property-image.entity';
 import { MediaService, MediaImageDto } from '../media/media.service';
+import { fuzzCoordinates, APPROX_RADIUS_M } from './location-privacy';
 
 export interface PropertyCard {
   id: string;
@@ -20,9 +21,8 @@ export interface PropertyCard {
   cover: { url: string; alt: string | null } | MediaImageDto | null;
 }
 
-export interface PropertyDetail extends PropertyCard {
+interface PropertyDetailBase extends PropertyCard {
   description: string | null;
-  address: string | null;
   latitude: number | null;
   longitude: number | null;
   isFeatured: boolean;
@@ -47,6 +47,21 @@ export interface PropertyDetail extends PropertyCard {
   createdAt: Date;
   updatedAt: Date;
 }
+
+/**
+ * `exact` (admin) carries the real `address` and unmodified coordinates.
+ * `approximate` (public) has no `address` key at all and coordinates are
+ * fuzzed within `approximateRadiusM` metres — see `location-privacy.ts`.
+ */
+export type PropertyDetail =
+  | (PropertyDetailBase & {
+      locationPrecision: 'exact';
+      address: string | null;
+    })
+  | (PropertyDetailBase & {
+      locationPrecision: 'approximate';
+      approximateRadiusM: number;
+    });
 
 /** Numeric/decimal Postgres columns come back from `pg` as strings — normalize them. */
 function toNumber(value: unknown): number | null {
@@ -105,13 +120,16 @@ export class PropertyMapper {
     };
   }
 
-  toDetail(p: Property): PropertyDetail {
-    return {
+  /**
+   * `exact: true` (admin) returns the real address and unmodified coordinates.
+   * `exact: false` (public) drops `address` and fuzzes the coordinates within
+   * a ~300m radius — see `location-privacy.ts` for why that's real privacy
+   * and not just a client-side styling choice.
+   */
+  toDetail(p: Property, opts: { exact: boolean }): PropertyDetail {
+    const base = {
       ...this.toCard(p),
       description: p.description,
-      address: p.address,
-      latitude: toNumber(p.latitude),
-      longitude: toNumber(p.longitude),
       isFeatured: p.isFeatured,
       images: (p.images ?? [])
         .slice()
@@ -142,5 +160,62 @@ export class PropertyMapper {
       createdAt: p.createdAt,
       updatedAt: p.updatedAt,
     };
+
+    if (opts.exact) {
+      return {
+        ...base,
+        address: p.address,
+        latitude: toNumber(p.latitude),
+        longitude: toNumber(p.longitude),
+        locationPrecision: 'exact',
+      };
+    }
+
+    const { latitude, longitude } = this.fuzzLocation(p);
+    return {
+      ...base,
+      latitude,
+      longitude,
+      locationPrecision: 'approximate',
+      approximateRadiusM: APPROX_RADIUS_M,
+    };
+  }
+
+  /**
+   * Applies the same public location privacy as `toDetail({ exact: false })`
+   * to a raw entity — used by the `GET /properties` list, which (unlike
+   * `toCard`) returns full entities rather than the mapped card shape.
+   * Mutates and returns `property` so it composes with the image-enrichment
+   * mutation `PropertiesService` already does on the same object.
+   */
+  applyListLocationPrivacy(property: Property): Property {
+    const { latitude, longitude } = this.fuzzLocation(property);
+    property.latitude = latitude;
+    property.longitude = longitude;
+
+    const enriched = property as Property & {
+      locationPrecision: 'approximate';
+      approximateRadiusM: number;
+    };
+    enriched.locationPrecision = 'approximate';
+    enriched.approximateRadiusM = APPROX_RADIUS_M;
+
+    // Deleting keeps the field genuinely absent from the JSON response
+    // (not just null) — the `address` column is typed as required on the
+    // entity, so the delete has to go through an untyped view of it.
+    delete (property as unknown as Record<string, unknown>).address;
+
+    return property;
+  }
+
+  private fuzzLocation(p: Property): {
+    latitude: number | null;
+    longitude: number | null;
+  } {
+    const lat = toNumber(p.latitude);
+    const lng = toNumber(p.longitude);
+    if (lat === null || lng === null)
+      return { latitude: null, longitude: null };
+    return fuzzCoordinates(lat, lng, p.id);
   }
 }

@@ -117,7 +117,7 @@ export class PropertiesService {
     const [data, total] = await qb.getManyAndCount();
 
     return {
-      data: data.map((p) => this.toPropertyResponse(p)),
+      data: data.map((p) => this.toPublicListResponse(p)),
       meta: { total, page, limit, totalPages: Math.ceil(total / limit) },
     };
   }
@@ -128,7 +128,7 @@ export class PropertiesService {
       relations: DETAIL_RELATIONS,
     });
     if (!property) throw new NotFoundException(`Property '${slug}' not found`);
-    return this.mapper.toDetail(property);
+    return this.mapper.toDetail(property, { exact: false });
   }
 
   findAllTypes(): Promise<PropertyType[]> {
@@ -225,7 +225,7 @@ export class PropertiesService {
       relations: DETAIL_RELATIONS,
     });
     if (!property) throw new NotFoundException(`Property ${id} not found`);
-    return this.mapper.toDetail(property);
+    return this.mapper.toDetail(property, { exact: true });
   }
 
   async create(dto: CreatePropertyDto, currentUser: User): Promise<Property> {
@@ -451,5 +451,12 @@ export class PropertiesService {
       property.images = property.images.map((img) => this.toImageResponse(img));
     }
     return property;
+  }
+
+  /** Public list rows: image enrichment plus the same coordinate/address privacy as the detail endpoint. */
+  private toPublicListResponse(property: Property): Property {
+    return this.mapper.applyListLocationPrivacy(
+      this.toPropertyResponse(property),
+    );
   }
 }

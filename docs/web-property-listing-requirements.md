@@ -4,6 +4,12 @@
 > new web listing page (`/properties` in `mandana-web`) needs. The page is
 > already live and wired to `GET /properties` and `GET /property-types`; the
 > items below unblock its filters and sorting.
+>
+> ⚠️ **Superseded in part:** the "do not change the response envelope" rule below
+> refers to the top-level `{ data, meta }` shape, which is still frozen. The
+> per-item **fields** changed for the property detail work — see
+> `docs/web-property-detail-contract.md` ("Location privacy") for the
+> `address`/coordinate change that now also applies to this list endpoint.
 
 ## Current state
 
