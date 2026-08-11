@@ -1,4 +1,11 @@
-import { Body, Controller, Get, HttpCode, HttpStatus, Post } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Post,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { UserRole } from '../users/enums/user-role.enum';
@@ -23,7 +30,9 @@ export class HomepageAdminController {
   }
 
   @Post('recommendations')
-  @ApiOperation({ summary: 'Set homepage recommendations (replaces entire list)' })
+  @ApiOperation({
+    summary: 'Set homepage recommendations (replaces entire list)',
+  })
   setRecommendations(@Body() dto: SetRecommendationsDto) {
     return this.homepageService.setRecommendations(dto);
   }

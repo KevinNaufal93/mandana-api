@@ -16,7 +16,9 @@ export class TypeOrmConfigService implements TypeOrmOptionsFactory {
       password: this.configService.get<string>('database.password'),
       database: this.configService.get<string>('database.name'),
       entities: [join(__dirname, '..', '**', '*.entity.{ts,js}')],
-      migrations: [join(__dirname, '..', 'database', 'migrations', '*.{ts,js}')],
+      migrations: [
+        join(__dirname, '..', 'database', 'migrations', '*.{ts,js}'),
+      ],
       // synchronize: false in all environments — always use migrations
       synchronize: false,
       logging: this.configService.get<string>('app.nodeEnv') === 'development',

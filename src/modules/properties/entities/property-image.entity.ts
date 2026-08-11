@@ -24,7 +24,11 @@ export class PropertyImage extends BaseEntity {
   @Column({ name: 'property_id' })
   propertyId!: string;
 
-  @ManyToOne(() => MediaAsset, { nullable: true, eager: false, onDelete: 'RESTRICT' })
+  @ManyToOne(() => MediaAsset, {
+    nullable: true,
+    eager: false,
+    onDelete: 'RESTRICT',
+  })
   @JoinColumn({ name: 'media_asset_id' })
   mediaAsset!: MediaAsset | null;
 

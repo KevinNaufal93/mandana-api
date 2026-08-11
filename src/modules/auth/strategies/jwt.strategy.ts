@@ -27,7 +27,9 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
       throw new UnauthorizedException();
     }
 
-    const blacklistedAt = await this.cacheManager.get<number>(`blacklist:${payload.sub}`);
+    const blacklistedAt = await this.cacheManager.get<number>(
+      `blacklist:${payload.sub}`,
+    );
     if (blacklistedAt && payload.iat! * 1000 < blacklistedAt) {
       throw new UnauthorizedException();
     }

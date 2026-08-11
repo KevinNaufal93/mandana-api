@@ -4,7 +4,11 @@ import { MediaAsset } from '../../media/entities/media-asset.entity';
 
 @Entity('hero_slides')
 export class HeroSlide extends BaseEntity {
-  @ManyToOne(() => MediaAsset, { nullable: false, eager: false, onDelete: 'RESTRICT' })
+  @ManyToOne(() => MediaAsset, {
+    nullable: false,
+    eager: false,
+    onDelete: 'RESTRICT',
+  })
   @JoinColumn({ name: 'media_asset_id' })
   mediaAsset!: MediaAsset;
 

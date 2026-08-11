@@ -25,13 +25,17 @@ export class CreateInquiryDto {
   @MaxLength(30)
   phone?: string;
 
-  @ApiProperty({ example: 'I am interested in this property, please contact me.' })
+  @ApiProperty({
+    example: 'I am interested in this property, please contact me.',
+  })
   @IsString()
   @MinLength(10)
   @MaxLength(2000)
   message!: string;
 
-  @ApiPropertyOptional({ description: 'UUID of the property this inquiry relates to' })
+  @ApiPropertyOptional({
+    description: 'UUID of the property this inquiry relates to',
+  })
   @IsOptional()
   @IsUUID()
   propertyId?: string;

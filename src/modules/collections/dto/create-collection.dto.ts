@@ -14,7 +14,9 @@ export class CreateCollectionDto {
   @ApiProperty({ example: 'bsd-city', description: 'URL-safe slug, unique' })
   @IsString()
   @MaxLength(255)
-  @Matches(/^[a-z0-9-]+$/, { message: 'slug must be lowercase alphanumeric with hyphens' })
+  @Matches(/^[a-z0-9-]+$/, {
+    message: 'slug must be lowercase alphanumeric with hyphens',
+  })
   slug!: string;
 
   @ApiProperty({ example: 'BSD City' })

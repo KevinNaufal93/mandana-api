@@ -31,12 +31,7 @@ export class JwtRefreshStrategy extends PassportStrategy(
     const user = await this.usersService.findById(payload.sub);
     const refreshToken = req.body.refreshToken;
 
-    if (
-      !user ||
-      !user.isActive ||
-      !user.hashedRefreshToken ||
-      !refreshToken
-    ) {
+    if (!user || !user.isActive || !user.hashedRefreshToken || !refreshToken) {
       throw new UnauthorizedException();
     }
 

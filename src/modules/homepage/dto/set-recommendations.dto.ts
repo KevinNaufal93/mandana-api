@@ -1,6 +1,12 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { ArrayMaxSize, IsNumber, IsUUID, Min, ValidateNested } from 'class-validator';
+import {
+  ArrayMaxSize,
+  IsNumber,
+  IsUUID,
+  Min,
+  ValidateNested,
+} from 'class-validator';
 
 class RecommendationItemDto {
   @IsUUID()

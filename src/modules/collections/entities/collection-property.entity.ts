@@ -5,7 +5,9 @@ import { Property } from '../../properties/entities/property.entity';
 
 @Entity('collection_properties')
 export class CollectionProperty extends BaseEntity {
-  @ManyToOne(() => Collection, (c) => c.collectionProperties, { onDelete: 'CASCADE' })
+  @ManyToOne(() => Collection, (c) => c.collectionProperties, {
+    onDelete: 'CASCADE',
+  })
   @JoinColumn({ name: 'collection_id' })
   collection!: Collection;
 

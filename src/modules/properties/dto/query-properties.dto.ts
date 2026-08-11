@@ -14,7 +14,10 @@ import { ListingType } from '../enums/listing-type.enum';
 import { PropertySort } from '../enums/property-sort.enum';
 
 export class QueryPropertiesDto extends PaginationQueryDto {
-  @ApiPropertyOptional({ description: 'Full-text search across title, description, address, area, city, province' })
+  @ApiPropertyOptional({
+    description:
+      'Full-text search across title, description, address, area, city, province',
+  })
   @IsOptional()
   @IsString()
   search?: string;
@@ -50,7 +53,9 @@ export class QueryPropertiesDto extends PaginationQueryDto {
 
   @ApiPropertyOptional()
   @IsOptional()
-  @Transform(({ value }: { value: unknown }) => value === 'true' || value === true)
+  @Transform(
+    ({ value }: { value: unknown }) => value === 'true' || value === true,
+  )
   @IsBoolean()
   isFeatured?: boolean;
 

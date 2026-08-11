@@ -13,7 +13,9 @@ export class HomepageController {
   @Public()
   @Get()
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Aggregated homepage payload (hero, collections, recommendations)' })
+  @ApiOperation({
+    summary: 'Aggregated homepage payload (hero, collections, recommendations)',
+  })
   async getHomepage(@Res() res: Response) {
     const data = await this.homepageService.getHomepage();
 

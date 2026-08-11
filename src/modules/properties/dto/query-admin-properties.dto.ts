@@ -15,7 +15,10 @@ export class QueryAdminPropertiesDto extends PaginationQueryDto {
   @IsEnum(ListingType)
   listingType?: ListingType;
 
-  @ApiPropertyOptional({ description: 'Full-text search across title, description, address, area, city, province' })
+  @ApiPropertyOptional({
+    description:
+      'Full-text search across title, description, address, area, city, province',
+  })
   @IsOptional()
   @IsString()
   search?: string;

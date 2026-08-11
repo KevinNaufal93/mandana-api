@@ -3,7 +3,10 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { Collection } from './entities/collection.entity';
 import { CollectionProperty } from './entities/collection-property.entity';
 import { CollectionsService } from './collections.service';
-import { CollectionsController, CollectionsAdminController } from './collections.controller';
+import {
+  CollectionsController,
+  CollectionsAdminController,
+} from './collections.controller';
 import { HomepageCacheModule } from '../homepage/homepage-cache.module';
 
 @Module({

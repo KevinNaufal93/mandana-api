@@ -30,7 +30,9 @@ export class ImageProcessorService {
     }
   }
 
-  async intrinsicSize(buffer: Buffer): Promise<{ width: number; height: number }> {
+  async intrinsicSize(
+    buffer: Buffer,
+  ): Promise<{ width: number; height: number }> {
     const meta = await sharp(buffer).metadata();
     return { width: meta.width ?? 0, height: meta.height ?? 0 };
   }
@@ -45,12 +47,18 @@ export class ImageProcessorService {
 
     for (const width of widths) {
       for (const format of this.formats) {
-        const resized = sharp(buffer).resize({ width, withoutEnlargement: true });
+        const resized = sharp(buffer).resize({
+          width,
+          withoutEnlargement: true,
+        });
 
         let out: Buffer;
-        if (format === 'webp') out = await resized.webp({ quality: 82 }).toBuffer();
-        else if (format === 'avif') out = await resized.avif({ quality: 70 }).toBuffer();
-        else out = await resized.jpeg({ quality: 85, mozjpeg: true }).toBuffer();
+        if (format === 'webp')
+          out = await resized.webp({ quality: 82 }).toBuffer();
+        else if (format === 'avif')
+          out = await resized.avif({ quality: 70 }).toBuffer();
+        else
+          out = await resized.jpeg({ quality: 85, mozjpeg: true }).toBuffer();
 
         const ext = format === 'jpeg' ? 'jpg' : format;
         variants.push({

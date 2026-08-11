@@ -26,7 +26,9 @@ export class CollectionsController {
 
   @Public()
   @Get(':slug')
-  @ApiOperation({ summary: 'Get a collection with its property listings (public)' })
+  @ApiOperation({
+    summary: 'Get a collection with its property listings (public)',
+  })
   findBySlug(@Param('slug') slug: string) {
     return this.collectionsService.findBySlug(slug);
   }

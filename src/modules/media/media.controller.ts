@@ -11,7 +11,13 @@ import {
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { ApiBearerAuth, ApiBody, ApiConsumes, ApiOperation, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiBody,
+  ApiConsumes,
+  ApiOperation,
+  ApiTags,
+} from '@nestjs/swagger';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { UserRole } from '../users/enums/user-role.enum';
 import { MediaService } from './media.service';
@@ -32,8 +38,16 @@ export class MediaController {
       type: 'object',
       required: ['file', 'purpose'],
       properties: {
-        file: { type: 'string', format: 'binary', description: 'Image file (JPEG, PNG, or WebP, max 20 MB)' },
-        purpose: { type: 'string', enum: ['hero', 'cover'], description: 'Determines which responsive widths are generated' },
+        file: {
+          type: 'string',
+          format: 'binary',
+          description: 'Image file (JPEG, PNG, or WebP, max 20 MB)',
+        },
+        purpose: {
+          type: 'string',
+          enum: ['hero', 'cover'],
+          description: 'Determines which responsive widths are generated',
+        },
         alt: { type: 'string', description: 'Alt text for accessibility' },
       },
     },
@@ -48,7 +62,9 @@ export class MediaController {
 
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
-  @ApiOperation({ summary: 'Delete a media asset and all its storage variants' })
+  @ApiOperation({
+    summary: 'Delete a media asset and all its storage variants',
+  })
   async delete(@Param('id', ParseUUIDPipe) id: string) {
     await this.mediaService.delete(id);
   }

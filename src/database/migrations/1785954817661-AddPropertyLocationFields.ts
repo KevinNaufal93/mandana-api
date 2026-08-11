@@ -1,8 +1,6 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
 
-export class AddPropertyLocationFields1785954817661
-  implements MigrationInterface
-{
+export class AddPropertyLocationFields1785954817661 implements MigrationInterface {
   public async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(`
       ALTER TABLE "properties"

@@ -1,8 +1,18 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsBoolean, IsNumber, IsOptional, IsString, IsUUID, MaxLength, Min } from 'class-validator';
+import {
+  IsBoolean,
+  IsNumber,
+  IsOptional,
+  IsString,
+  IsUUID,
+  MaxLength,
+  Min,
+} from 'class-validator';
 
 export class CreateHeroSlideDto {
-  @ApiProperty({ description: 'MediaAsset UUID (upload first via POST /admin/media)' })
+  @ApiProperty({
+    description: 'MediaAsset UUID (upload first via POST /admin/media)',
+  })
   @IsUUID()
   mediaAssetId!: string;
 

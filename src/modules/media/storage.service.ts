@@ -20,7 +20,10 @@ export class StorageService {
         accessKeyId: configService.getOrThrow<string>('storage.accessKey'),
         secretAccessKey: configService.getOrThrow<string>('storage.secretKey'),
       },
-      forcePathStyle: configService.get<boolean>('storage.forcePathStyle', true),
+      forcePathStyle: configService.get<boolean>(
+        'storage.forcePathStyle',
+        true,
+      ),
     });
     this.bucket = configService.getOrThrow<string>('storage.bucket');
     this.publicUrl = configService.getOrThrow<string>('media.publicUrl');
