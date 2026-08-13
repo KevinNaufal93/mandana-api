@@ -37,7 +37,7 @@ async function bootstrap() {
   app.useGlobalFilters(new AllExceptionsFilter());
   app.useGlobalInterceptors(
     new ClassSerializerInterceptor(app.get(Reflector)),
-    new TransformInterceptor(),
+    new TransformInterceptor(app.get(Reflector)),
   );
 
   // Swagger UI at /docs

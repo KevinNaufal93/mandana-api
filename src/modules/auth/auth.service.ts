@@ -5,8 +5,16 @@ import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import type { Cache } from 'cache-manager';
 import * as bcrypt from 'bcrypt';
 import { UsersService } from '../users/users.service';
-import { JwtPayload } from './interfaces/jwt-payload.interface';
+import {
+  JwtPayload,
+  STORAGE_STREAM_TICKET_PURPOSE,
+  StreamTicketPayload,
+} from './interfaces/jwt-payload.interface';
 import { User } from '../users/entities/user.entity';
+
+/** Ticket lifetime, seconds. Covers only the time to open the SSE connection
+ * — once the stream is open it stays open; the ticket is never re-checked. */
+const STREAM_TICKET_TTL_SECONDS = 60;
 
 @Injectable()
 export class AuthService {
@@ -31,6 +39,34 @@ export class AuthService {
 
   async refresh(user: User) {
     return this.issueTokens(user);
+  }
+
+  /**
+   * Mints a short-lived, single-purpose token for authenticating an
+   * EventSource connection (`?ticket=`), which cannot send a normal
+   * `Authorization` header. Reuses the access-token secret — no new env var
+   * — but the `purpose` claim is what actually gates it: `JwtStreamStrategy`
+   * rejects any token missing it, so a plain access token can't double as a
+   * ticket even though it would otherwise verify fine against this secret.
+   */
+  async issueStreamTicket(
+    user: User,
+  ): Promise<{ ticket: string; expiresIn: number }> {
+    const payload: StreamTicketPayload = {
+      sub: user.id,
+      email: user.email,
+      role: user.role,
+      purpose: STORAGE_STREAM_TICKET_PURPOSE,
+    };
+
+    const accessSecret =
+      this.configService.getOrThrow<string>('jwt.accessSecret');
+    const ticket = await this.jwtService.signAsync(payload, {
+      secret: accessSecret,
+      expiresIn: STREAM_TICKET_TTL_SECONDS,
+    });
+
+    return { ticket, expiresIn: STREAM_TICKET_TTL_SECONDS };
   }
 
   async logout(userId: string) {

@@ -20,6 +20,7 @@ import { CollectionsModule } from './modules/collections/collections.module';
 import { HomepageModule } from './modules/homepage/homepage.module';
 import { AmenitiesModule } from './modules/amenities/amenities.module';
 import { MovingModule } from './modules/moving/moving.module';
+import { StorageModule } from './modules/storage/storage.module';
 
 @Module({
   imports: [
@@ -62,6 +63,7 @@ import { MovingModule } from './modules/moving/moving.module';
     HomepageModule,
     AmenitiesModule,
     MovingModule,
+    StorageModule,
   ],
   providers: [
     // Global JWT guard: all routes protected by default; @Public() opts out
