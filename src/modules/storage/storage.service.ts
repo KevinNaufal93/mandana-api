@@ -1,13 +1,10 @@
-import {
-  BadRequestException,
-  Injectable,
-  NotFoundException,
-} from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { FindOptionsWhere, Repository } from 'typeorm';
 import { StorageUnitType } from './entities/storage-unit-type.entity';
 import { StorageFacility } from './entities/storage-facility.entity';
 import { StorageInventory } from './entities/storage-inventory.entity';
+import { StorageUnit } from './entities/storage-unit.entity';
 import { CreateStorageUnitTypeDto } from './dto/create-storage-unit-type.dto';
 import { UpdateStorageUnitTypeDto } from './dto/update-storage-unit-type.dto';
 import { CreateStorageFacilityDto } from './dto/create-storage-facility.dto';
@@ -29,6 +26,8 @@ export class StorageService {
     private readonly facilityRepo: Repository<StorageFacility>,
     @InjectRepository(StorageInventory)
     private readonly inventoryRepo: Repository<StorageInventory>,
+    @InjectRepository(StorageUnit)
+    private readonly unitRepo: Repository<StorageUnit>,
     private readonly availability: StorageAvailabilityService,
   ) {}
 
@@ -296,10 +295,6 @@ export class StorageService {
   async createInventory(
     dto: CreateStorageInventoryDto,
   ): Promise<StorageInventory> {
-    const occupiedUnits = dto.occupiedUnits ?? 0;
-    if (occupiedUnits > dto.totalUnits) {
-      throw new BadRequestException('occupiedUnits cannot exceed totalUnits');
-    }
     // Existence checks first — surfaces a clean 404 instead of a raw FK
     // violation (which AllExceptionsFilter has no special handling for).
     await this.findFacilityOrFail(dto.facilityId);
@@ -308,8 +303,6 @@ export class StorageService {
     const inventory = this.inventoryRepo.create({
       facilityId: dto.facilityId,
       unitTypeId: dto.unitTypeId,
-      totalUnits: dto.totalUnits,
-      occupiedUnits,
       monthlyRateOverride: dto.monthlyRateOverride ?? null,
       isActive: dto.isActive ?? true,
     });
@@ -327,19 +320,9 @@ export class StorageService {
   ): Promise<StorageInventory> {
     const inventory = await this.findInventoryOrFail(id);
 
-    const nextTotal = dto.totalUnits ?? inventory.totalUnits;
-    const nextOccupied = dto.occupiedUnits ?? inventory.occupiedUnits;
-    if (nextOccupied > nextTotal) {
-      throw new BadRequestException('occupiedUnits cannot exceed totalUnits');
-    }
-
     Object.assign(inventory, {
       ...(dto.facilityId !== undefined && { facilityId: dto.facilityId }),
       ...(dto.unitTypeId !== undefined && { unitTypeId: dto.unitTypeId }),
-      ...(dto.totalUnits !== undefined && { totalUnits: dto.totalUnits }),
-      ...(dto.occupiedUnits !== undefined && {
-        occupiedUnits: dto.occupiedUnits,
-      }),
       ...(dto.monthlyRateOverride !== undefined && {
         monthlyRateOverride: dto.monthlyRateOverride ?? null,
       }),
@@ -359,7 +342,9 @@ export class StorageService {
 
   // ─── Quote ────────────────────────────────────────────────────────────────
 
-  /** Resolves and validates a facility+unitType+inventory triple. Shared by
+  /** Resolves and validates a facility+unitType+inventory triple, plus the
+   * live physical unit count for that pair (StorageInventory no longer
+   * carries totalUnits — see storage-inventory.entity.ts). Shared by
    * quote() and (via StorageService injected into StorageBookingsService)
    * booking creation, so "is this combination bookable" has one answer. */
   async resolveBookableInventory(
@@ -369,6 +354,7 @@ export class StorageService {
     facility: StorageFacility;
     unitType: StorageUnitType;
     inventory: StorageInventory;
+    totalUnits: number;
   }> {
     const facility = await this.findFacilityBySlugOrFail(facilitySlug);
     const unitType = await this.findUnitTypeBySlugOrFail(unitTypeSlug);
@@ -384,7 +370,14 @@ export class StorageService {
         `${unitType.name} is not offered at ${facility.name}`,
       );
     }
-    return { facility, unitType, inventory };
+    const totalUnits = await this.unitRepo.count({
+      where: {
+        facilityId: facility.id,
+        unitTypeId: unitType.id,
+        isActive: true,
+      },
+    });
+    return { facility, unitType, inventory, totalUnits };
   }
 
   async quote(dto: QuoteStorageDto): Promise<StorageQuoteDto> {

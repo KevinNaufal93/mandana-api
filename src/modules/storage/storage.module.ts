@@ -3,8 +3,10 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { StorageUnitType } from './entities/storage-unit-type.entity';
 import { StorageFacility } from './entities/storage-facility.entity';
 import { StorageInventory } from './entities/storage-inventory.entity';
+import { StorageUnit } from './entities/storage-unit.entity';
 import { StorageBooking } from './entities/storage-booking.entity';
 import { StorageService } from './storage.service';
+import { StorageUnitsService } from './storage-units.service';
 import { StorageBookingsService } from './storage-bookings.service';
 import { StorageAvailabilityService } from './storage-availability.service';
 import { StorageAvailabilityCacheService } from './storage-availability-cache.service';
@@ -14,6 +16,7 @@ import {
   StorageAdminController,
   StorageAdminStreamController,
 } from './storage.controller';
+import { StorageUnitsController } from './storage-units.controller';
 import {
   StorageBookingsController,
   StorageBookingsAdminController,
@@ -27,6 +30,7 @@ import { AuthModule } from '../auth/auth.module';
       StorageUnitType,
       StorageFacility,
       StorageInventory,
+      StorageUnit,
       StorageBooking,
     ]),
     MediaModule,
@@ -35,6 +39,7 @@ import { AuthModule } from '../auth/auth.module';
   ],
   providers: [
     StorageService,
+    StorageUnitsService,
     StorageBookingsService,
     StorageAvailabilityService,
     StorageAvailabilityCacheService,
@@ -44,6 +49,7 @@ import { AuthModule } from '../auth/auth.module';
     StorageController,
     StorageAdminController,
     StorageAdminStreamController,
+    StorageUnitsController,
     StorageBookingsController,
     StorageBookingsAdminController,
   ],

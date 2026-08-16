@@ -1,5 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { StorageBookingStatus } from '../enums/storage-booking-status.enum';
+import { StorageUnitStatus } from '../enums/storage-unit-status.enum';
 
 /**
  * Response-shape DTOs, declared purely so Swagger/OpenAPI can describe the
@@ -90,6 +91,8 @@ export class StorageFacilityResponseDto {
 }
 
 // ─── Inventory (admin) ──────────────────────────────────────────────────────
+// Config only — "is this size offered here, at what rate." Unit counts live
+// on /admin/storage/units, not here; see storage-inventory.entity.ts.
 
 export class StorageInventoryDto {
   @ApiProperty() id!: string;
@@ -97,9 +100,6 @@ export class StorageInventoryDto {
   @ApiProperty() facilitySlug!: string;
   @ApiProperty() unitTypeId!: string;
   @ApiProperty() unitTypeSlug!: string;
-  @ApiProperty() totalUnits!: number;
-  @ApiProperty() occupiedUnits!: number;
-  @ApiProperty() availableUnits!: number;
   @ApiPropertyOptional({ nullable: true, type: Number }) monthlyRateOverride!:
     number | null;
   @ApiProperty() isActive!: boolean;
@@ -110,18 +110,94 @@ export class StorageInventoryListResponseDto {
   data!: StorageInventoryDto[];
 }
 
+// ─── Units (admin) — the individual physical rows behind the counts above ──
+
+export class StorageUnitDto {
+  @ApiProperty() id!: string;
+  @ApiProperty() facilityId!: string;
+  @ApiProperty() facilitySlug!: string;
+  @ApiProperty() unitTypeId!: string;
+  @ApiProperty() unitTypeSlug!: string;
+  @ApiProperty() code!: string;
+  @ApiPropertyOptional({ nullable: true, type: Number }) gridColumn!:
+    number | null;
+  @ApiPropertyOptional({ nullable: true, type: Number }) gridRow!:
+    number | null;
+  @ApiPropertyOptional({ nullable: true, type: Number }) columnSpan!:
+    number | null;
+  @ApiPropertyOptional({ nullable: true, type: Number }) rowSpan!:
+    number | null;
+  @ApiProperty({ enum: StorageUnitStatus }) status!: StorageUnitStatus;
+  @ApiPropertyOptional({ nullable: true, type: String }) bookingId!:
+    string | null;
+  @ApiProperty() isActive!: boolean;
+}
+
+export class StorageUnitResponseDto {
+  @ApiProperty({ type: StorageUnitDto })
+  data!: StorageUnitDto;
+}
+
+export class StorageUnitListResponseDto {
+  @ApiProperty({ type: [StorageUnitDto] })
+  data!: StorageUnitDto[];
+}
+
 export class StorageInventoryResponseDto {
   @ApiProperty({ type: StorageInventoryDto })
   data!: StorageInventoryDto;
 }
 
 // ─── Availability snapshot (polling + both SSE streams) ────────────────────
+// No `onHold` anywhere below — nothing server-side ever populates a hold
+// (see StorageUnitStatus), so a field that would always read 0 is omitted
+// rather than shipped as permanently-dead API surface.
 
 export class StorageAvailabilityUnitDto {
   @ApiProperty() unitTypeSlug!: string;
   @ApiProperty() total!: number;
   @ApiProperty() available!: number;
+  @ApiProperty() occupied!: number;
+  @ApiProperty() maintenance!: number;
   @ApiProperty({ description: 'Rupiah, integer' }) monthlyRate!: number;
+}
+
+export class StorageAvailabilityLayoutUnitDto {
+  @ApiProperty() code!: string;
+  @ApiProperty() unitTypeSlug!: string;
+  @ApiProperty({ enum: StorageUnitStatus }) status!: StorageUnitStatus;
+  @ApiPropertyOptional({
+    nullable: true,
+    type: Number,
+    description:
+      'Null until a real floor survey exists — client packs its own placement',
+  })
+  gridColumn!: number | null;
+  @ApiPropertyOptional({ nullable: true, type: Number }) gridRow!:
+    number | null;
+  @ApiPropertyOptional({ nullable: true, type: Number }) columnSpan!:
+    number | null;
+  @ApiPropertyOptional({ nullable: true, type: Number }) rowSpan!:
+    number | null;
+}
+
+export class StorageAvailabilityLayoutDto {
+  @ApiProperty({
+    description:
+      'Changes only when physical geometry changes, never on a status flip — safe to memoize placement on this key.',
+  })
+  layoutVersion!: string;
+  @ApiPropertyOptional({
+    nullable: true,
+    type: Number,
+    description: 'Null until positions are populated',
+  })
+  columns!: number | null;
+  @ApiPropertyOptional({ nullable: true, type: Number }) rows!: number | null;
+  @ApiProperty({ description: 'Grid cell size in cm — for span derivation' })
+  cellCm!: number;
+  @ApiProperty({ type: [StorageAvailabilityLayoutUnitDto] })
+  units!: StorageAvailabilityLayoutUnitDto[];
 }
 
 export class StorageAvailabilityFacilityDto {
@@ -129,11 +205,14 @@ export class StorageAvailabilityFacilityDto {
   @ApiProperty() facilityName!: string;
   @ApiProperty({ type: [StorageAvailabilityUnitDto] })
   units!: StorageAvailabilityUnitDto[];
+  @ApiProperty({ type: StorageAvailabilityLayoutDto })
+  layout!: StorageAvailabilityLayoutDto;
 }
 
 export class StorageAvailabilitySnapshotDto {
   @ApiProperty({
-    description: 'md5 of the snapshot body — also used as the ETag',
+    description:
+      'md5 of the complete snapshot body — including every unit in layout.units — also used as the ETag. A per-unit status change always changes this, even when every aggregate count stays the same.',
   })
   version!: string;
   @ApiProperty() generatedAt!: string;
@@ -258,6 +337,14 @@ export class PaginationMetaDto {
 export class StorageBookingAdminListResponseDto {
   @ApiProperty({ type: [StorageBookingAdminDto] })
   data!: StorageBookingAdminDto[];
+
+  @ApiProperty({ type: PaginationMetaDto })
+  meta!: PaginationMetaDto;
+}
+
+export class StorageUnitAdminListResponseDto {
+  @ApiProperty({ type: [StorageUnitDto] })
+  data!: StorageUnitDto[];
 
   @ApiProperty({ type: PaginationMetaDto })
   meta!: PaginationMetaDto;

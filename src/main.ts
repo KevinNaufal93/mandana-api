@@ -18,7 +18,11 @@ async function bootstrap() {
 
   // Security
   app.use(helmet());
-  app.enableCors();
+  // exposedHeaders: without this, cross-origin JS cannot read the ETag
+  // header at all (GET /storage/availability, GET /homepage) — the browser
+  // still uses it for its own native revalidation regardless, but a client
+  // wanting to do its own conditional fetch needs the header exposed.
+  app.enableCors({ exposedHeaders: ['ETag'] });
 
   // Global prefix + URI versioning → routes at /api/v1/...
   app.setGlobalPrefix('api');

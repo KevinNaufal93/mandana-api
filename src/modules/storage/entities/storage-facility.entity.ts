@@ -53,4 +53,17 @@ export class StorageFacility extends BaseEntity {
 
   @Column({ name: 'sort_order', default: 0 })
   sortOrder!: number;
+
+  // Grid-cell size (cm) for the floor-plan span math — kept per facility
+  // rather than hardcoded so a facility with a different physical layout
+  // later isn't a schema change.
+  @Column({ name: 'layout_cell_cm', type: 'int', default: 50 })
+  layoutCellCm!: number;
+
+  // Bumped only when an admin edits unit positions (no such action exists
+  // yet — positions stay null this phase, so this stays constant). The FE
+  // memoizes its derived layout on this key so a status-only change never
+  // triggers a re-layout of every tile.
+  @Column({ name: 'layout_version', type: 'timestamp', default: () => 'now()' })
+  layoutVersion!: Date;
 }

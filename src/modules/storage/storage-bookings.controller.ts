@@ -12,6 +12,7 @@ import {
 } from '@nestjs/common';
 import {
   ApiBearerAuth,
+  ApiCreatedResponse,
   ApiOkResponse,
   ApiOperation,
   ApiTags,
@@ -49,7 +50,7 @@ export class StorageBookingsController {
     summary:
       'Submit a Smart Storage booking request — status starts pending; an admin confirms it. Does not reserve a unit until confirmed.',
   })
-  @ApiOkResponse({ type: StorageBookingResponseDto })
+  @ApiCreatedResponse({ type: StorageBookingResponseDto })
   async create(@Body() dto: CreateStorageBookingDto) {
     const booking = await this.bookingsService.create(dto);
     return this.mapper.toBookingDto(booking);

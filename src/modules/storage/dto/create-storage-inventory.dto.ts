@@ -10,23 +10,6 @@ export class CreateStorageInventoryDto {
   @IsUUID()
   unitTypeId!: string;
 
-  @ApiProperty({ example: 12, minimum: 1 })
-  @IsInt()
-  @Min(1)
-  totalUnits!: number;
-
-  @ApiPropertyOptional({
-    example: 0,
-    minimum: 0,
-    default: 0,
-    description:
-      'For manually correcting stock (e.g. onboarding pre-existing tenants not tracked as bookings). Must not exceed totalUnits.',
-  })
-  @IsOptional()
-  @IsInt()
-  @Min(0)
-  occupiedUnits?: number;
-
   @ApiPropertyOptional({
     minimum: 0,
     description:

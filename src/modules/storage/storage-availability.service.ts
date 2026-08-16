@@ -5,6 +5,7 @@ import { createHash } from 'crypto';
 import { Observable, Subject, from, interval, merge } from 'rxjs';
 import { catchError, map } from 'rxjs/operators';
 import { StorageInventory } from './entities/storage-inventory.entity';
+import { StorageUnit } from './entities/storage-unit.entity';
 import { StorageAvailabilityCacheService } from './storage-availability-cache.service';
 import { StorageMapper } from './storage.mapper';
 import {
@@ -53,12 +54,15 @@ export class StorageAvailabilityService {
   constructor(
     @InjectRepository(StorageInventory)
     private readonly inventoryRepo: Repository<StorageInventory>,
+    @InjectRepository(StorageUnit)
+    private readonly unitRepo: Repository<StorageUnit>,
     private readonly cache: StorageAvailabilityCacheService,
     private readonly mapper: StorageMapper,
   ) {}
 
   private async buildSnapshot(): Promise<StorageAvailabilitySnapshotDto> {
-    const rows = await this.inventoryRepo.find({
+    // Drives which facility×type pairs are offered, and at what rate.
+    const inventoryRows = await this.inventoryRepo.find({
       where: {
         isActive: true,
         facility: { isActive: true },
@@ -71,7 +75,30 @@ export class StorageAvailabilityService {
       },
     });
 
-    const facilities = this.mapper.buildAvailabilityFacilities(rows);
+    // Supplies live per-unit counts and the floor-plan layout.
+    const unitRows = await this.unitRepo.find({
+      where: {
+        isActive: true,
+        facility: { isActive: true },
+        unitType: { isActive: true },
+      },
+      relations: { facility: true, unitType: true },
+      order: {
+        facility: { sortOrder: 'ASC' },
+        unitType: { sortOrder: 'ASC' },
+        code: 'ASC',
+      },
+    });
+
+    // The complete per-facility object — summary `units[]` AND `layout`
+    // together — MUST be what gets hashed below. Hashing a subset (e.g.
+    // only the summary counts) would let a same-type, net-zero status swap
+    // produce an identical hash, silently breaking both the polling `ETag`
+    // and the FE's SSE dedup on `version`. See docs/storage-floor-plan-response.md §1.
+    const facilities = this.mapper.buildAvailabilityFacilities(
+      inventoryRows,
+      unitRows,
+    );
     const version = createHash('md5')
       .update(JSON.stringify(facilities))
       .digest('hex');

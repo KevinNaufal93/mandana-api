@@ -4,12 +4,12 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { QueryFailedError, Repository } from 'typeorm';
+import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
+import { DataSource, QueryFailedError, Repository } from 'typeorm';
 import { randomBytes } from 'crypto';
 import { StorageBooking } from './entities/storage-booking.entity';
-import { StorageInventory } from './entities/storage-inventory.entity';
 import { StorageBookingStatus } from './enums/storage-booking-status.enum';
+import { StorageUnitStatus } from './enums/storage-unit-status.enum';
 import { CreateStorageBookingDto } from './dto/create-storage-booking.dto';
 import { QueryStorageBookingsDto } from './dto/query-storage-bookings.dto';
 import { TransitionStorageBookingDto } from './dto/transition-storage-booking.dto';
@@ -26,6 +26,16 @@ const REFERENCE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const REFERENCE_CODE_LENGTH = 6;
 const MAX_REFERENCE_ATTEMPTS = 5;
 const POSTGRES_UNIQUE_VIOLATION = '23505';
+
+/** Shapes for the two raw SQL result sets in confirm() — `queryRunner.query()`
+ * returns `any`, so these give the two destructures an explicit, honest type
+ * instead of letting `any` flow silently into typed variables. */
+interface ClaimedUnitRow {
+  id: string;
+}
+interface CountRow {
+  count: number;
+}
 
 /** `storage_bookings.reference` is the table's only unique column, so any
  * 23505 on insert can only be a reference collision — safe to retry blindly
@@ -44,8 +54,8 @@ export class StorageBookingsService {
   constructor(
     @InjectRepository(StorageBooking)
     private readonly bookingRepo: Repository<StorageBooking>,
-    @InjectRepository(StorageInventory)
-    private readonly inventoryRepo: Repository<StorageInventory>,
+    @InjectDataSource()
+    private readonly dataSource: DataSource,
     private readonly storageService: StorageService,
     private readonly availability: StorageAvailabilityService,
     private readonly mapper: StorageMapper,
@@ -98,16 +108,16 @@ export class StorageBookingsService {
    * against overselling lives entirely in confirm() below.
    */
   async create(dto: CreateStorageBookingDto): Promise<StorageBooking> {
-    const { facility, unitType, inventory } =
+    const { facility, unitType, inventory, totalUnits } =
       await this.storageService.resolveBookableInventory(
         dto.facilitySlug,
         dto.unitTypeSlug,
       );
 
     const quantity = dto.quantity ?? 1;
-    if (quantity > inventory.totalUnits) {
+    if (quantity > totalUnits) {
       throw new BadRequestException(
-        `${facility.name} only has ${inventory.totalUnits} ${unitType.name} unit(s) in total`,
+        `${facility.name} only has ${totalUnits} ${unitType.name} unit(s) in total`,
       );
     }
     if (dto.durationMonths < unitType.minDurationMonths) {
@@ -177,27 +187,29 @@ export class StorageBookingsService {
     }
   }
 
-  /** Mirror of the allocate step below — GREATEST(...) floors at 0 so a
-   * double-release (e.g. a retried request) can never go negative. */
+  /** Releases whatever units this specific booking holds, regardless of
+   * quantity — a plain targeted UPDATE, no locking needed: only one booking
+   * can ever point at a given set of rows, so there's no contention to
+   * resolve here (unlike confirm() below, which is contested). */
   private async releaseUnit(booking: StorageBooking): Promise<void> {
-    await this.inventoryRepo
-      .createQueryBuilder()
-      .update(StorageInventory)
-      .set({ occupiedUnits: () => 'GREATEST(occupied_units - :qty, 0)' })
-      .where('facility_id = :facilityId AND unit_type_id = :unitTypeId', {
-        facilityId: booking.facilityId,
-        unitTypeId: booking.unitTypeId,
-      })
-      .setParameter('qty', booking.quantity)
-      .execute();
+    await this.dataSource.query(
+      `UPDATE storage_units
+         SET status = $1::storage_units_status_enum, booking_id = NULL, "updatedAt" = now()
+       WHERE booking_id = $2`,
+      [StorageUnitStatus.AVAILABLE, booking.id],
+    );
   }
 
   /**
-   * The only place occupancy is taken. One atomic conditional UPDATE — no
-   * SELECT ... FOR UPDATE, no transaction — the WHERE clause's capacity
-   * check and the increment happen in the same statement, so two admins
-   * confirming the last unit concurrently cannot both succeed: the second
-   * UPDATE's WHERE simply matches zero rows once the first has committed.
+   * The only place occupancy is taken. Unlike a pooled counter, claiming N
+   * *specific* unit rows needs real row-level locking: two admins confirming
+   * the last unit concurrently must not both succeed. `SELECT ... FOR UPDATE
+   * SKIP LOCKED` is what makes that safe — the second transaction's SELECT
+   * simply skips any row the first has already locked, so it correctly sees
+   * fewer than `quantity` rows available and rolls back instead of racing.
+   * Raw SQL through a manual QueryRunner transaction — the portable choice,
+   * matching how the phase-1 atomic-UPDATE trick also went straight to SQL
+   * rather than trusting a query-builder abstraction to get SKIP LOCKED right.
    */
   async confirm(
     id: string,
@@ -207,31 +219,53 @@ export class StorageBookingsService {
     const booking = await this.findOneOrFail(id);
     this.assertStatus(booking, StorageBookingStatus.PENDING, 'confirm');
 
-    const result = await this.inventoryRepo
-      .createQueryBuilder()
-      .update(StorageInventory)
-      .set({ occupiedUnits: () => 'occupied_units + :qty' })
-      .where('facility_id = :facilityId AND unit_type_id = :unitTypeId', {
-        facilityId: booking.facilityId,
-        unitTypeId: booking.unitTypeId,
-      })
-      .andWhere('total_units - occupied_units >= :qty')
-      .setParameter('qty', booking.quantity)
-      .execute();
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+    try {
+      const claimed = (await queryRunner.query(
+        `SELECT id FROM storage_units
+           WHERE facility_id = $1 AND unit_type_id = $2
+             AND status = $3::storage_units_status_enum AND is_active = true
+           ORDER BY code
+           LIMIT $4
+           FOR UPDATE SKIP LOCKED`,
+        [
+          booking.facilityId,
+          booking.unitTypeId,
+          StorageUnitStatus.AVAILABLE,
+          booking.quantity,
+        ],
+      )) as ClaimedUnitRow[];
 
-    if (result.affected === 0) {
-      const inventory = await this.inventoryRepo.findOne({
-        where: {
-          facilityId: booking.facilityId,
-          unitTypeId: booking.unitTypeId,
-        },
-      });
-      const available = inventory
-        ? Math.max(0, inventory.totalUnits - inventory.occupiedUnits)
-        : 0;
-      throw new ConflictException(
-        `Only ${available} unit(s) of ${booking.unitType.name} left at ${booking.facility.name}`,
+      if (claimed.length < booking.quantity) {
+        const [{ count }] = (await queryRunner.query(
+          `SELECT COUNT(*)::int AS count FROM storage_units
+             WHERE facility_id = $1 AND unit_type_id = $2
+               AND status = $3::storage_units_status_enum AND is_active = true`,
+          [booking.facilityId, booking.unitTypeId, StorageUnitStatus.AVAILABLE],
+        )) as CountRow[];
+        await queryRunner.rollbackTransaction();
+        throw new ConflictException(
+          `Only ${count} unit(s) of ${booking.unitType.name} left at ${booking.facility.name}`,
+        );
+      }
+
+      await queryRunner.query(
+        `UPDATE storage_units
+           SET status = $1::storage_units_status_enum, booking_id = $2, "updatedAt" = now()
+         WHERE id = ANY($3::uuid[])`,
+        [StorageUnitStatus.OCCUPIED, booking.id, claimed.map((row) => row.id)],
       );
+
+      await queryRunner.commitTransaction();
+    } catch (err) {
+      if (queryRunner.isTransactionActive) {
+        await queryRunner.rollbackTransaction();
+      }
+      throw err;
+    } finally {
+      await queryRunner.release();
     }
 
     booking.status = StorageBookingStatus.CONFIRMED;

@@ -2,10 +2,13 @@ import { Injectable } from '@nestjs/common';
 import { StorageUnitType } from './entities/storage-unit-type.entity';
 import { StorageFacility } from './entities/storage-facility.entity';
 import { StorageInventory } from './entities/storage-inventory.entity';
+import { StorageUnit } from './entities/storage-unit.entity';
 import { StorageBooking } from './entities/storage-booking.entity';
+import { StorageUnitStatus } from './enums/storage-unit-status.enum';
 import { MediaService } from '../media/media.service';
 import {
   StorageAvailabilityFacilityDto,
+  StorageAvailabilityLayoutUnitDto,
   StorageBookingAdminDto,
   StorageBookingCreatedEventDto,
   StorageBookingDto,
@@ -14,6 +17,7 @@ import {
   StorageFacilityDto,
   StorageImageDto,
   StorageInventoryDto,
+  StorageUnitDto,
   StorageUnitTypeDto,
 } from './dto/storage-response.dto';
 
@@ -88,38 +92,116 @@ export class StorageMapper {
       facilitySlug: inv.facility.slug,
       unitTypeId: inv.unitTypeId,
       unitTypeSlug: inv.unitType.slug,
-      totalUnits: inv.totalUnits,
-      occupiedUnits: inv.occupiedUnits,
-      availableUnits: Math.max(0, inv.totalUnits - inv.occupiedUnits),
       monthlyRateOverride: inv.monthlyRateOverride,
       isActive: inv.isActive,
     };
   }
 
-  // ─── Availability snapshot — counts only, shared by both public and admin
-  // streams, and by the polling endpoint. Never include customer data here;
-  // the public stream is @Public() and anyone can open it. ─────────────────
+  // ─── Units (admin) ───────────────────────────────────────────────────────
+
+  toUnitDto(u: StorageUnit): StorageUnitDto {
+    return {
+      id: u.id,
+      facilityId: u.facilityId,
+      facilitySlug: u.facility.slug,
+      unitTypeId: u.unitTypeId,
+      unitTypeSlug: u.unitType.slug,
+      code: u.code,
+      gridColumn: u.gridColumn,
+      gridRow: u.gridRow,
+      columnSpan: u.columnSpan,
+      rowSpan: u.rowSpan,
+      status: u.status,
+      bookingId: u.bookingId,
+      isActive: u.isActive,
+    };
+  }
+
+  // ─── Availability snapshot — shared by both public and admin streams, and
+  // by the polling endpoint. Never include customer data here (no bookingId,
+  // no booking relation read at all) — the public stream is @Public() and
+  // anyone can open it. `inventoryRows` drives which facility×type pairs are
+  // offered (and at what rate); `unitRows` supplies live per-unit counts and
+  // the floor-plan layout. A unit whose pair has no active inventory row is
+  // dropped from `layout.units` too, so the two views never disagree. ──────
 
   buildAvailabilityFacilities(
-    rows: StorageInventory[],
+    inventoryRows: StorageInventory[],
+    unitRows: StorageUnit[],
   ): StorageAvailabilityFacilityDto[] {
+    const activePairs = new Set(
+      inventoryRows.map((inv) => `${inv.facilityId}:${inv.unitTypeId}`),
+    );
+
+    const countsByPair = new Map<
+      string,
+      { available: number; occupied: number; maintenance: number }
+    >();
+    const layoutUnitsByFacility = new Map<
+      string,
+      StorageAvailabilityLayoutUnitDto[]
+    >();
+
+    for (const unit of unitRows) {
+      const pairKey = `${unit.facilityId}:${unit.unitTypeId}`;
+      if (!activePairs.has(pairKey)) continue;
+
+      const counts = countsByPair.get(pairKey) ?? {
+        available: 0,
+        occupied: 0,
+        maintenance: 0,
+      };
+      if (unit.status === StorageUnitStatus.AVAILABLE) counts.available++;
+      else if (unit.status === StorageUnitStatus.OCCUPIED) counts.occupied++;
+      else if (unit.status === StorageUnitStatus.MAINTENANCE) {
+        counts.maintenance++;
+      }
+      countsByPair.set(pairKey, counts);
+
+      const layoutUnits = layoutUnitsByFacility.get(unit.facilityId) ?? [];
+      layoutUnits.push({
+        code: unit.code,
+        unitTypeSlug: unit.unitType.slug,
+        status: unit.status,
+        gridColumn: unit.gridColumn,
+        gridRow: unit.gridRow,
+        columnSpan: unit.columnSpan,
+        rowSpan: unit.rowSpan,
+      });
+      layoutUnitsByFacility.set(unit.facilityId, layoutUnits);
+    }
+
     const byFacility = new Map<string, StorageAvailabilityFacilityDto>();
 
-    for (const row of rows) {
-      let entry = byFacility.get(row.facility.slug);
+    for (const inv of inventoryRows) {
+      let entry = byFacility.get(inv.facility.slug);
       if (!entry) {
         entry = {
-          facilitySlug: row.facility.slug,
-          facilityName: row.facility.name,
+          facilitySlug: inv.facility.slug,
+          facilityName: inv.facility.name,
           units: [],
+          layout: {
+            layoutVersion: inv.facility.layoutVersion.toISOString(),
+            columns: null,
+            rows: null,
+            cellCm: inv.facility.layoutCellCm,
+            units: layoutUnitsByFacility.get(inv.facilityId) ?? [],
+          },
         };
-        byFacility.set(row.facility.slug, entry);
+        byFacility.set(inv.facility.slug, entry);
       }
+
+      const counts = countsByPair.get(
+        `${inv.facilityId}:${inv.unitTypeId}`,
+      ) ?? { available: 0, occupied: 0, maintenance: 0 };
+
       entry.units.push({
-        unitTypeSlug: row.unitType.slug,
-        total: row.totalUnits,
-        available: Math.max(0, row.totalUnits - row.occupiedUnits),
-        monthlyRate: row.monthlyRateOverride ?? row.unitType.monthlyRate,
+        unitTypeSlug: inv.unitType.slug,
+        total: counts.available + counts.occupied + counts.maintenance,
+        available: counts.available,
+        occupied: counts.occupied,
+        maintenance: counts.maintenance,
+        monthlyRate: inv.monthlyRateOverride ?? inv.unitType.monthlyRate,
       });
     }
 

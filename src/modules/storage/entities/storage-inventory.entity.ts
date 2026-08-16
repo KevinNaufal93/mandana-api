@@ -4,13 +4,13 @@ import { StorageFacility } from './storage-facility.entity';
 import { StorageUnitType } from './storage-unit-type.entity';
 
 /**
- * The pooled unit count for one facility × unit type pair. Availability is
- * `totalUnits - occupiedUnits`, computed in the mapper — never stored.
- *
- * `occupiedUnits` must stay within `[0, totalUnits]`. The migration adds a DB
- * `CHECK` constraint as the final backstop, but the real guard is the atomic
- * conditional `UPDATE` in StorageBookingsService (confirm/cancel/complete) —
- * see that file for why a plain read-modify-write here would allow overselling.
+ * The facility × unit type pairing config — "is this size offered here, and
+ * at what rate." Unit counts are NOT stored here: they're derived by
+ * counting `storage_unit` rows, which is the single source of truth for
+ * capacity and occupancy. This table used to also carry `totalUnits`/
+ * `occupiedUnits`, but keeping both independently writable was exactly the
+ * drift bug the floor-plan work exists to avoid — see
+ * docs/storage-floor-plan-response.md §3.
  */
 @Entity('storage_inventory')
 @Unique('UQ_storage_inventory_facility_unit_type', ['facilityId', 'unitTypeId'])
@@ -28,12 +28,6 @@ export class StorageInventory extends BaseEntity {
 
   @Column({ name: 'unit_type_id' })
   unitTypeId!: string;
-
-  @Column({ name: 'total_units', type: 'int' })
-  totalUnits!: number;
-
-  @Column({ name: 'occupied_units', type: 'int', default: 0 })
-  occupiedUnits!: number;
 
   // Overrides StorageUnitType.monthlyRate for this facility (e.g. a premium
   // location). Null = use the unit type's base rate.
