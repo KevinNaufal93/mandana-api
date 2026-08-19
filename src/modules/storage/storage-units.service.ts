@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { FindOptionsWhere, Repository } from 'typeorm';
+import { FindOptionsWhere, In, Repository } from 'typeorm';
 import { StorageUnit } from './entities/storage-unit.entity';
 import { StorageFacility } from './entities/storage-facility.entity';
 import { StorageUnitType } from './entities/storage-unit-type.entity';
@@ -174,6 +174,13 @@ export class StorageUnitsService {
 
     const saved = await this.unitRepo.save(toCreate);
     await this.availability.publish();
-    return saved;
+    // save() only returns the FK columns (facilityId/unitTypeId), not the
+    // loaded facility/unitType relations — toUnitDto() needs both slugs, so
+    // reload with relations before returning (same reason create() does it).
+    return this.unitRepo.find({
+      where: { id: In(saved.map((u) => u.id)) },
+      relations: { facility: true, unitType: true },
+      order: { code: 'ASC' },
+    });
   }
 }

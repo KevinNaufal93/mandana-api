@@ -72,7 +72,7 @@ change to the booking-creation behavior at all. Two reasons, not just one:
 2. **It reuses zero existing infrastructure.** The atomic confirm-time allocation
    (`SELECT ... FOR UPDATE SKIP LOCKED`, described below) was already required by adopting
    §3 regardless of this decision — claiming specific rows instead of incrementing a
-   counter needs real locking either way. Holds would add a *second*, genuinely new
+   counter needs real locking either way. Holds would add a _second_, genuinely new
    subsystem on top: an expiry sweep, an `expired` booking status, and idempotency-key
    handling to stop a retried request from burning two holds for one booking. None of that
    exists in this codebase today.
@@ -88,18 +88,26 @@ require re-touching `confirm()`.
   "facilitySlug": "bsd-city",
   "facilityName": "Mandana Storage BSD City",
   "units": [
-    { "unitTypeSlug": "medium", "total": 12, "available": 9, "occupied": 3, "maintenance": 0, "monthlyRate": 650000 }
+    {
+      "unitTypeSlug": "medium",
+      "total": 12,
+      "available": 9,
+      "occupied": 3,
+      "maintenance": 0,
+      "monthlyRate": 650000,
+    },
   ],
   "layout": {
     "layoutVersion": "2026-08-16T09:00:00.000Z",
-    "columns": null, "rows": null,
+    "columns": null,
+    "rows": null,
     "cellCm": 50,
     "units": [
-      { "code": "M-01", "unitTypeSlug": "medium", "status": "available" }
+      { "code": "M-01", "unitTypeSlug": "medium", "status": "available" },
       // gridColumn/gridRow/columnSpan/rowSpan omitted per unit — derive
       // from unitType.dimensions / cellCm until positions are populated
-    ]
-  }
+    ],
+  },
 }
 ```
 
@@ -136,7 +144,7 @@ requested:
 **`version` hashes the complete per-facility object, `layout.units[]` included — not just
 the aggregate counts.** Confirmed as a genuine gap in the first draft and closed before
 anything shipped: the snapshot builder composes the summary `units[]` and `layout`
-together into one object *first*, then hashes that whole thing. A same-type, net-zero
+together into one object _first_, then hashes that whole thing. A same-type, net-zero
 status swap (one unit `available→maintenance`, another `maintenance→available`) now
 changes `version`, which means it also changes the `ETag` and triggers a real SSE
 `availability` frame — verified as an explicit test case before merging (flip two units,
