@@ -11,6 +11,7 @@ import {
   MaxLength,
   Min,
 } from 'class-validator';
+import { RichText } from '../../../common/rich-text';
 
 export class CreateTruckClassDto {
   @ApiProperty({ example: 'Pick Up Bak' })
@@ -31,11 +32,7 @@ export class CreateTruckClassDto {
   })
   slug?: string;
 
-  @ApiPropertyOptional({
-    example: 'Cocok untuk isi kamar kos atau barang ±3 m³',
-  })
-  @IsOptional()
-  @IsString()
+  @RichText()
   description?: string;
 
   @ApiPropertyOptional({ example: 1000, minimum: 0 })

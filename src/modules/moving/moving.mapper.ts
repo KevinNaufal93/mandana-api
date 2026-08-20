@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { TruckClass } from './entities/truck-class.entity';
 import { MediaService } from '../media/media.service';
+import { richTextToPlain } from '../../common/rich-text';
 import {
   TruckClassDto,
   TruckDimensionsDto,
@@ -35,6 +36,7 @@ export class MovingMapper {
       slug: t.slug,
       name: t.name,
       description: t.description,
+      descriptionText: richTextToPlain(t.description),
       capacityKg: t.capacityKg,
       volumeM3: toNumber(t.volumeM3),
       dimensions: this.buildDimensions(t),

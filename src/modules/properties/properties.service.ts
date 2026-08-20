@@ -29,6 +29,7 @@ import {
   PropertyDetail,
 } from './property.mapper';
 import { resolveUniqueSlug } from '../../common/utils/slugify';
+import { richTextToPlain } from '../../common/rich-text';
 
 const DETAIL_RELATIONS = {
   images: { mediaAsset: true },
@@ -82,7 +83,7 @@ export class PropertiesService {
 
     if (search) {
       qb.andWhere(
-        `to_tsvector('simple', COALESCE(p.title,'') || ' ' || COALESCE(p.city,'') || ' ' || COALESCE(p.province,'') || ' ' || COALESCE(p.area,'') || ' ' || COALESCE(p.address,'') || ' ' || COALESCE(p.description,'')) @@ websearch_to_tsquery('simple', :search)`,
+        `to_tsvector('simple', COALESCE(p.title,'') || ' ' || COALESCE(p.city,'') || ' ' || COALESCE(p.province,'') || ' ' || COALESCE(p.area,'') || ' ' || COALESCE(p.address,'') || ' ' || COALESCE(p.description_text,'')) @@ websearch_to_tsquery('simple', :search)`,
         { search },
       );
     }
@@ -201,7 +202,7 @@ export class PropertiesService {
       qb.andWhere('p.listingType = :listingType', { listingType });
     if (search) {
       qb.andWhere(
-        `to_tsvector('simple', COALESCE(p.title,'') || ' ' || COALESCE(p.city,'') || ' ' || COALESCE(p.province,'') || ' ' || COALESCE(p.area,'') || ' ' || COALESCE(p.address,'') || ' ' || COALESCE(p.description,'')) @@ websearch_to_tsquery('simple', :search)`,
+        `to_tsvector('simple', COALESCE(p.title,'') || ' ' || COALESCE(p.city,'') || ' ' || COALESCE(p.province,'') || ' ' || COALESCE(p.area,'') || ' ' || COALESCE(p.address,'') || ' ' || COALESCE(p.description_text,'')) @@ websearch_to_tsquery('simple', :search)`,
         { search },
       );
     }
@@ -239,6 +240,7 @@ export class PropertiesService {
       slug,
       title: dto.title,
       description: dto.description ?? null,
+      descriptionText: richTextToPlain(dto.description),
       listingType: dto.listingType,
       status: dto.status,
       price: dto.price,
@@ -285,6 +287,7 @@ export class PropertiesService {
       ...(dto.title !== undefined && { title: dto.title }),
       ...(dto.description !== undefined && {
         description: dto.description ?? null,
+        descriptionText: richTextToPlain(dto.description),
       }),
       ...(dto.listingType !== undefined && { listingType: dto.listingType }),
       ...(dto.status !== undefined && { status: dto.status }),

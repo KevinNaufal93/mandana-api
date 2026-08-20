@@ -12,6 +12,7 @@ import {
   MaxLength,
   Min,
 } from 'class-validator';
+import { RichText } from '../../../common/rich-text';
 
 export class CreateStorageFacilityDto {
   @ApiProperty({ example: 'Mandana Storage BSD City' })
@@ -32,11 +33,7 @@ export class CreateStorageFacilityDto {
   })
   slug?: string;
 
-  @ApiPropertyOptional({
-    example: 'Fasilitas penyimpanan dengan CCTV 24 jam',
-  })
-  @IsOptional()
-  @IsString()
+  @RichText()
   description?: string;
 
   @ApiPropertyOptional({ example: 'Jl. Letnan Sutopo No. 1, BSD City' })

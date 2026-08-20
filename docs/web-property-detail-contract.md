@@ -7,13 +7,17 @@
 > (the listing page) — public coordinates are fuzzed and `address` is dropped from
 > *every* public endpoint, list included. See "Location privacy" below before you
 > touch the map or the listing cards.
+>
+> ⚠️ **Phase 3 update:** `description` is now sanitized **HTML rich text**, not plain
+> text — the admin CMS switched to a WYSIWYG editor. See "Rich text description" below
+> before you touch the description field.
 
 ## Summary
 
 | Endpoint | Status |
 | --- | --- |
-| `GET /properties` | ⚠️ **Changed** — `address` removed, `latitude`/`longitude` are now fuzzed (~300 m), `locationPrecision`/`approximateRadiusM` added. Every other field is unchanged. |
-| `GET /properties/:slug` | ✅ Existing route, richer payload — now includes `amenities`, `agent`, a deterministically-ordered gallery, and fuzzed location (see below). `latitude`/`longitude`/`price`/`areaSqm` are JSON **numbers**, not strings. |
+| `GET /properties` | ⚠️ **Changed** — `address` removed, `latitude`/`longitude` are now fuzzed (~300 m), `locationPrecision`/`approximateRadiusM` added, `description` is now HTML with a new plain-text `descriptionText` sibling. Every other field is unchanged. |
+| `GET /properties/:slug` | ✅ Existing route, richer payload — now includes `amenities`, `agent`, a deterministically-ordered gallery, and fuzzed location (see below). `latitude`/`longitude`/`price`/`areaSqm` are JSON **numbers**, not strings. `description` is now HTML — see "Rich text description" below. |
 | `GET /properties/:slug/similar` | 🆕 New — "Pilihan Properti Serupa" |
 | `GET /amenities` | 🆕 New — full facility picklist (for icon/label lookup, if you render facility filters later) |
 
@@ -32,7 +36,8 @@ Same route as before. Response shape:
   "latitude": -6.1445, "longitude": 106.8689,
   "locationPrecision": "approximate", "approximateRadiusM": 300,
   "isFeatured": false,
-  "description": "Dijual Rumah Modern Classic Siap Huni Di daerah Sunter Jakarta Utara...",
+  "description": "<p>Dijual Rumah <strong>Modern Classic</strong> Siap Huni...</p>",
+  "descriptionText": "Dijual Rumah Modern Classic Siap Huni...",
   "propertyType": { "id": "...", "name": "Rumah", "slug": "rumah" },
   "images": [
     { "id": "...", "url": "...", "srcset": "... 768w, ... 1280w, ... 1920w",
@@ -58,6 +63,36 @@ Same route as before. Response shape:
 - `agent` is `null` if the listing has no assigned agent (shouldn't happen for existing data — backfilled to the oldest admin).
 - `agent` never includes `email`/`role` — don't rely on those being absent-but-present; they simply aren't sent.
 - **Breaking type change:** `price`, `areaSqm`, `latitude`, `longitude` are JSON numbers (previously strings, since Postgres `numeric`/`decimal` columns come back from `pg` as strings). If your code does `parseFloat(property.price)` or similar, it still works but is now redundant — safe either way.
+
+---
+
+## Rich text description ⚠️ breaking change
+
+`description` is now sanitized HTML, not plain text — render it with
+`dangerouslySetInnerHTML` (React) or equivalent, not as a plain string. The admin CMS
+posts whatever its WYSIWYG editor produces; the API sanitizes it against a fixed
+allow-list before it's ever stored, so it's safe to render directly without further
+escaping. Allowed tags: `p br span strong b em i u s strike blockquote ol ul li a
+h1–h6 img pre code hr`, plus `color`/`background-color`/`text-align` inline styles.
+Links always carry `target="_blank" rel="noopener noreferrer nofollow"`. No `data:`
+URIs — images are always `https://` (uploaded through the media pipeline).
+
+A plain-text sibling, `descriptionText`, ships alongside it (also on `GET /properties`
+list rows and `GET /homepage` collection cards) for anywhere you need text without
+markup — SEO `<meta description>`, share previews, search snippets. Both fields can be
+`null`.
+
+```jsonc
+{
+  "description": "<p>Rumah <strong>modern</strong> di BSD.</p><ul><li>3 kamar tidur</li></ul>",
+  "descriptionText": "Rumah modern di BSD. 3 kamar tidur"
+}
+```
+
+Existing plain-text descriptions were migrated automatically (wrapped in `<p>`, blank
+lines split into paragraphs) — no content was lost, but re-check a few listings after
+deploy since automated HTML conversion is a best-effort transform, not a guarantee of
+identical rendering.
 
 ---
 
@@ -149,7 +184,9 @@ stay that way.
 
 - `GET /properties` (listing page) is unchanged **except** `address` is dropped and
   `latitude`/`longitude`/`locationPrecision`/`approximateRadiusM` per "Location privacy" above —
-  every filter, `meta`, and every other field is identical.
+  every filter, `meta`, and every other field is identical. List rows also carry
+  `description` (now HTML) and the new `descriptionText`, same as the detail endpoint —
+  see "Rich text description" above.
 - `GET /homepage` gains an `srcset` on `recommendations[].cover` (previously missing); every
   other field is unchanged. Homepage/`similar` cards never carried `address` or coordinates in
   the first place, so nothing changes there.

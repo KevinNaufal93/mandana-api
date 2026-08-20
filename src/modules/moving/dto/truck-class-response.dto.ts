@@ -28,6 +28,8 @@ export class TruckClassDto {
   @ApiProperty() name!: string;
   @ApiPropertyOptional({ nullable: true, type: String }) description!:
     string | null;
+  @ApiPropertyOptional({ nullable: true, type: String }) descriptionText!:
+    string | null;
   @ApiPropertyOptional({ nullable: true, type: Number }) capacityKg!:
     number | null;
   @ApiPropertyOptional({ nullable: true, type: Number }) volumeM3!:

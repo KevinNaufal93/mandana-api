@@ -34,6 +34,8 @@ export class StorageUnitTypeDto {
   @ApiProperty() name!: string;
   @ApiPropertyOptional({ nullable: true, type: String }) description!:
     string | null;
+  @ApiPropertyOptional({ nullable: true, type: String }) descriptionText!:
+    string | null;
   @ApiPropertyOptional({ nullable: true, type: Number }) volumeM3!:
     number | null;
   @ApiPropertyOptional({ nullable: true, type: StorageDimensionsDto })
@@ -63,6 +65,8 @@ export class StorageFacilityDto {
   @ApiProperty() slug!: string;
   @ApiProperty() name!: string;
   @ApiPropertyOptional({ nullable: true, type: String }) description!:
+    string | null;
+  @ApiPropertyOptional({ nullable: true, type: String }) descriptionText!:
     string | null;
   @ApiPropertyOptional({ nullable: true, type: String }) address!:
     string | null;

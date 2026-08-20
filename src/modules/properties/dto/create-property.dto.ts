@@ -13,6 +13,7 @@ import {
   MinLength,
 } from 'class-validator';
 import { Type } from 'class-transformer';
+import { RichText } from '../../../common/rich-text';
 import { ListingType } from '../enums/listing-type.enum';
 import { PropertyStatus } from '../enums/property-status.enum';
 
@@ -37,9 +38,7 @@ export class CreatePropertyDto {
   @MaxLength(255)
   title!: string;
 
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsString()
+  @RichText()
   description?: string;
 
   @ApiPropertyOptional({ enum: ListingType, default: ListingType.SALE })

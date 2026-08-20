@@ -28,6 +28,15 @@ export class Property extends BaseEntity {
   @Column({ type: 'text', nullable: true })
   description!: string | null;
 
+  /**
+   * Plain-text derivative of `description` (HTML stripped), kept in sync on
+   * every write. Exists solely so the FTS index (see migration
+   * `1786320000000-AddPropertySearchIndex`, later repointed at this column)
+   * indexes real words instead of markup tokens like "strong" or "li".
+   */
+  @Column({ name: 'description_text', type: 'text', nullable: true })
+  descriptionText!: string | null;
+
   @Column({
     name: 'listing_type',
     type: 'enum',

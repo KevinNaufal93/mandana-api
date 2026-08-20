@@ -8,6 +8,7 @@ import { CollectionsService } from '../collections/collections.service';
 import { MediaService } from '../media/media.service';
 import { PropertyMapper } from '../properties/property.mapper';
 import { SetRecommendationsDto } from './dto/set-recommendations.dto';
+import { richTextToPlain } from '../../common/rich-text';
 
 const CAROUSEL_INTERVAL_MS = 5000;
 
@@ -60,6 +61,7 @@ export class HomepageService {
         slug: c.slug,
         name: c.name,
         description: c.description,
+        descriptionText: richTextToPlain(c.description),
         sortOrder: c.sortOrder,
         propertyCount: collectionCounts[i],
         cover: c.coverMediaAsset

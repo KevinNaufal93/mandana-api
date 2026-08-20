@@ -11,6 +11,7 @@ import {
   MaxLength,
   Min,
 } from 'class-validator';
+import { RichText } from '../../../common/rich-text';
 
 export class CreateStorageUnitTypeDto {
   @ApiProperty({ example: 'Medium' })
@@ -31,11 +32,7 @@ export class CreateStorageUnitTypeDto {
   })
   slug?: string;
 
-  @ApiPropertyOptional({
-    example: 'Cocok untuk isi 1 kamar penuh termasuk furnitur kecil',
-  })
-  @IsOptional()
-  @IsString()
+  @RichText()
   description?: string;
 
   @ApiPropertyOptional({ example: 5, minimum: 0 })

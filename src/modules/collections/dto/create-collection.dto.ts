@@ -9,6 +9,7 @@ import {
   MaxLength,
   Min,
 } from 'class-validator';
+import { RichText } from '../../../common/rich-text';
 
 export class CreateCollectionDto {
   @ApiProperty({ example: 'bsd-city', description: 'URL-safe slug, unique' })
@@ -24,10 +25,7 @@ export class CreateCollectionDto {
   @MaxLength(255)
   name!: string;
 
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsString()
-  @MaxLength(2000)
+  @RichText()
   description?: string;
 
   @ApiPropertyOptional({ description: 'MediaAsset UUID for the cover image' })

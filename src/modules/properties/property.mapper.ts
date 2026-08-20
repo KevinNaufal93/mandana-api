@@ -3,6 +3,7 @@ import { Property } from './entities/property.entity';
 import { PropertyImage } from './entities/property-image.entity';
 import { MediaService, MediaImageDto } from '../media/media.service';
 import { fuzzCoordinates, APPROX_RADIUS_M } from './location-privacy';
+import { richTextToPlain } from '../../common/rich-text';
 
 export interface PropertyCard {
   id: string;
@@ -23,6 +24,8 @@ export interface PropertyCard {
 
 interface PropertyDetailBase extends PropertyCard {
   description: string | null;
+  /** Plain-text derivative of `description` (HTML stripped) — SEO meta, share previews. */
+  descriptionText: string | null;
   latitude: number | null;
   longitude: number | null;
   isFeatured: boolean;
@@ -130,6 +133,7 @@ export class PropertyMapper {
     const base = {
       ...this.toCard(p),
       description: p.description,
+      descriptionText: p.descriptionText ?? richTextToPlain(p.description),
       isFeatured: p.isFeatured,
       images: (p.images ?? [])
         .slice()

@@ -6,6 +6,7 @@ import { StorageUnit } from './entities/storage-unit.entity';
 import { StorageBooking } from './entities/storage-booking.entity';
 import { StorageUnitStatus } from './enums/storage-unit-status.enum';
 import { MediaService } from '../media/media.service';
+import { richTextToPlain } from '../../common/rich-text';
 import {
   StorageAvailabilityFacilityDto,
   StorageAvailabilityLayoutUnitDto,
@@ -53,6 +54,7 @@ export class StorageMapper {
       slug: u.slug,
       name: u.name,
       description: u.description,
+      descriptionText: richTextToPlain(u.description),
       volumeM3: toNumber(u.volumeM3),
       dimensions: this.buildDimensions(u),
       monthlyRate: u.monthlyRate,
@@ -71,6 +73,7 @@ export class StorageMapper {
       slug: f.slug,
       name: f.name,
       description: f.description,
+      descriptionText: richTextToPlain(f.description),
       address: f.address,
       area: f.area,
       city: f.city,
