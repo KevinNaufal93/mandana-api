@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { Property } from './entities/property.entity';
 import { PropertyImage } from './entities/property-image.entity';
+import { PropertyStatus } from './enums/property-status.enum';
 import { MediaService, MediaImageDto } from '../media/media.service';
 import { fuzzCoordinates, APPROX_RADIUS_M } from './location-privacy';
 import { richTextToPlain } from '../../common/rich-text';
@@ -28,6 +29,15 @@ interface PropertyDetailBase extends PropertyCard {
   descriptionText: string | null;
   latitude: number | null;
   longitude: number | null;
+  /**
+   * Missing from PropertyCard on purpose (the public card list never
+   * needs it — every public query already filters to PUBLISHED). Detail
+   * responses need it though: the admin detail view gates editing on it,
+   * and findBySlug's PUBLISHED-only filter means the public detail
+   * response always carries the same literal value, so exposing it there
+   * too is harmless.
+   */
+  status: PropertyStatus;
   isFeatured: boolean;
   images: Array<
     MediaImageDto & { id: string; isCover: boolean; sortOrder: number }
@@ -134,6 +144,7 @@ export class PropertyMapper {
       ...this.toCard(p),
       description: p.description,
       descriptionText: p.descriptionText ?? richTextToPlain(p.description),
+      status: p.status,
       isFeatured: p.isFeatured,
       images: (p.images ?? [])
         .slice()

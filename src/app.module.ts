@@ -21,6 +21,7 @@ import { HomepageModule } from './modules/homepage/homepage.module';
 import { AmenitiesModule } from './modules/amenities/amenities.module';
 import { MovingModule } from './modules/moving/moving.module';
 import { StorageModule } from './modules/storage/storage.module';
+import { EventSupportModule } from './modules/event-support/event-support.module';
 
 @Module({
   imports: [
@@ -64,6 +65,7 @@ import { StorageModule } from './modules/storage/storage.module';
     AmenitiesModule,
     MovingModule,
     StorageModule,
+    EventSupportModule,
   ],
   providers: [
     // Global JWT guard: all routes protected by default; @Public() opts out

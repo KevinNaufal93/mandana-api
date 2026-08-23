@@ -6,7 +6,6 @@ import {
 } from '@nestjs/common';
 import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
 import { DataSource, QueryFailedError, Repository } from 'typeorm';
-import { randomBytes } from 'crypto';
 import { StorageBooking } from './entities/storage-booking.entity';
 import { StorageBookingStatus } from './enums/storage-booking-status.enum';
 import { StorageUnitStatus } from './enums/storage-unit-status.enum';
@@ -19,13 +18,11 @@ import { StorageService } from './storage.service';
 import { StorageAvailabilityService } from './storage-availability.service';
 import { StorageMapper } from './storage.mapper';
 import { addMonthsToDateString, storageQuote } from './storage-pricing';
-
-// No 0/O/1/I — avoids visual ambiguity when a customer reads the reference
-// out loud over WhatsApp or phone.
-const REFERENCE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-const REFERENCE_CODE_LENGTH = 6;
-const MAX_REFERENCE_ATTEMPTS = 5;
-const POSTGRES_UNIQUE_VIOLATION = '23505';
+import {
+  generateBookingReference,
+  MAX_REFERENCE_ATTEMPTS,
+  POSTGRES_UNIQUE_VIOLATION,
+} from '../../common/utils/booking-reference';
 
 /** Shapes for the two raw SQL result sets in confirm() — `queryRunner.query()`
  * returns `any`, so these give the two destructures an explicit, honest type
@@ -35,18 +32,6 @@ interface ClaimedUnitRow {
 }
 interface CountRow {
   count: number;
-}
-
-/** `storage_bookings.reference` is the table's only unique column, so any
- * 23505 on insert can only be a reference collision — safe to retry blindly
- * rather than letting it surface as the generic "Resource already exists"
- * AllExceptionsFilter would otherwise produce (see all-exceptions.filter.ts). */
-function generateReference(): string {
-  const bytes = randomBytes(REFERENCE_CODE_LENGTH);
-  let code = '';
-  for (const b of bytes)
-    code += REFERENCE_ALPHABET[b % REFERENCE_ALPHABET.length];
-  return `MDN-STG-${code}`;
 }
 
 @Injectable()
@@ -136,7 +121,7 @@ export class StorageBookingsService {
 
     for (let attempt = 0; attempt < MAX_REFERENCE_ATTEMPTS; attempt++) {
       const booking = this.bookingRepo.create({
-        reference: generateReference(),
+        reference: generateBookingReference('MDN-STG'),
         customerName: dto.customerName,
         email: dto.email,
         phone: dto.phone ?? null,
