@@ -1,6 +1,10 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { v4 as uuidv4 } from 'uuid';
 import { MediaAsset, VariantMap } from './entities/media-asset.entity';
 import { StorageService } from './storage.service';
@@ -28,6 +32,7 @@ export class MediaService {
     file: Express.Multer.File,
     dto: UploadMediaDto,
   ): Promise<MediaAsset> {
+    if (!file) throw new BadRequestException('file is required');
     this.processor.validate(file.mimetype, file.size);
 
     const { width, height } = await this.processor.intrinsicSize(file.buffer);
@@ -63,6 +68,12 @@ export class MediaService {
     });
 
     return this.mediaRepo.save(asset);
+  }
+
+  /** Batch existence lookup, e.g. for validating a set of mediaAssetIds referenced by another entity's batch write. */
+  findManyByIds(ids: string[]): Promise<MediaAsset[]> {
+    if (ids.length === 0) return Promise.resolve([]);
+    return this.mediaRepo.findBy({ id: In(ids) });
   }
 
   async delete(id: string): Promise<void> {

@@ -66,7 +66,9 @@ services:
     env_file: .env
     environment:
       DATABASE_HOST: postgres
+      DATABASE_PORT: 5432
       REDIS_HOST: redis
+      REDIS_PORT: 6379
       S3_ENDPOINT: http://minio:9000
     ports:
       - "${PORT:-3000}:3000"

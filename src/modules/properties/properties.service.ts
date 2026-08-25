@@ -2,11 +2,12 @@ import {
   BadRequestException,
   ConflictException,
   Injectable,
+  Logger,
   NotFoundException,
   Optional,
 } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { In, Repository } from 'typeorm';
+import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
+import { DataSource, EntityManager, In, Repository } from 'typeorm';
 import { Property } from './entities/property.entity';
 import { PropertyType } from './entities/property-type.entity';
 import { PropertyImage } from './entities/property-image.entity';
@@ -18,10 +19,12 @@ import { CreatePropertyDto } from './dto/create-property.dto';
 import { UpdatePropertyDto } from './dto/update-property.dto';
 import { AddPropertyImageDto } from './dto/add-property-image.dto';
 import { UpdatePropertyImageDto } from './dto/update-property-image.dto';
+import { PropertyImageInputDto } from './dto/property-image-input.dto';
 import { PropertyStatus } from './enums/property-status.enum';
 import { PropertySort } from './enums/property-sort.enum';
 import { PaginatedResult } from '../../common/interfaces/paginated-result.interface';
 import { MediaService } from '../media/media.service';
+import { MediaAsset } from '../media/entities/media-asset.entity';
 import { HomepageCacheService } from '../homepage/homepage-cache.service';
 import {
   PropertyMapper,
@@ -30,6 +33,22 @@ import {
 } from './property.mapper';
 import { resolveUniqueSlug } from '../../common/utils/slugify';
 import { richTextToPlain } from '../../common/rich-text';
+
+/** Plan computed by `planImageReconcile()` before the write transaction opens. */
+interface ImageReconcilePlan {
+  toCreate: {
+    mediaAssetId: string;
+    asset: MediaAsset;
+    alt: string | null;
+    sortOrder: number;
+    isCover: boolean;
+  }[];
+  toUpdate: {
+    image: PropertyImage;
+    changes: Pick<PropertyImage, 'alt' | 'sortOrder' | 'isCover'>;
+  }[];
+  toDelete: PropertyImage[];
+}
 
 const DETAIL_RELATIONS = {
   images: { mediaAsset: true },
@@ -43,6 +62,8 @@ const SIMILAR_MAX_LIMIT = 12;
 
 @Injectable()
 export class PropertiesService {
+  private readonly logger = new Logger(PropertiesService.name);
+
   constructor(
     @InjectRepository(Property)
     private readonly propertiesRepo: Repository<Property>,
@@ -54,6 +75,8 @@ export class PropertiesService {
     private readonly amenitiesRepo: Repository<Amenity>,
     private readonly mediaService: MediaService,
     private readonly mapper: PropertyMapper,
+    @InjectDataSource()
+    private readonly dataSource: DataSource,
     @Optional() private readonly cache?: HomepageCacheService,
   ) {}
 
@@ -265,7 +288,21 @@ export class PropertiesService {
     return saved;
   }
 
-  async update(id: string, dto: UpdatePropertyDto): Promise<Property> {
+  /**
+   * Updates scalar property fields and, optionally, the property's complete
+   * image set in one call. When `dto.images` is present, the field save and
+   * the image add/update/delete reconcile commit together in a single
+   * transaction (all-or-nothing) — see `planImageReconcile`/
+   * `applyImageReconcile` below. When it's absent, images are left
+   * untouched and this behaves exactly as before (a plain `save()`, which
+   * TypeORM already wraps in its own internal transaction together with
+   * the `amenities` join-table sync).
+   *
+   * Returns the full detail shape (same as `adminFindOne`/`GET :id`) rather
+   * than the raw saved entity, so callers don't need a follow-up fetch to
+   * see current images/propertyType/agent.
+   */
+  async update(id: string, dto: UpdatePropertyDto): Promise<PropertyDetail> {
     const property = await this.adminFindOneRaw(id);
 
     if (dto.slug !== undefined && dto.slug !== property.slug) {
@@ -282,7 +319,7 @@ export class PropertiesService {
 
     const amenities = await this.resolveAmenities(dto.amenityIds);
 
-    Object.assign(property, {
+    const fieldChanges = {
       ...(slug !== undefined && { slug }),
       ...(dto.title !== undefined && { title: dto.title }),
       ...(dto.description !== undefined && {
@@ -308,11 +345,65 @@ export class PropertiesService {
       }),
       ...(dto.agentId !== undefined && { agentId: dto.agentId }),
       ...(amenities !== undefined && { amenities }),
-    });
+    };
 
-    const saved = await this.propertiesRepo.save(property);
+    if (dto.images === undefined) {
+      Object.assign(property, fieldChanges);
+      await this.propertiesRepo.save(property);
+      await this.cache?.bust();
+      return this.adminFindOne(id);
+    }
+
+    // Images are part of this request: validate the whole batch (pure
+    // reads — safe outside a transaction under Postgres's default READ
+    // COMMITTED) before opening the transaction that actually writes.
+    const imagePlan = await this.planImageReconcile(id, dto.images);
+    const orphanedMediaAssetIds = imagePlan.toDelete
+      .map((img) => img.mediaAssetId)
+      .filter((assetId): assetId is string => assetId !== null);
+
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+    try {
+      const propertyRepo = queryRunner.manager.getRepository(Property);
+      Object.assign(property, fieldChanges);
+      await propertyRepo.save(property);
+      await this.applyImageReconcile(queryRunner.manager, id, imagePlan);
+      await queryRunner.commitTransaction();
+    } catch (err) {
+      if (queryRunner.isTransactionActive) {
+        await queryRunner.rollbackTransaction();
+      }
+      throw err;
+    } finally {
+      await queryRunner.release();
+    }
+
     await this.cache?.bust();
-    return saved;
+
+    // Best-effort, post-commit: an S3 delete can't be rolled back, so it
+    // must never run inside the DB transaction above. A leftover
+    // unreferenced MediaAsset row is a recoverable state; aborting an
+    // otherwise-successful save because this cleanup call failed would not
+    // be — so failures here are logged and swallowed, not thrown.
+    if (orphanedMediaAssetIds.length > 0) {
+      const results = await Promise.allSettled(
+        orphanedMediaAssetIds.map((assetId) =>
+          this.mediaService.delete(assetId),
+        ),
+      );
+      results.forEach((r, i) => {
+        if (r.status === 'rejected') {
+          this.logger.error(
+            `Failed to clean up orphaned media asset ${orphanedMediaAssetIds[i]} after property ${id} update`,
+            r.reason,
+          );
+        }
+      });
+    }
+
+    return this.adminFindOne(id);
   }
 
   async remove(id: string): Promise<void> {
@@ -434,6 +525,140 @@ export class PropertiesService {
       );
     }
     return found;
+  }
+
+  /**
+   * Diffs the incoming `images` array against the property's current
+   * `PropertyImage` rows and validates every referenced id, without
+   * writing anything. `PropertyImageInputDto`'s validator already
+   * guarantees each entry has exactly one of `id`/`mediaAssetId` and that
+   * at most one entry has `isCover: true`, so this only needs to check
+   * that every *referenced* id/mediaAssetId actually exists.
+   *
+   * Deliberately does not assign `property.images = [...]` and save the
+   * parent: `Property.images` is `{ cascade: true }` without
+   * `orphanedRowAction: 'delete'`, so TypeORM would cascade inserts/updates
+   * but silently skip deleting rows dropped from the array. Reconciling
+   * `PropertyImage` rows directly (via `applyImageReconcile`) avoids that.
+   */
+  private async planImageReconcile(
+    propertyId: string,
+    incoming: PropertyImageInputDto[],
+  ): Promise<ImageReconcilePlan> {
+    const existing = await this.propertyImagesRepo.find({
+      where: { propertyId },
+    });
+    const existingById = new Map(existing.map((img) => [img.id, img]));
+
+    const unknownIds = incoming
+      .filter((e) => e.id !== undefined && !existingById.has(e.id))
+      .map((e) => e.id!);
+    if (unknownIds.length > 0) {
+      throw new BadRequestException(
+        `Unknown image id(s): ${unknownIds.join(', ')}`,
+      );
+    }
+
+    // Two entries referencing the same existing row would otherwise both
+    // land in toUpdate below and silently last-write-wins onto one row.
+    const idCounts = new Map<string, number>();
+    incoming.forEach((e) => {
+      if (e.id !== undefined) idCounts.set(e.id, (idCounts.get(e.id) ?? 0) + 1);
+    });
+    const duplicateIds = [...idCounts.entries()]
+      .filter(([, count]) => count > 1)
+      .map(([id]) => id);
+    if (duplicateIds.length > 0) {
+      throw new BadRequestException(
+        `Duplicate image id(s) in images: ${duplicateIds.join(', ')}`,
+      );
+    }
+
+    const assetIds = incoming
+      .filter((e) => e.mediaAssetId !== undefined)
+      .map((e) => e.mediaAssetId!);
+    const assetById = new Map(
+      (await this.mediaService.findManyByIds(assetIds)).map((a) => [a.id, a]),
+    );
+    const unknownAssetIds = assetIds.filter((id) => !assetById.has(id));
+    if (unknownAssetIds.length > 0) {
+      throw new BadRequestException(
+        `Unknown media asset id(s): ${unknownAssetIds.join(', ')}`,
+      );
+    }
+
+    const keepIds = new Set(
+      incoming.filter((e) => e.id !== undefined).map((e) => e.id!),
+    );
+    const toDelete = existing.filter((img) => !keepIds.has(img.id));
+
+    const toUpdate: ImageReconcilePlan['toUpdate'] = [];
+    const toCreate: ImageReconcilePlan['toCreate'] = [];
+
+    incoming.forEach((entry, index) => {
+      // Full replacement, not merge: an omitted field takes its default
+      // rather than inheriting the stored value, consistent across both
+      // existing (id) and new (mediaAssetId) entries.
+      const alt = entry.alt ?? null;
+      const sortOrder = entry.sortOrder ?? index;
+      const isCover = entry.isCover ?? false;
+
+      if (entry.id !== undefined) {
+        const image = existingById.get(entry.id)!;
+        const changed =
+          image.alt !== alt ||
+          image.sortOrder !== sortOrder ||
+          image.isCover !== isCover;
+        // Skip true no-ops so an unrelated field-only save doesn't bump
+        // every image's updatedAt.
+        if (changed)
+          toUpdate.push({ image, changes: { alt, sortOrder, isCover } });
+      } else {
+        const asset = assetById.get(entry.mediaAssetId!)!;
+        toCreate.push({
+          mediaAssetId: entry.mediaAssetId!,
+          asset,
+          alt,
+          sortOrder,
+          isCover,
+        });
+      }
+    });
+
+    return { toCreate, toUpdate, toDelete };
+  }
+
+  /** Applies a plan from `planImageReconcile` via the transactional manager. */
+  private async applyImageReconcile(
+    manager: EntityManager,
+    propertyId: string,
+    plan: ImageReconcilePlan,
+  ): Promise<void> {
+    const imagesRepo = manager.getRepository(PropertyImage);
+
+    if (plan.toDelete.length > 0) {
+      await imagesRepo.remove(plan.toDelete);
+    }
+    if (plan.toUpdate.length > 0) {
+      await imagesRepo.save(
+        plan.toUpdate.map(({ image, changes }) =>
+          Object.assign(image, changes),
+        ),
+      );
+    }
+    if (plan.toCreate.length > 0) {
+      const newImages = plan.toCreate.map((c) =>
+        imagesRepo.create({
+          propertyId,
+          mediaAssetId: c.mediaAssetId,
+          url: this.mediaService.buildImageDto(c.asset).url,
+          alt: c.alt,
+          sortOrder: c.sortOrder,
+          isCover: c.isCover,
+        }),
+      );
+      await imagesRepo.save(newImages);
+    }
   }
 
   private toImageResponse(img: PropertyImage): PropertyImage {

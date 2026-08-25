@@ -127,7 +127,12 @@ export class PropertiesAdminController {
   // ─── Image sub-resources ──────────────────────────────────────────────────
 
   @Post(':id/images')
-  @ApiOperation({ summary: 'Upload and attach an image to a property' })
+  @ApiOperation({
+    summary: 'Upload and attach an image to a property',
+    deprecated: true,
+    description:
+      'Superseded by the images field on PATCH /admin/properties/:id, which also supports attaching an asset already uploaded via POST /admin/media/upload.',
+  })
   @ApiConsumes('multipart/form-data')
   @ApiBody({
     schema: {
@@ -159,7 +164,12 @@ export class PropertiesAdminController {
   }
 
   @Patch(':id/images/:imageId')
-  @ApiOperation({ summary: 'Update image metadata (alt, sortOrder, isCover)' })
+  @ApiOperation({
+    summary: 'Update image metadata (alt, sortOrder, isCover)',
+    deprecated: true,
+    description:
+      'Superseded by the images field on PATCH /admin/properties/:id.',
+  })
   updateImage(
     @Param('id', ParseUUIDPipe) id: string,
     @Param('imageId', ParseUUIDPipe) imageId: string,
@@ -170,7 +180,12 @@ export class PropertiesAdminController {
 
   @Delete(':id/images/:imageId')
   @HttpCode(HttpStatus.NO_CONTENT)
-  @ApiOperation({ summary: 'Delete a property image (removes S3 asset too)' })
+  @ApiOperation({
+    summary: 'Delete a property image (removes S3 asset too)',
+    deprecated: true,
+    description:
+      "Superseded by the images field on PATCH /admin/properties/:id (omit the image's id from the array to delete it).",
+  })
   async removeImage(
     @Param('id', ParseUUIDPipe) id: string,
     @Param('imageId', ParseUUIDPipe) imageId: string,

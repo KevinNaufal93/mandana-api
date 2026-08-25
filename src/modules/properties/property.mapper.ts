@@ -91,17 +91,34 @@ export class PropertyMapper {
     const images = p.images ?? [];
     const cover = images.find((img) => img.isCover) ?? images[0];
     if (!cover) return null;
-    if (cover.mediaAsset)
-      return this.mediaService.buildImageDto(cover.mediaAsset);
+    if (cover.mediaAsset) {
+      const dto = this.mediaService.buildImageDto(cover.mediaAsset);
+      // Prefer this PropertyImage's own alt (property-specific caption) over
+      // the underlying MediaAsset's alt (its generic, upload-time default) —
+      // otherwise editing an image's alt text via updateImage()/the images
+      // batch on PATCH silently never shows up in any read response.
+      return { ...dto, alt: cover.alt ?? dto.alt };
+    }
     return { url: cover.url ?? '', alt: cover.alt };
   }
 
   private buildImage(img: PropertyImage) {
-    const base = img.mediaAsset
-      ? this.mediaService.buildImageDto(img.mediaAsset)
-      : { url: img.url ?? '', srcset: '', alt: img.alt, width: 0, height: 0 };
+    if (img.mediaAsset) {
+      const dto = this.mediaService.buildImageDto(img.mediaAsset);
+      return {
+        ...dto,
+        alt: img.alt ?? dto.alt,
+        id: img.id,
+        isCover: img.isCover,
+        sortOrder: img.sortOrder,
+      };
+    }
     return {
-      ...base,
+      url: img.url ?? '',
+      srcset: '',
+      alt: img.alt,
+      width: 0,
+      height: 0,
       id: img.id,
       isCover: img.isCover,
       sortOrder: img.sortOrder,
