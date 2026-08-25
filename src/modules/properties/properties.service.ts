@@ -22,6 +22,8 @@ import { UpdatePropertyImageDto } from './dto/update-property-image.dto';
 import { PropertyImageInputDto } from './dto/property-image-input.dto';
 import { PropertyStatus } from './enums/property-status.enum';
 import { PropertySort } from './enums/property-sort.enum';
+import { ListingType } from './enums/listing-type.enum';
+import { ConstructionStatus } from './enums/construction-status.enum';
 import { PaginatedResult } from '../../common/interfaces/paginated-result.interface';
 import { MediaService } from '../media/media.service';
 import { MediaAsset } from '../media/entities/media-asset.entity';
@@ -253,6 +255,9 @@ export class PropertiesService {
   }
 
   async create(dto: CreatePropertyDto, currentUser: User): Promise<Property> {
+    const listingType = dto.listingType ?? ListingType.SALE;
+    this.assertNewOnlyFields(listingType, dto);
+
     const slug = await resolveUniqueSlug(
       this.propertiesRepo,
       dto.slug ?? dto.title,
@@ -265,6 +270,12 @@ export class PropertiesService {
       description: dto.description ?? null,
       descriptionText: richTextToPlain(dto.description),
       listingType: dto.listingType,
+      handoverDate:
+        listingType === ListingType.NEW ? (dto.handoverDate ?? null) : null,
+      constructionStatus:
+        listingType === ListingType.NEW
+          ? (dto.constructionStatus ?? null)
+          : null,
       status: dto.status,
       price: dto.price,
       currency: dto.currency ?? 'IDR',
@@ -317,6 +328,9 @@ export class PropertiesService {
         ? await resolveUniqueSlug(this.propertiesRepo, dto.slug, id)
         : undefined;
 
+    const effectiveListingType = dto.listingType ?? property.listingType;
+    this.assertNewOnlyFields(effectiveListingType, dto);
+
     const amenities = await this.resolveAmenities(dto.amenityIds);
 
     const fieldChanges = {
@@ -327,6 +341,20 @@ export class PropertiesService {
         descriptionText: richTextToPlain(dto.description),
       }),
       ...(dto.listingType !== undefined && { listingType: dto.listingType }),
+      // handoverDate/constructionStatus describe a developer's build — they
+      // only make sense while listingType is NEW, so switching away from NEW
+      // (in this request or a prior one) clears any stale values instead of
+      // just refusing to update them.
+      ...(effectiveListingType === ListingType.NEW
+        ? {
+            ...(dto.handoverDate !== undefined && {
+              handoverDate: dto.handoverDate ?? null,
+            }),
+            ...(dto.constructionStatus !== undefined && {
+              constructionStatus: dto.constructionStatus ?? null,
+            }),
+          }
+        : { handoverDate: null, constructionStatus: null }),
       ...(dto.status !== undefined && { status: dto.status }),
       ...(dto.price !== undefined && { price: dto.price }),
       ...(dto.currency !== undefined && { currency: dto.currency }),
@@ -525,6 +553,26 @@ export class PropertiesService {
       );
     }
     return found;
+  }
+
+  /**
+   * `handoverDate`/`constructionStatus` describe a developer's build and are
+   * meaningless on a resale (`sale`) or rental (`rent`) listing — reject the
+   * request outright rather than silently ignoring them.
+   */
+  private assertNewOnlyFields(
+    effectiveListingType: ListingType,
+    dto: { handoverDate?: string; constructionStatus?: ConstructionStatus },
+  ): void {
+    if (effectiveListingType === ListingType.NEW) return;
+    if (
+      dto.handoverDate !== undefined ||
+      dto.constructionStatus !== undefined
+    ) {
+      throw new BadRequestException(
+        'handoverDate and constructionStatus are only valid when listingType is "new"',
+      );
+    }
   }
 
   /**

@@ -10,6 +10,7 @@ import {
 } from 'typeorm';
 import { BaseEntity } from '../../../common/entities/base.entity';
 import { ListingType } from '../enums/listing-type.enum';
+import { ConstructionStatus } from '../enums/construction-status.enum';
 import { PropertyStatus } from '../enums/property-status.enum';
 import { PropertyType } from './property-type.entity';
 import { PropertyImage } from './property-image.entity';
@@ -44,6 +45,19 @@ export class Property extends BaseEntity {
     default: ListingType.SALE,
   })
   listingType!: ListingType;
+
+  /** Handover/completion date. Only meaningful when `listingType` is `NEW`. */
+  @Column({ name: 'handover_date', type: 'date', nullable: true })
+  handoverDate!: string | null;
+
+  /** Only meaningful when `listingType` is `NEW`. */
+  @Column({
+    name: 'construction_status',
+    type: 'enum',
+    enum: ConstructionStatus,
+    nullable: true,
+  })
+  constructionStatus!: ConstructionStatus | null;
 
   @Column({
     type: 'enum',

@@ -10,6 +10,11 @@
 > per-item **fields** changed for the property detail work — see
 > `docs/web-property-detail-contract.md` ("Location privacy") for the
 > `address`/coordinate change that now also applies to this list endpoint.
+>
+> ⚠️ **Phase 4 update:** `listingType` gained a third value, `new` ("Properti
+> Baru" — brand-new units from a developer). See
+> `docs/new-property-listing-type.md` before you touch the listing-type filter
+> or badge — an unfiltered `GET /properties` now returns all three types mixed.
 
 ## Current state
 
@@ -162,7 +167,7 @@ name with the web before implementing.
 | --- | --- | --- |
 | `page` | int ≥ 1 | default 1 |
 | `limit` | int 1–100 | default 12 |
-| `listingType` | `sale` \| `rent` | |
+| `listingType` | `sale` \| `rent` \| `new` | **`new` added** — see `docs/new-property-listing-type.md`. Omitting the param now returns all three types mixed. |
 | `city` | string | partial, case-insensitive |
 | `propertyTypeSlug` | string | needs Task 1 |
 | `minPrice` | int (IDR) | |

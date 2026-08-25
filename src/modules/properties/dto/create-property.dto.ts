@@ -2,6 +2,7 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   IsArray,
   IsBoolean,
+  IsDateString,
   IsEnum,
   IsNumber,
   IsOptional,
@@ -15,6 +16,7 @@ import {
 import { Type } from 'class-transformer';
 import { RichText } from '../../../common/rich-text';
 import { ListingType } from '../enums/listing-type.enum';
+import { ConstructionStatus } from '../enums/construction-status.enum';
 import { PropertyStatus } from '../enums/property-status.enum';
 
 export class CreatePropertyDto {
@@ -45,6 +47,23 @@ export class CreatePropertyDto {
   @IsOptional()
   @IsEnum(ListingType)
   listingType?: ListingType;
+
+  @ApiPropertyOptional({
+    example: '2027-06-30',
+    description:
+      'Handover/completion date (YYYY-MM-DD). Only valid when listingType is "new".',
+  })
+  @IsOptional()
+  @IsDateString()
+  handoverDate?: string;
+
+  @ApiPropertyOptional({
+    enum: ConstructionStatus,
+    description: 'Only valid when listingType is "new".',
+  })
+  @IsOptional()
+  @IsEnum(ConstructionStatus)
+  constructionStatus?: ConstructionStatus;
 
   @ApiPropertyOptional({ enum: PropertyStatus, default: PropertyStatus.DRAFT })
   @IsOptional()

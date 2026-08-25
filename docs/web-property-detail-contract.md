@@ -11,6 +11,10 @@
 > ⚠️ **Phase 3 update:** `description` is now sanitized **HTML rich text**, not plain
 > text — the admin CMS switched to a WYSIWYG editor. See "Rich text description" below
 > before you touch the description field.
+>
+> ⚠️ **Phase 4 update:** `listingType` gained a third value, `new` ("Properti Baru"),
+> and every card/detail response now also carries `handoverDate`/`constructionStatus`.
+> See `docs/new-property-listing-type.md` and the "Properti Baru" section below.
 
 ## Summary
 
@@ -30,7 +34,8 @@ Same route as before. Response shape:
 ```jsonc
 { "data": {
   "id": "3f8a1c92-...", "slug": "blossom-residence", "title": "Blossom Residence",
-  "listingType": "sale", "price": 1200000000, "currency": "IDR",
+  "listingType": "sale", "handoverDate": null, "constructionStatus": null,
+  "price": 1200000000, "currency": "IDR",
   "bedrooms": 3, "bathrooms": 2, "areaSqm": 60,
   "area": "Sunter", "city": "Jakarta Utara", "province": "DKI Jakarta",
   "latitude": -6.1445, "longitude": 106.8689,
@@ -147,7 +152,8 @@ newest. Never includes the source property itself.
 ```jsonc
 { "data": [
   { "id": "...", "slug": "bio-district-bsd", "title": "BIO District BSD",
-    "listingType": "sale", "price": 20000000, "currency": "IDR",
+    "listingType": "sale", "handoverDate": null, "constructionStatus": null,
+    "price": 20000000, "currency": "IDR",
     "bedrooms": 3, "bathrooms": 2, "areaSqm": 102,
     "area": "BSD City", "city": "Tangerang Selatan",
     "propertyType": { "id": "...", "name": "Apartemen", "slug": "apartemen" },
@@ -156,8 +162,9 @@ newest. Never includes the source property itself.
 ```
 
 This is the same "card" shape used on the homepage (`GET /homepage` → `recommendations[]`)
-and `GET /properties` list rows — `id`, `slug`, `title`, `listingType`, `price`, `currency`,
-`bedrooms`, `bathrooms`, `areaSqm`, `area`, `city`, `province`, `propertyType`, `cover`.
+and `GET /properties` list rows — `id`, `slug`, `title`, `listingType`, `handoverDate`,
+`constructionStatus`, `price`, `currency`, `bedrooms`, `bathrooms`, `areaSqm`, `area`, `city`,
+`province`, `propertyType`, `cover`.
 
 Returns `404` if the slug doesn't exist or isn't published. Returns `{ "data": [] }` (not an
 error) if there's genuinely nothing else published in that listing type.
@@ -177,6 +184,33 @@ Full facility list, ordered by `category`, then `sortOrder`, then `name`:
 `icon` is a key (e.g. `"ac"`, `"pool"`) for you to map to your own icon set — the API doesn't
 serve icon assets. Not paginated; the list is small (~12 seeded facilities) and expected to
 stay that way.
+
+---
+
+## Properti Baru 🆕
+
+`listingType` now has a third value: `new` ("Properti Baru" — brand-new units sold
+directly by a developer, as opposed to `sale`'s resale/secondary market). It behaves
+identically to `sale`/`rent` everywhere — same filters, same pagination, same detail
+shape, same `/similar` (which stays within the source's `listingType`, so a properti
+baru listing only recommends other properti baru).
+
+Two extra fields ship on every card and detail response, only ever non-`null` when
+`listingType` is `new`:
+
+```jsonc
+{
+  "listingType": "new",
+  "handoverDate": "2027-06-30",
+  "constructionStatus": "under_construction"
+}
+```
+
+- `handoverDate` — `YYYY-MM-DD` string or `null`. Expected completion/handover date.
+- `constructionStatus` — `"ready"` \| `"under_construction"` \| `null`.
+
+Full details in `docs/new-property-listing-type.md`, including the badge-mapping and
+"no filter now returns three types" callouts for the listing page.
 
 ---
 

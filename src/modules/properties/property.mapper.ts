@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { Property } from './entities/property.entity';
 import { PropertyImage } from './entities/property-image.entity';
 import { PropertyStatus } from './enums/property-status.enum';
+import { ConstructionStatus } from './enums/construction-status.enum';
 import { MediaService, MediaImageDto } from '../media/media.service';
 import { fuzzCoordinates, APPROX_RADIUS_M } from './location-privacy';
 import { richTextToPlain } from '../../common/rich-text';
@@ -11,6 +12,10 @@ export interface PropertyCard {
   slug: string;
   title: string;
   listingType: string;
+  /** Handover/completion date (YYYY-MM-DD). Only meaningful when listingType is "new". */
+  handoverDate: string | null;
+  /** Only meaningful when listingType is "new". */
+  constructionStatus: ConstructionStatus | null;
   price: number | null;
   currency: string;
   bedrooms: number | null;
@@ -131,6 +136,8 @@ export class PropertyMapper {
       slug: p.slug,
       title: p.title,
       listingType: p.listingType,
+      handoverDate: p.handoverDate,
+      constructionStatus: p.constructionStatus,
       price: toNumber(p.price),
       currency: p.currency,
       bedrooms: p.bedrooms,
