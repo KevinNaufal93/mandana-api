@@ -24,6 +24,7 @@ import { StorageMapper } from './storage.mapper';
 import { CreateStorageUnitDto } from './dto/create-storage-unit.dto';
 import { UpdateStorageUnitDto } from './dto/update-storage-unit.dto';
 import { BulkCreateStorageUnitsDto } from './dto/bulk-create-storage-units.dto';
+import { BulkDeleteStorageUnitsDto } from './dto/bulk-delete-storage-units.dto';
 import { QueryStorageUnitsDto } from './dto/query-storage-units.dto';
 import {
   StorageUnitAdminListResponseDto,
@@ -90,6 +91,20 @@ export class StorageUnitsController {
   ) {
     const unit = await this.unitsService.update(id, dto);
     return this.mapper.toUnitDto(unit);
+  }
+
+  // Registered before ':id' — Nest/Express match DELETE routes in
+  // declaration order, so 'bulk' must come first or ParseUUIDPipe on the
+  // :id route below would reject "bulk" as an invalid UUID before this
+  // handler is ever reached.
+  @Delete('bulk')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({
+    summary:
+      'Delete multiple storage units by id. Atomic — 404 naming any id(s) not found, nothing is deleted unless all exist.',
+  })
+  async bulkRemove(@Body() dto: BulkDeleteStorageUnitsDto) {
+    await this.unitsService.bulkRemove(dto);
   }
 
   @Delete(':id')

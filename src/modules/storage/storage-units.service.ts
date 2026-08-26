@@ -8,6 +8,7 @@ import { StorageUnitStatus } from './enums/storage-unit-status.enum';
 import { CreateStorageUnitDto } from './dto/create-storage-unit.dto';
 import { UpdateStorageUnitDto } from './dto/update-storage-unit.dto';
 import { BulkCreateStorageUnitsDto } from './dto/bulk-create-storage-units.dto';
+import { BulkDeleteStorageUnitsDto } from './dto/bulk-delete-storage-units.dto';
 import { QueryStorageUnitsDto } from './dto/query-storage-units.dto';
 import { PaginatedResult } from '../../common/interfaces/paginated-result.interface';
 import { StorageAvailabilityService } from './storage-availability.service';
@@ -182,5 +183,26 @@ export class StorageUnitsService {
       relations: { facility: true, unitType: true },
       order: { code: 'ASC' },
     });
+  }
+
+  /** Row-select counterpart to bulkCreate() — atomic: every id must exist
+   * or nothing is deleted, so a caller never has to reconcile a partial
+   * result. Same "name what's missing" shape as findOneOrFail(), just for
+   * a set instead of one id. No occupied-unit guard, same as remove(). */
+  async bulkRemove(dto: BulkDeleteStorageUnitsDto): Promise<void> {
+    const units = await this.unitRepo.find({
+      where: { id: In(dto.ids) },
+    });
+
+    const foundIds = new Set(units.map((u) => u.id));
+    const missing = dto.ids.filter((id) => !foundIds.has(id));
+    if (missing.length > 0) {
+      throw new NotFoundException(
+        `Storage unit(s) not found: ${missing.join(', ')}`,
+      );
+    }
+
+    await this.unitRepo.remove(units);
+    await this.availability.publish();
   }
 }

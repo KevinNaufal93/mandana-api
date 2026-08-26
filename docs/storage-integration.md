@@ -309,6 +309,9 @@ Bearer JWT, `role: admin`, same as every other admin surface.
 GET|POST|PATCH|DELETE  /admin/storage/unit-types[/:id]
 GET|POST|PATCH|DELETE  /admin/storage/facilities[/:id]
 GET|POST|PATCH|DELETE  /admin/storage/inventory[/:id]      totalUnits / occupiedUnits / monthlyRateOverride
+GET|POST|PATCH|DELETE  /admin/storage/units[/:id]           individual physical units, see storage-floor-plan-response.md §3
+POST                    /admin/storage/units/bulk           { facilityId, unitTypeId, count, codePrefix } — add capacity fast
+DELETE                  /admin/storage/units/bulk           { ids: string[] } — atomic, 404 naming any id(s) not found
 GET                    /admin/storage/bookings             paginated; ?status=&facilitySlug=&unitTypeSlug=
 GET                    /admin/storage/bookings/:id
 PATCH                  /admin/storage/bookings/:id/confirm  atomically allocates the unit(s); 409 if not enough remain
