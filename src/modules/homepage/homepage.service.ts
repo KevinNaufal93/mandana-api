@@ -9,6 +9,7 @@ import { MediaService } from '../media/media.service';
 import { PropertyMapper } from '../properties/property.mapper';
 import { SetRecommendationsDto } from './dto/set-recommendations.dto';
 import { richTextToPlain } from '../../common/rich-text';
+import { PropertyStatus } from '../properties/enums/property-status.enum';
 
 const CAROUSEL_INTERVAL_MS = 5000;
 
@@ -32,6 +33,7 @@ export class HomepageService {
       this.heroService.findActive(),
       this.collectionsService.findHomepage(),
       this.recRepo.find({
+        where: { property: { status: PropertyStatus.PUBLISHED } },
         relations: {
           property: { images: { mediaAsset: true }, propertyType: true },
         },
