@@ -89,60 +89,175 @@ export async function fetchTruckClasses(): Promise<TruckClassDto[]> {
 Do **not** fall back to the stub on failure — show an error card with the
 WhatsApp escape hatch, per the page's own failure-mode table.
 
-### `POST /moving/quote` (public) — new, not in the original FE plan
+### `GET /moving/addons` (public) — new
 
-The FE's `lib/moving/pricing.ts` renders an instant preview from the truck
-list (keep it — it's the right UX for step 2). This endpoint makes the
-**final** number the customer and WhatsApp see authoritative, so a rate change
-takes effect without a frontend deploy and the formula/constants aren't the
-only copy living in a public bundle.
+The configurable fee catalog: helper, packaging, extra waiting time,
+insurance, and a toll estimate. Active-only, same active-flag convention as
+`GET /moving/truck-classes`, sorted `sortOrder ASC, name ASC`.
 
 ```jsonc
-// Request
-{ "truckSlug": "pickup-bak", "distanceMeters": 151200 }
+{
+  "data": [
+    {
+      "id": "uuid",
+      "slug": "helper",
+      "name": "Helper",
+      "description": null,
+      "descriptionText": null,
+      "kind": "helper",
+      "pricingModel": "per_unit",
+      "unitPrice": 150000,
+      "percentBps": null,
+      "minCharge": null,
+      "maxCharge": null,
+      "unitLabel": "orang",
+      "minQty": 1,
+      "maxQty": 6,
+      "doublesOnRoundTrip": false,
+      "image": null,
+      "isActive": true,
+      "sortOrder": 10
+    }
+  ]
+}
+```
+
+**`kind: "toll"` rows are informational only — never render one as a
+selectable checkbox.** The toll fee is applied automatically from the
+`tollRoute` flag on the quote request (see below); if a client selects it by
+slug in `addons[]`, the quote endpoint returns `400`. Use it to show a line
+like "estimasi termasuk tol, Rp {unitPrice}/km" next to the toll toggle. As
+seeded, this row is `isActive: false` and simply won't appear in this list
+until ops turns it on.
+
+Pricing models, so the FE knows how to render each row before it prices
+anything client-side:
+
+| `pricingModel` | Uses | Client input needed |
+|---|---|---|
+| `flat` | `unitPrice` | none — a single checkbox |
+| `per_unit` | `unitPrice`, `minQty`, `maxQty`, `unitLabel` | a quantity stepper clamped to `[minQty, maxQty]` |
+| `percent` | `percentBps`, `minCharge` | the cart-level `declaredValue` (Rupiah) |
+
+### `GET /moving/pricing-config` (public) — new
+
+The pricing policy previously hardcoded as `MOVING_DEFAULTS` in both repos.
+**Fetch this instead of hardcoding a local copy** — see "Constants" below.
+
+```jsonc
+{
+  "data": {
+    "roundToIdr": 10000,
+    "bandPct": 10,
+    "defaultIncludedKm": 5
+  }
+}
+```
+
+### `POST /moving/quote` (public)
+
+The FE's `lib/moving/pricing.ts` renders an instant preview from the truck
+list + addon list + this pricing config (keep it — it's the right UX for step
+2). This endpoint makes the **final** number the customer and WhatsApp see
+authoritative, so a rate change takes effect without a frontend deploy.
+
+```jsonc
+// Request — truckSlug/distanceMeters are all that's required; everything
+// else is optional and defaults to "no extras selected".
+{
+  "truckSlug": "cdd",
+  "distanceMeters": 20000,
+  "roundTrip": false,
+  "tollRoute": true,
+  "declaredValue": 50000000,
+  "addons": [
+    { "slug": "helper", "quantity": 2 },
+    { "slug": "waiting-time", "quantity": 3 },
+    { "slug": "insurance" }
+  ]
+}
 
 // 200 response
 {
   "data": {
-    "truck": { "slug": "pickup-bak", "name": "Pick Up Bak" },
-    "distanceKm": 151.2,
+    "truck": { "slug": "cdd", "name": "CDD (Colt Diesel Double)" },
+    "distanceKm": 20,
     "includedKm": 5,
-    "chargeableKm": 146.2,
-    "baseFare": 250000,
-    "distanceFare": 657900,
-    "subtotal": 907900,
-    "total": 910000,
+    "chargeableKm": 15,
+    "roundTrip": false,
+    "tripMultiplier": 1,
+    "baseFare": 850000,
+    "distanceFare": 120000,
+    "travelSubtotal": 970000,
+    "tollRoute": true,
+    "tollFare": 0,
+    "addons": [
+      { "slug": "helper", "name": "Helper", "kind": "helper", "pricingModel": "per_unit", "quantity": 2, "unitPrice": 150000, "amount": 300000 },
+      { "slug": "waiting-time", "name": "Waktu Tunggu Tambahan", "kind": "waiting", "pricingModel": "per_unit", "quantity": 3, "unitPrice": 100000, "amount": 300000 },
+      { "slug": "insurance", "name": "Asuransi Barang", "kind": "insurance", "pricingModel": "percent", "quantity": 1, "unitPrice": 0, "amount": 100000 }
+    ],
+    "addonsTotal": 700000,
+    "subtotal": 1670000,
+    "total": 1670000,
     "minFareApplied": false,
-    "lowEstimate": 820000,
-    "highEstimate": 1000000,
+    "lowEstimate": 1500000,
+    "highEstimate": 1840000,
     "currency": "IDR"
   }
 }
 ```
+
+Field notes:
+
+- **`roundTrip`** doubles `distanceFare` (and `tollFare`, if applicable) —
+  `tripMultiplier` echoes back `1` or `2`. `baseFare` and every add-on except
+  the toll row are charged once regardless.
+- **`tollRoute`** (default `true`) says whether `distanceMeters` was computed
+  via a toll-road route. **This must match what the FE's own Google Routes
+  call actually requested** — send `routeModifiers.avoidTolls: !tollRoute` on
+  that call, or `distanceMeters` and `tollFare` below will describe two
+  different routes (see `moving-route-distance-proxy.md`). `tollFare` is `0`
+  whenever no `toll`-kind addon is active yet (the seeded row starts
+  inactive), regardless of `tollRoute` — the flag alone never invents a price.
+- **`declaredValue`** (Rupiah) is required only when a `percent`-priced addon
+  (currently just `insurance`) is in `addons[]`; omit it otherwise. Missing it
+  while `insurance` is selected → `400`.
+- **`minFareApplied`** only ever reflects `travelSubtotal` (`baseFare +
+  distanceFare`) against the truck's `minFare` — add-ons and toll are never
+  absorbed into the minimum, they're always added on top.
+- `addons[]` in the response is the priced breakdown for display — one line
+  per requested slug, in the order the pricing engine processed them (not
+  necessarily request order).
 
 `distanceMeters` is an input, not coordinates — reuse whatever distance the
 FE's own Google Routes call (or its Next.js proxy) already produced. If/when
 that proxy moves server-side (see §5), this DTO is designed to grow an
 optional `origin`/`destination` alternative without breaking this shape.
 
-Errors: unknown or inactive `truckSlug` → `404`. `distanceMeters` outside
-`[1, 5_000_000]` or non-integer → `400` (global `ValidationPipe`,
-`forbidNonWhitelisted: true` — extra body fields also 400).
+Errors: unknown or inactive `truckSlug` → `404`. Unknown/inactive addon slug →
+`404`, naming the missing slug(s). A `toll`-kind slug in `addons[]` → `400`.
+Duplicate addon slug → `400`. `insurance` (or any `percent` addon) selected
+without `declaredValue` → `400`. `distanceMeters` outside `[1, 5_000_000]` or
+non-integer → `400` (global `ValidationPipe`, `forbidNonWhitelisted: true` —
+extra body fields also 400).
 
-**Recommended flow:** call this once distance + truck are both set (same
-trigger point the FE already debounces Routes calls on), and render `total` /
-`lowEstimate` / `highEstimate` in place of the client-computed preview before
-building the WhatsApp message. Treat the client preview as instant feedback
-only, never as the number that ships in the WA text.
+**Recommended flow:** call this once distance + truck + any selected add-ons
+are set (same trigger point the FE already debounces Routes calls on), and
+render `total` / `lowEstimate` / `highEstimate` in place of the
+client-computed preview before building the WhatsApp message. Treat the
+client preview as instant feedback only, never as the number that ships in
+the WA text.
 
-**Constants must stay in sync.** `MOVING_DEFAULTS`
-(`includedKm: 5, roundToIdr: 10_000, bandPct: 10`) exists in both repos —
-`lib/moving/pricing.ts` here and `moving-pricing.ts` in the backend. If a
-constant changes on one side without the other, the client-side preview and
-this endpoint's `total` will silently disagree. There is no shared source
-today; changing one requires remembering to change the other. Cross-check
-periodically: same truck + same `distanceMeters` should produce byte-identical
-totals from both.
+**Constants — fetch, don't hardcode.** `moving-pricing.ts`'s exported
+*function bodies* are still mirrored byte-for-byte in `lib/moving/pricing.ts`
+— changing the math on one side without the other silently desyncs the
+preview from the quote. The **numbers** are a different story now: `GET
+/moving/pricing-config` and `GET /moving/addons` are the source of truth for
+`roundToIdr` / `bandPct` / `defaultIncludedKm` and every fee rate. Delete any
+locally hardcoded copy of `MOVING_DEFAULTS` in the frontend and pass the
+fetched config as the 3rd argument to `movingQuote()` client-side instead —
+that removes the "remember to change both repos" hazard for every value
+except the math itself.
 
 ## 4. Admin endpoints (not needed by the public page, for completeness)
 
@@ -152,11 +267,26 @@ GET    /admin/moving/truck-classes/:id
 POST   /admin/moving/truck-classes
 PATCH  /admin/moving/truck-classes/:id
 DELETE /admin/moving/truck-classes/:id         204
+
+GET    /admin/moving/addons                    includes inactive; ?isActive=true|false
+GET    /admin/moving/addons/:id
+POST   /admin/moving/addons
+PATCH  /admin/moving/addons/:id
+DELETE /admin/moving/addons/:id                204
+
+GET    /admin/moving/settings                  singleton — GET/PATCH only, no :id
+PATCH  /admin/moving/settings
 ```
 
 Bearer JWT, `role: admin`. Attach an image the same way hero slides do:
 upload via the existing `POST /admin/media/upload`, then pass the returned
 `mediaAssetId` in the create/update body.
+
+**Add-on cross-field rules**, enforced server-side (not encodable purely in
+class-validator, so they 400 from the service instead): `pricingModel:
+"percent"` requires `percentBps > 0`; `flat`/`per_unit` require `unitPrice >
+0`; `maxQty` must be `>= minQty`; activating a second `kind: "toll"` row while
+one is already active → `409` (at most one toll rate can be live at a time).
 
 ## 5. Known gaps — flagged, not built in this phase
 
@@ -181,4 +311,12 @@ upload via the existing `POST /admin/media/upload`, then pass the returned
   working on swap day. **Every seeded fare is a placeholder** pending sign-off
   from ops — check current values via `GET /admin/moving/truck-classes`
   before relying on them for anything beyond development.
+- Migration `1787100000000-AddMovingAddonsAndSettings` seeds the pricing
+  policy singleton at today's exact defaults (`roundToIdr: 10000, bandPct:
+  10, defaultIncludedKm: 5` — behavior-neutral) and six add-ons: `helper`,
+  `packaging-basic`, `packaging-full`, `waiting-time`, `insurance` (all
+  active), and `toll-estimate` (seeded **inactive** — turn it on via `PATCH
+  /admin/moving/addons/:id` once the per-km rate is checked against real
+  receipts). **Every seeded rate here is also a placeholder**, same caveat as
+  the truck classes above.
 - No new env vars for this phase.

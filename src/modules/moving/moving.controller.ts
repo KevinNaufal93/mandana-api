@@ -21,13 +21,17 @@ import { Public } from '../../common/decorators/public.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { UserRole } from '../users/enums/user-role.enum';
 import { MovingService } from './moving.service';
+import { MovingAddonsService } from './moving-addons.service';
+import { MovingSettingsService } from './moving-settings.service';
 import { MovingMapper } from './moving.mapper';
 import { CreateTruckClassDto } from './dto/create-truck-class.dto';
 import { UpdateTruckClassDto } from './dto/update-truck-class.dto';
 import { QueryTruckClassesDto } from './dto/query-truck-classes.dto';
 import { QuoteMovingDto } from './dto/quote-moving.dto';
 import {
+  MovingAddonListResponseDto,
   MovingQuoteResponseDto,
+  MovingSettingsResponseDto,
   TruckClassListResponseDto,
   TruckClassResponseDto,
 } from './dto/truck-class-response.dto';
@@ -40,6 +44,8 @@ import {
 export class MovingController {
   constructor(
     private readonly movingService: MovingService,
+    private readonly addonsService: MovingAddonsService,
+    private readonly settingsService: MovingSettingsService,
     private readonly mapper: MovingMapper,
   ) {}
 
@@ -53,11 +59,33 @@ export class MovingController {
     return trucks.map((t) => this.mapper.toDto(t));
   }
 
+  @Get('addons')
+  @ApiOperation({
+    summary:
+      'List active add-on fees (helper, packaging, waiting, insurance, toll) for the Moving Support page',
+  })
+  @ApiOkResponse({ type: MovingAddonListResponseDto })
+  async findAllAddons() {
+    const addons = await this.addonsService.findAllPublic();
+    return addons.map((a) => this.mapper.toAddonDto(a));
+  }
+
+  @Get('pricing-config')
+  @ApiOperation({
+    summary:
+      'Pricing policy (rounding step, ± estimate band, fallback included-km) — fetch these instead of hardcoding them client-side',
+  })
+  @ApiOkResponse({ type: MovingSettingsResponseDto })
+  async getPricingConfig() {
+    const settings = await this.settingsService.get();
+    return this.mapper.toSettingsDto(settings);
+  }
+
   @Post('quote')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary:
-      'Compute an authoritative price band for a truck class + road distance',
+      'Compute an authoritative price band for a truck class + road distance, plus any selected add-ons',
   })
   @ApiOkResponse({ type: MovingQuoteResponseDto })
   quote(@Body() dto: QuoteMovingDto) {

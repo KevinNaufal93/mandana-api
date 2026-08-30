@@ -1,8 +1,13 @@
 import { Injectable } from '@nestjs/common';
 import { TruckClass } from './entities/truck-class.entity';
+import { MovingAddon } from './entities/moving-addon.entity';
+import { MovingSettings } from './entities/moving-settings.entity';
 import { MediaService } from '../media/media.service';
+import { MediaAsset } from '../media/entities/media-asset.entity';
 import { richTextToPlain } from '../../common/rich-text';
 import {
+  MovingAddonDto,
+  MovingSettingsDto,
   TruckClassDto,
   TruckDimensionsDto,
   TruckImageDto,
@@ -26,8 +31,8 @@ export class MovingMapper {
     return { lengthCm: t.lengthCm, widthCm: t.widthCm, heightCm: t.heightCm };
   }
 
-  private buildImage(t: TruckClass): TruckImageDto | null {
-    return t.mediaAsset ? this.mediaService.buildImageDto(t.mediaAsset) : null;
+  private buildImage(asset: MediaAsset | null): TruckImageDto | null {
+    return asset ? this.mediaService.buildImageDto(asset) : null;
   }
 
   toDto(t: TruckClass): TruckClassDto {
@@ -45,9 +50,40 @@ export class MovingMapper {
       perKmFare: t.perKmFare,
       includedKm: t.includedKm,
       minFare: t.minFare,
-      image: this.buildImage(t),
+      image: this.buildImage(t.mediaAsset),
       isActive: t.isActive,
       sortOrder: t.sortOrder,
+    };
+  }
+
+  toAddonDto(a: MovingAddon): MovingAddonDto {
+    return {
+      id: a.id,
+      slug: a.slug,
+      name: a.name,
+      description: a.description,
+      descriptionText: richTextToPlain(a.description),
+      kind: a.kind,
+      pricingModel: a.pricingModel,
+      unitPrice: a.unitPrice,
+      percentBps: a.percentBps,
+      minCharge: a.minCharge,
+      maxCharge: a.maxCharge,
+      unitLabel: a.unitLabel,
+      minQty: a.minQty,
+      maxQty: a.maxQty,
+      doublesOnRoundTrip: a.doublesOnRoundTrip,
+      image: this.buildImage(a.mediaAsset),
+      isActive: a.isActive,
+      sortOrder: a.sortOrder,
+    };
+  }
+
+  toSettingsDto(s: MovingSettings): MovingSettingsDto {
+    return {
+      roundToIdr: s.roundToIdr,
+      bandPct: s.bandPct,
+      defaultIncludedKm: s.defaultIncludedKm,
     };
   }
 }

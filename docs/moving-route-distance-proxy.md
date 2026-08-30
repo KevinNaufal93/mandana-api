@@ -76,9 +76,21 @@ X-Goog-FieldMask: routes.distanceMeters,routes.duration
   "travelMode": "DRIVE",
   "routingPreference": "TRAFFIC_UNAWARE",
   "computeAlternativeRoutes": false,
+  "routeModifiers": { "avoidTolls": true },
   "languageCode": "id-ID", "regionCode": "ID", "units": "METRIC"
 }
 ```
+
+**`routeModifiers.avoidTolls` must mirror the caller's `tollRoute` flag** —
+send `avoidTolls: !tollRoute` (see `moving-integration.md`'s `POST
+/moving/quote` section). Without this, Google silently returns its default
+route, which is the toll route for most Jabodetabek/intercity pairs, while
+`POST /moving/quote` prices toll-route kilometers and (until an ops toll rate
+is active) charges Rp 0 toll — a systematic under-quote either way: take the
+toll and it's eaten, avoid it and the real distance is longer than quoted.
+`avoidTolls` is a plain route modifier, not a Pro/Enterprise feature — it
+stays on the Essentials SKU, so this costs nothing extra. See "Phase 2: toll
+pricing" below for what *does* cost more.
 
 **`routingPreference: "TRAFFIC_UNAWARE"` is not optional** — `TRAFFIC_AWARE`
 silently upgrades the call to the Compute Routes *Pro* SKU: double the price
@@ -154,3 +166,47 @@ natural fit here rather than porting their parser verbatim):
 entirely on the frontend regardless of this change — it's referrer-restricted
 and inlined into the client bundle by design. This proxy only ever concerns
 the **server** key.
+
+## Phase 2: toll pricing (researched, deferred)
+
+Avoiding tolls (`routeModifiers.avoidTolls`, above) is free; asking Google
+what they'd cost is not. This section documents what pulling a real toll
+*price* from Google would take, and why `POST /moving/quote` instead uses an
+ops-configured toll estimate (`moving_addons.kind = 'toll'` — see
+`moving-integration.md`) for now.
+
+- **`routeModifiers.avoidTolls`** is a basic modifier — it appears in neither
+  the Compute Routes Pro nor Enterprise feature list, so it stays on the
+  **Essentials** SKU (~$5/1k, 10,000 free/month).
+- **Toll *calculation*** — `extraComputations: ["TOLLS"]` plus
+  `routes.travelAdvisory.tollInfo` in the field mask — is explicitly an
+  **Enterprise** feature: ~**$15/1k**, free tier drops to 1,000/month, ~3× the
+  cost per uncached quote. It would also undo the saving this proxy design
+  already gets from forcing `routingPreference: TRAFFIC_UNAWARE`.
+- **Indonesia is supported** — `ID_E_TOLL` is a real `TollPass` enum value
+  ("E-card provided by multiple banks… all e-cards are charged the same").
+  But Indonesia is specifically a region where the pass is **mandatory**:
+  omit `tollPasses` and Google reports that a toll exists with no price.
+- **The blocker**: `estimatedPrice` is **non-commercial (passenger car)**
+  pricing; Google's docs warn it differs for commercial vehicles. Indonesian
+  tolls bill by *golongan*, and a CDD or Fuso is Gol II–IV — roughly
+  1.5–2.5× the Gol I rate. So at 3× the API cost the figure is still wrong
+  for three of the four truck classes without a hand-maintained golongan
+  multiplier per truck — at which point ops is tuning a multiplier either
+  way, which is exactly what the `toll-estimate` addon already is.
+
+**If volume ever justifies it:** build this proxy for real (still "not
+built" as of this writing — today the FE calls Google directly and this
+backend only receives `distanceMeters`), add `GOOGLE_MAPS_SERVER_API_KEY` to
+`env.validation.ts` + `configuration.ts` per the section above, add a
+`toll_golongan_multiplier_bps` column to `truck_classes`, and Redis-cache by
+4dp-quantized coordinates for 24h as already specified. `MovingQuoteExtras.toll`
+in `moving-pricing.ts` is the seam: swapping the ops estimate for a
+Google-derived number at quote time is a service-layer change only — no
+schema or response-shape break.
+
+Sources: [Calculate toll fees](https://developers.google.com/maps/documentation/routes/calculate_toll_fees) ·
+[RouteModifiers / TollPass](https://developers.google.com/maps/documentation/routes/reference/rest/v2/RouteModifiers) ·
+[Routes API usage and billing](https://developers.google.com/maps/documentation/routes/usage-and-billing) ·
+[SKU details](https://developers.google.com/maps/billing-and-pricing/sku-details) ·
+[Maps Platform pricing](https://mapsplatform.google.com/pricing/)

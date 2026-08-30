@@ -60,9 +60,79 @@ export class TruckClassResponseDto {
   data!: TruckClassDto;
 }
 
+// ─── Moving add-ons (helper, packaging, waiting, insurance, toll) ─────────────
+
+export class MovingAddonDto {
+  @ApiProperty() id!: string;
+  @ApiProperty() slug!: string;
+  @ApiProperty() name!: string;
+  @ApiPropertyOptional({ nullable: true, type: String }) description!:
+    string | null;
+  @ApiPropertyOptional({ nullable: true, type: String }) descriptionText!:
+    string | null;
+  @ApiProperty({ example: 'helper' }) kind!: string;
+  @ApiProperty({ example: 'per_unit' }) pricingModel!: string;
+  @ApiProperty({ description: 'Rupiah, integer' }) unitPrice!: number;
+  @ApiPropertyOptional({ nullable: true, type: Number }) percentBps!:
+    number | null;
+  @ApiPropertyOptional({ nullable: true, type: Number }) minCharge!:
+    number | null;
+  @ApiPropertyOptional({ nullable: true, type: Number }) maxCharge!:
+    number | null;
+  @ApiPropertyOptional({ nullable: true, type: String }) unitLabel!:
+    string | null;
+  @ApiProperty() minQty!: number;
+  @ApiProperty() maxQty!: number;
+  @ApiProperty() doublesOnRoundTrip!: boolean;
+  @ApiPropertyOptional({ nullable: true, type: TruckImageDto })
+  image!: TruckImageDto | null;
+  @ApiProperty() isActive!: boolean;
+  @ApiProperty() sortOrder!: number;
+}
+
+export class MovingAddonListResponseDto {
+  @ApiProperty({ type: [MovingAddonDto] })
+  data!: MovingAddonDto[];
+}
+
+export class MovingAddonResponseDto {
+  @ApiProperty({ type: MovingAddonDto })
+  data!: MovingAddonDto;
+}
+
+// ─── Moving pricing settings (roundToIdr / bandPct / defaultIncludedKm) ───────
+
+export class MovingSettingsDto {
+  @ApiProperty({ description: 'Rupiah rounding step applied to the total' })
+  roundToIdr!: number;
+  @ApiProperty({ description: 'The ± percentage band shown to the customer' })
+  bandPct!: number;
+  @ApiProperty({
+    description: 'Fallback included-km when a truck class sets none',
+  })
+  defaultIncludedKm!: number;
+}
+
+export class MovingSettingsResponseDto {
+  @ApiProperty({ type: MovingSettingsDto })
+  data!: MovingSettingsDto;
+}
+
+// ─── Quote ─────────────────────────────────────────────────────────────────────
+
 export class MovingQuoteTruckDto {
   @ApiProperty() slug!: string;
   @ApiProperty() name!: string;
+}
+
+export class MovingQuoteAddonLineDto {
+  @ApiProperty() slug!: string;
+  @ApiProperty() name!: string;
+  @ApiProperty({ example: 'helper' }) kind!: string;
+  @ApiProperty({ example: 'per_unit' }) pricingModel!: string;
+  @ApiProperty() quantity!: number;
+  @ApiProperty({ description: 'Rupiah' }) unitPrice!: number;
+  @ApiProperty({ description: 'Rupiah' }) amount!: number;
 }
 
 export class MovingQuoteDto {
@@ -70,9 +140,31 @@ export class MovingQuoteDto {
   @ApiProperty() distanceKm!: number;
   @ApiProperty() includedKm!: number;
   @ApiProperty() chargeableKm!: number;
+  @ApiProperty() roundTrip!: boolean;
+  @ApiProperty({ description: '1 one-way, 2 round trip' })
+  tripMultiplier!: number;
   @ApiProperty({ description: 'Rupiah' }) baseFare!: number;
   @ApiProperty({ description: 'Rupiah' }) distanceFare!: number;
-  @ApiProperty({ description: 'Rupiah' }) subtotal!: number;
+  @ApiProperty({
+    description: 'Rupiah — baseFare + distanceFare, after minFare',
+  })
+  travelSubtotal!: number;
+  @ApiProperty({
+    description:
+      'Whether distanceMeters was computed via a toll-road route (echoes the request flag)',
+  })
+  tollRoute!: boolean;
+  @ApiProperty({
+    description: 'Rupiah — 0 unless an active toll addon applies',
+  })
+  tollFare!: number;
+  @ApiProperty({ type: [MovingQuoteAddonLineDto] })
+  addons!: MovingQuoteAddonLineDto[];
+  @ApiProperty({ description: 'Rupiah' }) addonsTotal!: number;
+  @ApiProperty({
+    description: 'Rupiah — travelSubtotal + tollFare + addonsTotal',
+  })
+  subtotal!: number;
   @ApiProperty({ description: 'Rupiah' }) total!: number;
   @ApiProperty() minFareApplied!: boolean;
   @ApiProperty({ description: 'Rupiah' }) lowEstimate!: number;

@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { FindOptionsWhere, Repository } from 'typeorm';
 import { TruckClass } from './entities/truck-class.entity';
@@ -7,13 +11,37 @@ import { UpdateTruckClassDto } from './dto/update-truck-class.dto';
 import { QuoteMovingDto } from './dto/quote-moving.dto';
 import { MovingQuoteDto } from './dto/truck-class-response.dto';
 import { resolveUniqueSlug } from '../../common/utils/slugify';
-import { movingQuote } from './moving-pricing';
+import { movingQuote, MovingAddonRate } from './moving-pricing';
+import { MovingAddonsService } from './moving-addons.service';
+import { MovingSettingsService } from './moving-settings.service';
+import { MovingAddon } from './entities/moving-addon.entity';
+import { MovingAddonKind } from './enums/moving-addon-kind.enum';
+import { MovingAddonPricingModel } from './enums/moving-addon-pricing-model.enum';
+
+/** Adapts a MovingAddon entity to the plain rate shape moving-pricing.ts expects. */
+function toAddonRate(addon: MovingAddon): MovingAddonRate {
+  return {
+    slug: addon.slug,
+    name: addon.name,
+    kind: addon.kind,
+    pricingModel: addon.pricingModel,
+    unitPrice: addon.unitPrice,
+    percentBps: addon.percentBps,
+    minCharge: addon.minCharge,
+    maxCharge: addon.maxCharge,
+    minQty: addon.minQty,
+    maxQty: addon.maxQty,
+    doublesOnRoundTrip: addon.doublesOnRoundTrip,
+  };
+}
 
 @Injectable()
 export class MovingService {
   constructor(
     @InjectRepository(TruckClass)
     private readonly repo: Repository<TruckClass>,
+    private readonly addonsService: MovingAddonsService,
+    private readonly settingsService: MovingSettingsService,
   ) {}
 
   /** Public list — always active-only, regardless of any query param. */
@@ -129,13 +157,66 @@ export class MovingService {
 
   async quote(dto: QuoteMovingDto): Promise<MovingQuoteDto> {
     const truck = await this.findActiveBySlugOrFail(dto.truckSlug);
+    const settings = await this.settingsService.get();
 
-    const result = movingQuote(dto.distanceMeters, {
-      baseFare: truck.baseFare,
-      perKmFare: truck.perKmFare,
-      includedKm: truck.includedKm,
-      minFare: truck.minFare,
-    });
+    const requestedAddons = dto.addons ?? [];
+    const requestedSlugs = requestedAddons.map((a) => a.slug);
+    const duplicateSlug = requestedSlugs.find(
+      (slug, i) => requestedSlugs.indexOf(slug) !== i,
+    );
+    if (duplicateSlug) {
+      throw new BadRequestException(`Duplicate addon slug: ${duplicateSlug}`);
+    }
+
+    const resolvedAddons =
+      await this.addonsService.findActiveBySlugs(requestedSlugs);
+    const addonBySlug = new Map(resolvedAddons.map((a) => [a.slug, a]));
+
+    const tollSelectedManually = resolvedAddons.find(
+      (a) => a.kind === MovingAddonKind.TOLL,
+    );
+    if (tollSelectedManually) {
+      throw new BadRequestException(
+        `"${tollSelectedManually.slug}" is a toll addon — set tollRoute instead of selecting it directly.`,
+      );
+    }
+
+    const needsDeclaredValue = resolvedAddons.some(
+      (a) => a.pricingModel === MovingAddonPricingModel.PERCENT,
+    );
+    if (needsDeclaredValue && dto.declaredValue === undefined) {
+      throw new BadRequestException(
+        'declaredValue is required when a percent-priced addon (e.g. insurance) is selected',
+      );
+    }
+
+    const tollRoute = dto.tollRoute !== false;
+    const toll = tollRoute ? await this.addonsService.findActiveToll() : null;
+
+    const result = movingQuote(
+      dto.distanceMeters,
+      {
+        baseFare: truck.baseFare,
+        perKmFare: truck.perKmFare,
+        includedKm: truck.includedKm,
+        minFare: truck.minFare,
+      },
+      {
+        roundToIdr: settings.roundToIdr,
+        bandPct: settings.bandPct,
+        includedKm: settings.defaultIncludedKm,
+      },
+      {
+        roundTrip: dto.roundTrip === true,
+        tollRoute,
+        declaredValue: dto.declaredValue,
+        toll: toll ? toAddonRate(toll) : null,
+        addons: requestedAddons.map((requested) => ({
+          rate: toAddonRate(addonBySlug.get(requested.slug)!),
+          quantity: requested.quantity ?? 1,
+        })),
+      },
+    );
 
     return {
       truck: { slug: truck.slug, name: truck.name },
