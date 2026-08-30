@@ -52,7 +52,7 @@ export class MovingAddon extends BaseEntity {
   @Column({ name: 'max_charge', type: 'int', nullable: true })
   maxCharge!: number | null;
 
-  @Column({ name: 'unit_label', length: 30, nullable: true })
+  @Column({ name: 'unit_label', type: 'varchar', length: 30, nullable: true })
   unitLabel!: string | null;
 
   @Column({ name: 'min_qty', type: 'int', default: 1 })
