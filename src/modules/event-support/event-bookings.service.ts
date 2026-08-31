@@ -15,11 +15,8 @@ import { PaginatedResult } from '../../common/interfaces/paginated-result.interf
 import { User } from '../users/entities/user.entity';
 import { EventItemsService } from './event-items.service';
 import { EventAvailabilityService } from './event-availability.service';
-import {
-  addDaysToDateString,
-  aggregateEventQuote,
-  computeLine,
-} from './event-pricing';
+import { EventSupportSettingsService } from './event-support-settings.service';
+import { aggregateEventQuote, computeLine } from './event-pricing';
 import {
   generateBookingReference,
   MAX_REFERENCE_ATTEMPTS,
@@ -45,6 +42,7 @@ export class EventBookingsService {
     private readonly dataSource: DataSource,
     private readonly itemsService: EventItemsService,
     private readonly availability: EventAvailabilityService,
+    private readonly settingsService: EventSupportSettingsService,
   ) {}
 
   async findOneOrFail(id: string): Promise<EventBooking> {
@@ -127,22 +125,50 @@ export class EventBookingsService {
       dto.items.map((l) => l.itemId),
     );
     const itemById = new Map(items.map((i) => [i.id, i]));
+    const policy = this.settingsService.toPricingPolicy(
+      await this.settingsService.get(),
+    );
 
     const lines = dto.items.map((lineDto) => {
       const item = itemById.get(lineDto.itemId)!;
-      const computed = computeLine({
-        pricePerDay: item.pricePerDay,
-        quantity: lineDto.quantity,
-        days: lineDto.days,
-      });
+      const computed = computeLine(
+        {
+          pricePerDay: item.pricePerDay,
+          hourlyRate: item.hourlyRate,
+          supportsHourly: item.supportsHourly,
+          minimumHours: item.minimumHours,
+          quantity: lineDto.quantity,
+          dropoffAt: lineDto.dropoffAt,
+          pickupAt: lineDto.pickupAt,
+        },
+        policy,
+      );
+      // Calendar days held — still meaningful under hourly billing, kept
+      // for anything (admin list filters, old reports) that reads `days`.
+      const days = Math.max(
+        1,
+        Math.round(
+          (Date.parse(`${computed.endDate}T00:00:00Z`) -
+            Date.parse(`${computed.startDate}T00:00:00Z`)) /
+            86_400_000,
+        ) + 1,
+      );
       return {
         itemId: item.id,
         itemName: item.name,
         quantity: computed.quantity,
-        startDate: lineDto.startDate,
-        days: computed.days,
-        endDate: addDaysToDateString(lineDto.startDate, computed.days),
-        pricePerDay: computed.pricePerDay,
+        startDate: computed.startDate,
+        days,
+        endDate: computed.endDate,
+        dropoffAt: computed.dropoffAt,
+        pickupAt: computed.pickupAt,
+        billingMode: computed.billingMode,
+        pricePerDay: item.pricePerDay,
+        unitPrice: computed.unitPrice,
+        unitLabel: computed.unitLabel,
+        billableUnits: computed.billableUnits,
+        extraHours: computed.extraHours,
+        extraHoursTotal: computed.extraHoursTotal,
         lineTotal: computed.lineTotal,
       };
     });
@@ -156,6 +182,14 @@ export class EventBookingsService {
       (max, l) => (l.endDate > max ? l.endDate : max),
       lines[0].endDate,
     );
+    const dropoffAt = lines.reduce(
+      (min, l) => (l.dropoffAt < min ? l.dropoffAt : min),
+      lines[0].dropoffAt,
+    );
+    const pickupAt = lines.reduce(
+      (max, l) => (l.pickupAt > max ? l.pickupAt : max),
+      lines[0].pickupAt,
+    );
 
     for (let attempt = 0; attempt < MAX_REFERENCE_ATTEMPTS; attempt++) {
       const booking = this.bookingRepo.create({
@@ -167,6 +201,8 @@ export class EventBookingsService {
         notes: dto.notes ?? null,
         startDate,
         endDate,
+        dropoffAt,
+        pickupAt,
         subtotal: quote.subtotal,
         discountAmount: quote.discountAmount,
         total: quote.total,

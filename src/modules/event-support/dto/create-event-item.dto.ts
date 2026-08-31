@@ -1,5 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
+  IsBoolean,
   IsEnum,
   IsInt,
   IsOptional,
@@ -59,6 +60,38 @@ export class CreateEventItemDto {
   @IsInt()
   @Min(0)
   stockQuantity!: number;
+
+  @ApiPropertyOptional({
+    example: 75000,
+    minimum: 0,
+    description:
+      'Rupiah, integer. Independent of pricePerDay — never derived from it. Required (and must be > 0) when supportsHourly is true.',
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  hourlyRate?: number;
+
+  @ApiPropertyOptional({
+    default: false,
+    description:
+      'Opts this item into hourly pricing for windows at/under the pricing-policy threshold. Requires a positive hourlyRate.',
+  })
+  @IsOptional()
+  @IsBoolean()
+  supportsHourly?: boolean;
+
+  @ApiPropertyOptional({
+    minimum: 0,
+    maximum: 24,
+    description:
+      'Smallest billable hourly block for this item. Omit to use the pricing-policy default (EventSupportSettings.defaultMinimumHours).',
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(24)
+  minimumHours?: number;
 
   @ApiPropertyOptional({
     description:

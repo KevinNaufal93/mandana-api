@@ -24,8 +24,9 @@ import { UserRole } from '../users/enums/user-role.enum';
 import { EventCategoriesService } from './event-categories.service';
 import { EventItemsService } from './event-items.service';
 import { EventAvailabilityService } from './event-availability.service';
+import { EventSupportSettingsService } from './event-support-settings.service';
 import { EventSupportMapper } from './event-support.mapper';
-import { addDaysToDateString } from './event-pricing';
+import { windowEndDate, windowStartDate } from './event-pricing';
 import { CreateEventCategoryDto } from './dto/create-event-category.dto';
 import { UpdateEventCategoryDto } from './dto/update-event-category.dto';
 import { QueryEventCategoriesDto } from './dto/query-event-categories.dto';
@@ -43,6 +44,7 @@ import {
   EventItemDetailResponseDto,
   EventItemListResponseDto,
   EventQuoteResponseDto,
+  EventSupportSettingsResponseDto,
 } from './dto/event-support-response.dto';
 
 // ─── Public controller ────────────────────────────────────────────────────────
@@ -55,6 +57,7 @@ export class EventSupportController {
     private readonly categoriesService: EventCategoriesService,
     private readonly itemsService: EventItemsService,
     private readonly availability: EventAvailabilityService,
+    private readonly settingsService: EventSupportSettingsService,
     private readonly mapper: EventSupportMapper,
   ) {}
 
@@ -68,21 +71,42 @@ export class EventSupportController {
     return categories.map((c) => this.mapper.toCategoryDto(c));
   }
 
+  @Get('pricing-config')
+  @ApiOperation({
+    summary:
+      'Hourly-pricing policy (threshold, rounding step, minimum hours, ...) — fetch these instead of hardcoding them client-side',
+  })
+  @ApiOkResponse({ type: EventSupportSettingsResponseDto })
+  async getPricingConfig() {
+    const settings = await this.settingsService.get();
+    return this.mapper.toSettingsDto(settings);
+  }
+
   @Get('items')
   @ApiOperation({
     summary:
-      'List published items, paginated. Pass ?startDate&days for live availableQuantity on GET /items/:slug.',
+      "List published items, paginated. Pass ?dropoffAt&pickupAt for each item's live activeRate.",
   })
   @ApiOkResponse({ type: EventItemListResponseDto })
   async findAllItems(@Query() query: QueryEventItemsDto) {
     const { data, meta } = await this.itemsService.findAllPublic(query);
-    return { data: data.map((i) => this.mapper.toItemListDto(i)), meta };
+    const activeRates = await this.itemsService.resolveActiveRates(
+      data,
+      query.dropoffAt,
+      query.pickupAt,
+    );
+    return {
+      data: data.map((i) =>
+        this.mapper.toItemListDto(i, activeRates.get(i.id)),
+      ),
+      meta,
+    };
   }
 
   @Get('items/:slug')
   @ApiOperation({
     summary:
-      'Get a single published item with full description. Optional ?startDate&days adds availableQuantity.',
+      'Get a single published item with full description. Optional ?dropoffAt&pickupAt adds availableQuantity and activeRate.',
   })
   @ApiOkResponse({ type: EventItemDetailResponseDto })
   async findOneItem(
@@ -92,17 +116,26 @@ export class EventSupportController {
     const item = await this.itemsService.findOneBySlugPublicOrFail(slug);
 
     let availableQuantity: number | null = null;
-    if (query.startDate && query.days) {
-      const endDate = addDaysToDateString(query.startDate, query.days);
+    if (query.dropoffAt && query.pickupAt) {
       availableQuantity = await this.availability.getAvailableQuantity(
         item.id,
         item.stockQuantity,
-        query.startDate,
-        endDate,
+        windowStartDate(query.dropoffAt),
+        windowEndDate(query.pickupAt),
       );
     }
 
-    return this.mapper.toItemDetailDto(item, availableQuantity);
+    const activeRates = await this.itemsService.resolveActiveRates(
+      [item],
+      query.dropoffAt,
+      query.pickupAt,
+    );
+
+    return this.mapper.toItemDetailDto(
+      item,
+      availableQuantity,
+      activeRates.get(item.id),
+    );
   }
 
   @Post('quote')
@@ -113,8 +146,11 @@ export class EventSupportController {
   })
   @ApiOkResponse({ type: EventQuoteResponseDto })
   async quote(@Body() dto: QuoteEventSupportDto) {
-    const computed = await this.itemsService.quote(dto);
-    return this.mapper.toQuoteDto(computed);
+    const [computed, settings] = await Promise.all([
+      this.itemsService.quote(dto),
+      this.settingsService.get(),
+    ]);
+    return this.mapper.toQuoteDto(computed, settings);
   }
 }
 

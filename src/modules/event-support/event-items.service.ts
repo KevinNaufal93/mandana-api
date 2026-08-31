@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   Injectable,
   NotFoundException,
@@ -10,6 +11,7 @@ import { EventCategory } from './entities/event-category.entity';
 import { EventBookingItem } from './entities/event-booking-item.entity';
 import { EventItemStatus } from './enums/event-item-status.enum';
 import { EventBookingStatus } from './enums/event-booking-status.enum';
+import { EventBillingMode } from './enums/event-billing-mode.enum';
 import { CreateEventItemDto } from './dto/create-event-item.dto';
 import { UpdateEventItemDto } from './dto/update-event-item.dto';
 import { TransitionEventItemStatusDto } from './dto/transition-event-item-status.dto';
@@ -19,27 +21,38 @@ import { QuoteEventSupportDto } from './dto/quote-event-support.dto';
 import { PaginatedResult } from '../../common/interfaces/paginated-result.interface';
 import { resolveUniqueSlug, slugify } from '../../common/utils/slugify';
 import { EventAvailabilityService } from './event-availability.service';
+import { EventSupportSettingsService } from './event-support-settings.service';
 import {
-  addDaysToDateString,
   aggregateEventQuote,
   computeLine,
+  resolveActiveRate,
+  todayInJakarta,
 } from './event-pricing';
 
 export interface EventQuoteLineComputation {
   item: EventItem;
   quantity: number;
+  dropoffAt: string;
+  pickupAt: string;
   startDate: string;
-  days: number;
   endDate: string;
-  pricePerDay: number;
+  billingMode: EventBillingMode;
+  unitPrice: number;
+  unitLabel: 'jam' | 'hari';
+  billableUnits: number;
+  extraHours: number | null;
+  extraHoursTotal: number | null;
   lineTotal: number;
   availableQuantity: number;
 }
 
 export interface EventQuoteComputation {
   lines: EventQuoteLineComputation[];
+  dropoffAt: string;
+  pickupAt: string;
   startDate: string;
   endDate: string;
+  isMixedBilling: boolean;
   subtotal: number;
   discountAmount: number;
   total: number;
@@ -72,6 +85,7 @@ export class EventItemsService {
     @InjectRepository(EventBookingItem)
     private readonly bookingItemRepo: Repository<EventBookingItem>,
     private readonly availability: EventAvailabilityService,
+    private readonly settingsService: EventSupportSettingsService,
   ) {}
 
   // ── Public ────────────────────────────────────────────────────────────
@@ -122,11 +136,50 @@ export class EventItemsService {
     });
   }
 
+  /** The rate applicable to each item over the given window, for the
+   * catalog endpoints' `activeRate` — see resolveActiveRate() in
+   * event-pricing.ts. Returns an empty map (no `activeRate`) when no
+   * window was given, so the controller/mapper can distinguish "no window"
+   * from "day-only item". */
+  async resolveActiveRates(
+    items: EventItem[],
+    dropoffAt?: string,
+    pickupAt?: string,
+  ): Promise<
+    Map<string, { amount: number; unit: 'hour' | 'day'; label: 'jam' | 'hari' }>
+  > {
+    const result = new Map<
+      string,
+      { amount: number; unit: 'hour' | 'day'; label: 'jam' | 'hari' }
+    >();
+    if (!dropoffAt || !pickupAt) return result;
+
+    const policy = this.settingsService.toPricingPolicy(
+      await this.settingsService.get(),
+    );
+    for (const item of items) {
+      result.set(
+        item.id,
+        resolveActiveRate(
+          {
+            pricePerDay: item.pricePerDay,
+            hourlyRate: item.hourlyRate,
+            supportsHourly: item.supportsHourly,
+          },
+          dropoffAt,
+          pickupAt,
+          policy,
+        ),
+      );
+    }
+    return result;
+  }
+
   /**
    * Public POST /event-support/quote — writes nothing, computes an
    * authoritative price for a cart and each line's live availability over
-   * its date range. All lines share `dto.startDate`; a line may override
-   * the cart-level `days` (e.g. a DJ set rented for only 1 of a 2-day event).
+   * its rental window. All lines share the cart-level window unless a line
+   * carries its own `dropoffAt`/`pickupAt` override.
    */
   async quote(dto: QuoteEventSupportDto): Promise<EventQuoteComputation> {
     const slugs = dto.items.map((l) => l.slug);
@@ -140,45 +193,93 @@ export class EventItemsService {
       );
     }
 
-    const lines: EventQuoteLineComputation[] = [];
-    for (const lineDto of dto.items) {
-      const item = itemBySlug.get(lineDto.slug)!;
-      const days = lineDto.days ?? dto.days;
-      const computed = computeLine({
-        pricePerDay: item.pricePerDay,
-        quantity: lineDto.quantity,
-        days,
-      });
-      const endDate = addDaysToDateString(dto.startDate, computed.days);
-      const availableQuantity = await this.availability.getAvailableQuantity(
-        item.id,
-        item.stockQuantity,
-        dto.startDate,
-        endDate,
-      );
+    const policy = this.settingsService.toPricingPolicy(
+      await this.settingsService.get(),
+    );
 
-      lines.push({
-        item,
-        quantity: computed.quantity,
-        startDate: dto.startDate,
-        days: computed.days,
-        endDate,
-        pricePerDay: computed.pricePerDay,
-        lineTotal: computed.lineTotal,
-        availableQuantity,
-      });
+    const priced = dto.items.map((lineDto) => {
+      const item = itemBySlug.get(lineDto.slug)!;
+      const dropoffAt = lineDto.dropoffAt ?? dto.dropoffAt;
+      const pickupAt = lineDto.pickupAt ?? dto.pickupAt;
+      const computed = computeLine(
+        {
+          pricePerDay: item.pricePerDay,
+          hourlyRate: item.hourlyRate,
+          supportsHourly: item.supportsHourly,
+          minimumHours: item.minimumHours,
+          quantity: lineDto.quantity,
+          dropoffAt,
+          pickupAt,
+        },
+        policy,
+      );
+      return { item, computed };
+    });
+
+    // Availability is peak-per-day over a calendar span, batched per
+    // distinct (startDate, endDate) pair instead of once per line —
+    // EventAvailabilityService.getPeakBooked already takes an array of
+    // item ids, so a cart with several lines sharing a window costs one
+    // round trip, not N.
+    const spanKey = (start: string, end: string) => `${start}|${end}`;
+    const itemIdsBySpan = new Map<string, Set<string>>();
+    for (const { item, computed } of priced) {
+      const key = spanKey(computed.startDate, computed.endDate);
+      if (!itemIdsBySpan.has(key)) itemIdsBySpan.set(key, new Set());
+      itemIdsBySpan.get(key)!.add(item.id);
+    }
+    const peakBySpan = new Map<string, Map<string, number>>();
+    for (const [key, ids] of itemIdsBySpan) {
+      const [startDate, endDate] = key.split('|');
+      peakBySpan.set(
+        key,
+        await this.availability.getPeakBooked([...ids], startDate, endDate),
+      );
     }
 
+    const lines: EventQuoteLineComputation[] = priced.map(
+      ({ item, computed }) => {
+        const key = spanKey(computed.startDate, computed.endDate);
+        const peak = peakBySpan.get(key)?.get(item.id) ?? 0;
+        return {
+          item,
+          quantity: computed.quantity,
+          dropoffAt: computed.dropoffAt,
+          pickupAt: computed.pickupAt,
+          startDate: computed.startDate,
+          endDate: computed.endDate,
+          billingMode: computed.billingMode,
+          unitPrice: computed.unitPrice,
+          unitLabel: computed.unitLabel,
+          billableUnits: computed.billableUnits,
+          extraHours: computed.extraHours,
+          extraHoursTotal: computed.extraHoursTotal,
+          lineTotal: computed.lineTotal,
+          availableQuantity: Math.max(0, item.stockQuantity - peak),
+        };
+      },
+    );
+
     const quote = aggregateEventQuote(lines);
+    const startDate = lines.reduce(
+      (min, l) => (l.startDate < min ? l.startDate : min),
+      lines[0].startDate,
+    );
     const endDate = lines.reduce(
       (max, l) => (l.endDate > max ? l.endDate : max),
       lines[0].endDate,
     );
+    const isMixedBilling = lines.some(
+      (l) => l.billingMode !== lines[0].billingMode,
+    );
 
     return {
       lines,
-      startDate: dto.startDate,
+      dropoffAt: dto.dropoffAt,
+      pickupAt: dto.pickupAt,
+      startDate,
       endDate,
+      isMixedBilling,
       subtotal: quote.subtotal,
       discountAmount: quote.discountAmount,
       total: quote.total,
@@ -251,10 +352,31 @@ export class EventItemsService {
     }
   }
 
+  /** §9 invariant: an item with `supportsHourly: true` must always carry a
+   * positive `hourlyRate` — otherwise a later `computeLine()` call would
+   * silently fall back to daily pricing and the admin's "hourly" toggle
+   * would lie. Checked against the resolved (post-merge) values, so a
+   * PATCH that sets `supportsHourly: true` without ever sending
+   * `hourlyRate` on an item that has none is caught too. */
+  private assertHourlyRateInvariant(
+    supportsHourly: boolean,
+    hourlyRate: number | null,
+  ): void {
+    if (supportsHourly && !(hourlyRate !== null && hourlyRate > 0)) {
+      throw new BadRequestException(
+        'supportsHourly requires a positive hourlyRate',
+      );
+    }
+  }
+
   /** Always creates a `draft` item — status moves only via updateStatus(). */
   async create(dto: CreateEventItemDto): Promise<EventItem> {
     await this.assertCategoryExists(dto.categoryId);
     const slug = await resolveUniqueSlug(this.itemRepo, dto.slug ?? dto.name);
+
+    const hourlyRate = dto.hourlyRate ?? null;
+    const supportsHourly = dto.supportsHourly ?? false;
+    this.assertHourlyRateInvariant(supportsHourly, hourlyRate);
 
     const item = this.itemRepo.create({
       categoryId: dto.categoryId,
@@ -264,6 +386,9 @@ export class EventItemsService {
       description: dto.description ?? null,
       pricePerDay: dto.pricePerDay,
       stockQuantity: dto.stockQuantity,
+      hourlyRate,
+      supportsHourly,
+      minimumHours: dto.minimumHours ?? null,
       mediaAssetId: dto.mediaAssetId ?? null,
       sortOrder: dto.sortOrder ?? 0,
     });
@@ -290,6 +415,14 @@ export class EventItemsService {
         ? await resolveUniqueSlug(this.itemRepo, dto.slug, id)
         : undefined;
 
+    const resolvedHourlyRate =
+      dto.hourlyRate !== undefined ? dto.hourlyRate : item.hourlyRate;
+    const resolvedSupportsHourly =
+      dto.supportsHourly !== undefined
+        ? dto.supportsHourly
+        : item.supportsHourly;
+    this.assertHourlyRateInvariant(resolvedSupportsHourly, resolvedHourlyRate);
+
     Object.assign(item, {
       ...(dto.categoryId !== undefined && { categoryId: dto.categoryId }),
       ...(slug !== undefined && { slug }),
@@ -301,6 +434,15 @@ export class EventItemsService {
       ...(dto.pricePerDay !== undefined && { pricePerDay: dto.pricePerDay }),
       ...(dto.stockQuantity !== undefined && {
         stockQuantity: dto.stockQuantity,
+      }),
+      ...(dto.hourlyRate !== undefined && {
+        hourlyRate: dto.hourlyRate ?? null,
+      }),
+      ...(dto.supportsHourly !== undefined && {
+        supportsHourly: dto.supportsHourly,
+      }),
+      ...(dto.minimumHours !== undefined && {
+        minimumHours: dto.minimumHours ?? null,
       }),
       ...(dto.mediaAssetId !== undefined && {
         mediaAssetId: dto.mediaAssetId ?? null,
@@ -326,7 +468,7 @@ export class EventItemsService {
     }
 
     if (dto.status === EventItemStatus.ARCHIVED) {
-      const today = new Date().toISOString().slice(0, 10);
+      const today = todayInJakarta();
       const activeBookingCount = await this.bookingItemRepo
         .createQueryBuilder('bi')
         .innerJoin('bi.booking', 'b')

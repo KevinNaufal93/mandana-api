@@ -2,6 +2,8 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { EventBookingStatus } from '../enums/event-booking-status.enum';
 import { EventItemKind } from '../enums/event-item-kind.enum';
 import { EventItemStatus } from '../enums/event-item-status.enum';
+import { EventBillingMode } from '../enums/event-billing-mode.enum';
+import { EventOverThresholdMode } from '../enums/event-over-threshold-mode.enum';
 
 /**
  * Response-shape DTOs, declared purely so Swagger/OpenAPI can describe the
@@ -24,6 +26,15 @@ export class EventImageDto {
   @ApiProperty({ nullable: true, type: String }) alt!: string | null;
   @ApiProperty() width!: number;
   @ApiProperty() height!: number;
+}
+
+/** The rate actually applicable to an item over a requested window — the
+ * web renders this, it never computes which rate applies itself. Omitted
+ * (undefined) when no window was given. */
+export class EventActiveRateDto {
+  @ApiProperty({ description: 'Rupiah, integer' }) amount!: number;
+  @ApiProperty({ enum: ['hour', 'day'] }) unit!: 'hour' | 'day';
+  @ApiProperty({ example: 'jam' }) label!: 'jam' | 'hari';
 }
 
 // ─── Categories ─────────────────────────────────────────────────────────────
@@ -65,6 +76,12 @@ export class EventItemListDto {
   @ApiProperty({ description: 'Rupiah, integer' }) pricePerDay!: number;
   @ApiPropertyOptional({ nullable: true, type: EventImageDto })
   image!: EventImageDto | null;
+  @ApiPropertyOptional({
+    type: EventActiveRateDto,
+    description:
+      'The rate applicable over ?dropoffAt/?pickupAt. Omitted when no window was given.',
+  })
+  activeRate?: EventActiveRateDto;
 }
 
 export class EventItemListResponseDto {
@@ -87,7 +104,7 @@ export class EventItemDetailDto extends EventItemListDto {
     nullable: true,
     type: Number,
     description:
-      'Units still free over the requested ?startDate/?days window; null when no window was given',
+      'Units still free over the requested ?dropoffAt/?pickupAt window; null when no window was given',
   })
   availableQuantity!: number | null;
 }
@@ -112,6 +129,15 @@ export class EventItemAdminDto {
   @ApiPropertyOptional({ nullable: true, type: String }) descriptionText!:
     string | null;
   @ApiProperty({ description: 'Rupiah, integer' }) pricePerDay!: number;
+  @ApiPropertyOptional({
+    nullable: true,
+    type: Number,
+    description: 'Rupiah, integer',
+  })
+  hourlyRate!: number | null;
+  @ApiProperty() supportsHourly!: boolean;
+  @ApiPropertyOptional({ nullable: true, type: Number })
+  minimumHours!: number | null;
   @ApiProperty() stockQuantity!: number;
   @ApiProperty({ enum: EventItemStatus }) status!: EventItemStatus;
   @ApiPropertyOptional({ nullable: true, type: EventImageDto })
@@ -133,16 +159,76 @@ export class EventItemAdminResponseDto {
   data!: EventItemAdminDto;
 }
 
+// ─── Settings (public pricing-config + admin) ──────────────────────────────
+
+export class EventSupportSettingsDto {
+  @ApiProperty({ description: 'The hourly/daily cutoff, in hours' })
+  hourlyThresholdHours!: number;
+  @ApiProperty({
+    description:
+      'Whether a window exactly at hourlyThresholdHours still bills hourly (<=) or falls to daily (<)',
+  })
+  hourlyThresholdInclusive!: boolean;
+  @ApiProperty({
+    description:
+      'Fallback minimum billable hours when an item sets no minimumHours of its own',
+  })
+  defaultMinimumHours!: number;
+  @ApiProperty({ description: 'Billable-hours rounding step, in minutes' })
+  roundingUnitMinutes!: number;
+  @ApiProperty({
+    description:
+      'When true, an hourly line total never exceeds pricePerDay * quantity',
+  })
+  capHourlyAtDailyRate!: boolean;
+  @ApiProperty({ enum: EventOverThresholdMode })
+  overThresholdMode!: EventOverThresholdMode;
+  @ApiProperty({
+    description:
+      'Whether pricePerDay/hourlyRate already include Jabodetabek delivery',
+  })
+  priceIncludesJabodetabekDelivery!: boolean;
+  @ApiPropertyOptional({ nullable: true, type: String })
+  outsideJabodetabekNote!: string | null;
+}
+
+export class EventSupportSettingsResponseDto {
+  @ApiProperty({ type: EventSupportSettingsDto })
+  data!: EventSupportSettingsDto;
+}
+
 // ─── Quote (public) ─────────────────────────────────────────────────────────
 
 export class EventQuoteLineDto {
   @ApiProperty() slug!: string;
   @ApiProperty() name!: string;
   @ApiProperty() quantity!: number;
-  @ApiProperty() startDate!: string;
-  @ApiProperty() days!: number;
+  @ApiProperty() dropoffAt!: string;
+  @ApiProperty() pickupAt!: string;
+  @ApiProperty({ description: 'Derived calendar span the item is held' })
+  startDate!: string;
   @ApiProperty() endDate!: string;
-  @ApiProperty({ description: 'Rupiah, integer' }) pricePerDay!: number;
+  @ApiProperty({ enum: EventBillingMode }) billingMode!: EventBillingMode;
+  @ApiProperty({ description: 'Rupiah, integer — the rate actually applied' })
+  unitPrice!: number;
+  @ApiProperty({ enum: ['jam', 'hari'] }) unitLabel!: 'jam' | 'hari';
+  @ApiProperty({
+    description:
+      'Hours (billingMode: hourly) or days (billingMode: daily). Fractional when the rounding step is under 60 minutes.',
+  })
+  billableUnits!: number;
+  @ApiPropertyOptional({
+    nullable: true,
+    type: Number,
+    description: 'Only set under the day_plus_hourly over-threshold mode',
+  })
+  extraHours!: number | null;
+  @ApiPropertyOptional({
+    nullable: true,
+    type: Number,
+    description: 'Rupiah, integer',
+  })
+  extraHoursTotal!: number | null;
   @ApiProperty({ description: 'Rupiah, integer' }) lineTotal!: number;
   @ApiProperty({ description: "Units still free over this line's date range" })
   availableQuantity!: number;
@@ -151,8 +237,15 @@ export class EventQuoteLineDto {
 export class EventQuoteDto {
   @ApiProperty({ type: [EventQuoteLineDto] })
   lines!: EventQuoteLineDto[];
-  @ApiProperty() startDate!: string;
+  @ApiProperty() dropoffAt!: string;
+  @ApiProperty() pickupAt!: string;
+  @ApiProperty({ description: 'Derived cart-wide calendar span' })
+  startDate!: string;
   @ApiProperty() endDate!: string;
+  @ApiProperty({
+    description: 'true when the lines were priced under different billingModes',
+  })
+  isMixedBilling!: boolean;
   @ApiProperty({ description: 'Rupiah, integer' }) subtotal!: number;
   @ApiProperty({ description: 'Rupiah, integer' }) discountAmount!: number;
   @ApiProperty({ description: 'Rupiah, integer' }) total!: number;
@@ -176,10 +269,28 @@ export class EventBookingLineDto {
   @ApiProperty() itemId!: string;
   @ApiProperty() itemName!: string;
   @ApiProperty() quantity!: number;
+  @ApiPropertyOptional({ nullable: true, type: String }) dropoffAt!:
+    string | null;
+  @ApiPropertyOptional({ nullable: true, type: String }) pickupAt!:
+    string | null;
   @ApiProperty() startDate!: string;
-  @ApiProperty() days!: number;
+  @ApiProperty({ description: 'Calendar days held (endDate - startDate + 1)' })
+  days!: number;
   @ApiProperty() endDate!: string;
+  @ApiProperty({ enum: EventBillingMode }) billingMode!: EventBillingMode;
   @ApiProperty({ description: 'Rupiah, integer' }) pricePerDay!: number;
+  @ApiProperty({ description: 'Rupiah, integer — the rate actually applied' })
+  unitPrice!: number;
+  @ApiProperty({ enum: ['jam', 'hari'] }) unitLabel!: 'jam' | 'hari';
+  @ApiProperty() billableUnits!: number;
+  @ApiPropertyOptional({ nullable: true, type: Number }) extraHours!:
+    number | null;
+  @ApiPropertyOptional({
+    nullable: true,
+    type: Number,
+    description: 'Rupiah, integer',
+  })
+  extraHoursTotal!: number | null;
   @ApiProperty({ description: 'Rupiah, integer' }) lineTotal!: number;
 }
 
@@ -193,6 +304,10 @@ export class EventBookingAdminDto {
   @ApiPropertyOptional({ nullable: true, type: String }) eventLocation!:
     string | null;
   @ApiPropertyOptional({ nullable: true, type: String }) notes!: string | null;
+  @ApiPropertyOptional({ nullable: true, type: String }) dropoffAt!:
+    string | null;
+  @ApiPropertyOptional({ nullable: true, type: String }) pickupAt!:
+    string | null;
   @ApiProperty() startDate!: string;
   @ApiProperty() endDate!: string;
   @ApiProperty({ type: [EventBookingLineDto] }) items!: EventBookingLineDto[];

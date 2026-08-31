@@ -3,6 +3,7 @@ import { BaseEntity } from '../../../common/entities/base.entity';
 import { EventBookingStatus } from '../enums/event-booking-status.enum';
 import { EventBookingItem } from './event-booking-item.entity';
 import { User } from '../../users/entities/user.entity';
+import { naiveLocalDateTimeTransformer } from './naive-datetime.transformer';
 
 /**
  * An admin-recorded event-support booking. All real booking happens over
@@ -43,6 +44,28 @@ export class EventBooking extends BaseEntity {
 
   @Column({ name: 'end_date', type: 'date' })
   endDate!: string;
+
+  // Naive local datetime (Asia/Jakarta by convention) — the min/max across
+  // `items`, same denormalization rationale as startDate/endDate above.
+  // startDate/endDate stay authoritative for availability; these are the
+  // actual drop-off/pickup instants for display. See
+  // naive-datetime.transformer.ts for why this round-trips as a plain
+  // string rather than `Date`.
+  @Column({
+    name: 'dropoff_at',
+    type: 'timestamp',
+    nullable: true,
+    transformer: naiveLocalDateTimeTransformer,
+  })
+  dropoffAt!: string | null;
+
+  @Column({
+    name: 'pickup_at',
+    type: 'timestamp',
+    nullable: true,
+    transformer: naiveLocalDateTimeTransformer,
+  })
+  pickupAt!: string | null;
 
   @Column({
     type: 'enum',

@@ -4,7 +4,6 @@ import {
   ArrayMaxSize,
   ArrayMinSize,
   IsArray,
-  IsDateString,
   IsEmail,
   IsInt,
   IsOptional,
@@ -16,6 +15,10 @@ import {
   MinLength,
   ValidateNested,
 } from 'class-validator';
+import {
+  IsNaiveLocalDateTime,
+  ValidRentalWindow,
+} from './rental-window.validator';
 
 export class CreateEventBookingItemDto {
   @ApiProperty({ description: 'EventItem UUID' })
@@ -29,17 +32,19 @@ export class CreateEventBookingItemDto {
   quantity!: number;
 
   @ApiProperty({
-    example: '2026-03-01',
-    description: 'ISO 8601 date (YYYY-MM-DD)',
+    example: '2026-03-01T09:00',
+    description: 'Drop-off timestamp, naive local datetime (Asia/Jakarta)',
   })
-  @IsDateString({ strict: true })
-  startDate!: string;
+  @IsNaiveLocalDateTime()
+  dropoffAt!: string;
 
-  @ApiProperty({ example: 2, minimum: 1 })
-  @IsInt()
-  @Min(1)
-  @Max(365)
-  days!: number;
+  @ApiProperty({
+    example: '2026-03-01T17:00',
+    description: 'Pickup timestamp, naive local datetime (Asia/Jakarta)',
+  })
+  @IsNaiveLocalDateTime()
+  @ValidRentalWindow()
+  pickupAt!: string;
 }
 
 /** Body for POST /admin/event-support/bookings — every real booking is made

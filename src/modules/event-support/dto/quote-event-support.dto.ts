@@ -4,7 +4,6 @@ import {
   ArrayMaxSize,
   ArrayMinSize,
   IsArray,
-  IsDateString,
   IsInt,
   IsOptional,
   IsString,
@@ -13,6 +12,10 @@ import {
   Min,
   ValidateNested,
 } from 'class-validator';
+import {
+  IsNaiveLocalDateTime,
+  ValidRentalWindow,
+} from './rental-window.validator';
 
 export class QuoteEventSupportItemDto {
   @ApiProperty({
@@ -29,39 +32,47 @@ export class QuoteEventSupportItemDto {
   quantity!: number;
 
   @ApiPropertyOptional({
-    example: 1,
-    minimum: 1,
-    description: 'Overrides the cart-level `days` for this line only',
+    example: '2026-03-01T09:00',
+    description:
+      'Overrides the cart-level dropoffAt for this line only. Must be paired with pickupAt.',
   })
   @IsOptional()
-  @IsInt()
-  @Min(1)
-  @Max(365)
-  days?: number;
+  @IsNaiveLocalDateTime()
+  dropoffAt?: string;
+
+  @ApiPropertyOptional({
+    example: '2026-03-01T17:00',
+    description:
+      'Overrides the cart-level pickupAt for this line only. Must be paired with dropoffAt.',
+  })
+  @IsOptional()
+  @IsNaiveLocalDateTime()
+  @ValidRentalWindow()
+  pickupAt?: string;
 }
 
 /** Body for the public POST /event-support/quote — computes an
  * authoritative price for a cart and returns a prefilled WhatsApp message.
  * Writes nothing; the actual booking is made over WhatsApp and later
- * recorded by an admin via POST /admin/event-support/bookings. */
+ * recorded by an admin via POST /admin/event-support/bookings.
+ *
+ * Timestamps are naive local datetimes (Asia/Jakarta by convention, no `Z`
+ * or offset) — see rental-window.validator.ts. */
 export class QuoteEventSupportDto {
   @ApiProperty({
-    example: '2026-03-01',
-    description: 'ISO 8601 date (YYYY-MM-DD)',
+    example: '2026-03-01T09:00',
+    description: 'Drop-off timestamp, naive local datetime (Asia/Jakarta)',
   })
-  @IsDateString({ strict: true })
-  startDate!: string;
+  @IsNaiveLocalDateTime()
+  dropoffAt!: string;
 
   @ApiProperty({
-    example: 2,
-    minimum: 1,
-    description:
-      'Default rental length in days, applied to any line without its own `days`',
+    example: '2026-03-01T17:00',
+    description: 'Pickup timestamp, naive local datetime (Asia/Jakarta)',
   })
-  @IsInt()
-  @Min(1)
-  @Max(365)
-  days!: number;
+  @IsNaiveLocalDateTime()
+  @ValidRentalWindow()
+  pickupAt!: string;
 
   @ApiPropertyOptional({ example: 'Balai Sarbini, Jakarta Selatan' })
   @IsOptional()
