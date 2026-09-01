@@ -165,9 +165,10 @@ Open a psql shell: `docker compose -f docker-compose.prod.yml exec postgres psql
 - **Properties + images** — insert directly (no admin Property CRUD exists). Set
   `status='published'` and fill `area`/`city`/`province` so the FE location label
   renders (e.g. area='BSD City', city='Tangerang Selatan').
-- **Media / hero slides / collections / recommendations** — via the admin API:
-  log in (`POST /api/v1/auth/login`) for a JWT, then
-  `POST /api/v1/admin/media/upload` (multipart), `/admin/hero-slides`,
+- **Media / content blocks (hero slides, service cards) / collections /
+  recommendations** — via the admin API: log in (`POST /api/v1/auth/login`)
+  for a JWT, then `POST /api/v1/admin/media/upload` (multipart),
+  `/admin/content-blocks` (`?type=hero` or `?type=service_card`),
   `/admin/collections`, `/admin/homepage/recommendations`.
 
 ## 5. Frontend (Amplify) hand-off

@@ -121,6 +121,8 @@ export class PropertyMapper {
     return {
       url: img.url ?? '',
       srcset: '',
+      srcsetAvif: '',
+      placeholder: null,
       alt: img.alt,
       width: 0,
       height: 0,

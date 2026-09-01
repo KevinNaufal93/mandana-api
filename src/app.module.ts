@@ -15,7 +15,7 @@ import { UsersModule } from './modules/users/users.module';
 import { PropertiesModule } from './modules/properties/properties.module';
 import { InquiriesModule } from './modules/inquiries/inquiries.module';
 import { MediaModule } from './modules/media/media.module';
-import { HeroModule } from './modules/hero/hero.module';
+import { ContentBlocksModule } from './modules/content-blocks/content-blocks.module';
 import { CollectionsModule } from './modules/collections/collections.module';
 import { HomepageModule } from './modules/homepage/homepage.module';
 import { AmenitiesModule } from './modules/amenities/amenities.module';
@@ -59,7 +59,7 @@ import { EventSupportModule } from './modules/event-support/event-support.module
     PropertiesModule,
     InquiriesModule,
     MediaModule,
-    HeroModule,
+    ContentBlocksModule,
     CollectionsModule,
     HomepageModule,
     AmenitiesModule,

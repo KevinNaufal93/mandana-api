@@ -11,6 +11,7 @@ import { UserRole } from './enums/user-role.enum';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { MediaService } from '../media/media.service';
+import { MediaPurpose } from '../media/enums/media-purpose.enum';
 
 @Injectable()
 export class UsersService {
@@ -96,7 +97,7 @@ export class UsersService {
   async setPhoto(id: string, file: Express.Multer.File): Promise<User> {
     const user = await this.findByIdOrFail(id);
     const asset = await this.mediaService.upload(file, {
-      purpose: 'cover',
+      purpose: MediaPurpose.COVER,
       alt: user.name,
     });
     user.photoMediaAssetId = asset.id;

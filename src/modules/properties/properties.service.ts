@@ -27,6 +27,7 @@ import { ConstructionStatus } from './enums/construction-status.enum';
 import { PaginatedResult } from '../../common/interfaces/paginated-result.interface';
 import { MediaService } from '../media/media.service';
 import { MediaAsset } from '../media/entities/media-asset.entity';
+import { MediaPurpose } from '../media/enums/media-purpose.enum';
 import { HomepageCacheService } from '../homepage/homepage-cache.service';
 import {
   PropertyMapper,
@@ -450,7 +451,7 @@ export class PropertiesService {
     await this.adminFindOneRaw(propertyId);
 
     const asset = await this.mediaService.upload(file, {
-      purpose: 'cover',
+      purpose: MediaPurpose.COVER,
       alt: dto.alt,
     });
 

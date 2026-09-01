@@ -11,6 +11,18 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 export class TruckImageDto {
   @ApiProperty() url!: string;
   @ApiProperty() srcset!: string;
+  @ApiProperty({
+    description:
+      'Empty when this asset has no AVIF variants — only hero uploads generate AVIF.',
+  })
+  srcsetAvif!: string;
+  @ApiProperty({
+    nullable: true,
+    type: String,
+    description:
+      '~20px WebP data: URI for an instant blurred paint; null until backfilled for pre-existing assets.',
+  })
+  placeholder!: string | null;
   @ApiProperty({ nullable: true, type: String }) alt!: string | null;
   @ApiProperty() width!: number;
   @ApiProperty() height!: number;

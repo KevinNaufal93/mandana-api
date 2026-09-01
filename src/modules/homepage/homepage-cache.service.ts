@@ -2,7 +2,12 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import type { Cache } from 'cache-manager';
 
-export const HOMEPAGE_CACHE_KEY = 'homepage:v1';
+// Bumped to v2 when MediaImageDto grew srcsetAvif/placeholder — a stale
+// cached v1 payload would otherwise keep serving the old shape (missing
+// those fields) for up to its full TTL after deploy, silently, since a
+// missing field doesn't error, it just renders as if the feature isn't
+// live. Bump this again any time MediaImageDto's shape changes.
+export const HOMEPAGE_CACHE_KEY = 'homepage:v2';
 
 @Injectable()
 export class HomepageCacheService {

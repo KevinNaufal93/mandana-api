@@ -1,13 +1,15 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsIn, IsOptional, IsString, MaxLength } from 'class-validator';
+import { IsEnum, IsOptional, IsString, MaxLength } from 'class-validator';
+import { MediaPurpose } from '../enums/media-purpose.enum';
 
 export class UploadMediaDto {
   @ApiProperty({
-    enum: ['hero', 'cover'],
-    description: 'Determines which responsive widths are generated',
+    enum: MediaPurpose,
+    description:
+      'Determines the generated width ladder and formats. SVG files are only accepted when purpose=icon (they are rasterized, not stored as-is).',
   })
-  @IsIn(['hero', 'cover'])
-  purpose!: 'hero' | 'cover';
+  @IsEnum(MediaPurpose)
+  purpose!: MediaPurpose;
 
   @ApiPropertyOptional({
     description: 'Alt text for the image (accessibility)',

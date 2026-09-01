@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import helmet from 'helmet';
+import compression from 'compression';
 import { AppModule } from './app.module';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import { TransformInterceptor } from './common/interceptors/transform.interceptor';
@@ -18,6 +19,10 @@ async function bootstrap() {
 
   // Security
   app.use(helmet());
+  // The homepage payload now inlines LQIP placeholders (base64 data: URIs)
+  // and will grow further with the services array — gzip gets it back down
+  // to roughly a quarter of its wire size for essentially free.
+  app.use(compression());
   // exposedHeaders: without this, cross-origin JS cannot read the ETag
   // header at all (GET /storage/availability, GET /homepage) — the browser
   // still uses it for its own native revalidation regardless, but a client
