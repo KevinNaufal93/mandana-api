@@ -63,6 +63,22 @@ export class AllExceptionsFilter implements ExceptionFilter {
       this.logger.error(exception);
     }
 
+    // A response can already be underway (or fully sent) by the time an
+    // exception reaches this filter — most commonly the client disconnected
+    // (mobile network drop, CloudFront/browser abort) while a slow handler
+    // was still serializing, and the underlying socket errors out mid-write.
+    // Express/Node has nothing to "correct" at that point — the connection
+    // is already gone from the client's perspective — so calling
+    // response.status().json() here throws ERR_HTTP_HEADERS_SENT (and, in
+    // some Node versions, can cascade into a second, unrelated-looking crash
+    // in Node's own socket error handling). Just log and stop.
+    if (response.headersSent) {
+      this.logger.warn(
+        `Exception occurred after headers were already sent for ${request.method} ${request.url} — response not rewritten.`,
+      );
+      return;
+    }
+
     response.status(status).json({
       statusCode: status,
       timestamp: new Date().toISOString(),
