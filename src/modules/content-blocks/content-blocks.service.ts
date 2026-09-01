@@ -57,6 +57,11 @@ export class ContentBlocksService {
         'A hero content block requires an image (mediaAssetId).',
       );
     }
+    if (dto.imageOnly && !dto.mediaAssetId) {
+      throw new BadRequestException(
+        'A service card in image-only mode requires an image (mediaAssetId).',
+      );
+    }
 
     const block = this.repo.create({
       type: dto.type,
@@ -67,6 +72,7 @@ export class ContentBlocksService {
       link: dto.link ?? null,
       sortOrder: dto.sortOrder ?? 0,
       isActive: dto.isActive ?? true,
+      imageOnly: dto.imageOnly ?? false,
     });
     const saved = await this.repo.save(block);
     await this.cache?.bust();
@@ -89,6 +95,12 @@ export class ContentBlocksService {
         'A hero content block requires an image (mediaAssetId) — either keep the existing one or attach a replacement before removing it.',
       );
     }
+    const nextImageOnly = dto.imageOnly ?? block.imageOnly;
+    if (nextImageOnly && !nextMediaAssetId) {
+      throw new BadRequestException(
+        'A service card in image-only mode requires an image (mediaAssetId) — either keep the existing one or attach a replacement before removing it.',
+      );
+    }
 
     Object.assign(block, {
       ...(dto.type !== undefined && { type: dto.type }),
@@ -101,6 +113,7 @@ export class ContentBlocksService {
       ...(dto.link !== undefined && { link: dto.link ?? null }),
       ...(dto.sortOrder !== undefined && { sortOrder: dto.sortOrder }),
       ...(dto.isActive !== undefined && { isActive: dto.isActive }),
+      ...(dto.imageOnly !== undefined && { imageOnly: dto.imageOnly }),
     });
     const saved = await this.repo.save(block);
     await this.cache?.bust();

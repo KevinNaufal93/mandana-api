@@ -67,4 +67,13 @@ export class ContentBlock extends BaseEntity {
 
   @Column({ name: 'is_active', default: true })
   isActive!: boolean;
+
+  /** Service-card only: when true, the public site renders just the
+   *  image — no title/subtitle text overlay — because the artwork already
+   *  has that copy baked in. Enforced (alongside `mediaAssetId`) by the DB
+   *  CHECK constraint `chk_content_blocks_image_only_requires_media` in the
+   *  owning migration: an image-only block with no image would render as
+   *  nothing at all. */
+  @Column({ name: 'image_only', default: false })
+  imageOnly!: boolean;
 }

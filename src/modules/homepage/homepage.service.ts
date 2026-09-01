@@ -85,6 +85,7 @@ export class HomepageService {
         description: c.subtitle,
         href: c.link,
         sortOrder: c.sortOrder,
+        imageOnly: c.imageOnly,
         icon: c.mediaAsset
           ? this.mediaService.buildImageDto(c.mediaAsset)
           : null,

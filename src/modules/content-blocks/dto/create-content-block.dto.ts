@@ -51,11 +51,13 @@ export class CreateContentBlockDto {
 
   @ApiPropertyOptional({
     description:
-      'MediaAsset UUID (upload first via POST /admin/media). Required when type=hero — a hero slide with no image is invalid. Optional for every other type.',
+      'MediaAsset UUID (upload first via POST /admin/media). Required when type=hero, or when imageOnly=true — either case renders nothing without an image. Optional otherwise.',
   })
   @ValidateIf(
     (o: CreateContentBlockDto) =>
-      o.type === ContentBlockType.HERO || o.mediaAssetId !== undefined,
+      o.type === ContentBlockType.HERO ||
+      o.imageOnly === true ||
+      o.mediaAssetId !== undefined,
   )
   @IsUUID()
   mediaAssetId?: string;
@@ -70,4 +72,13 @@ export class CreateContentBlockDto {
   @IsOptional()
   @IsBoolean()
   isActive?: boolean;
+
+  @ApiPropertyOptional({
+    default: false,
+    description:
+      "Service card only: when true, the public site renders just the image (the artwork already has the title/description baked in) and skips the text overlay. Requires mediaAssetId.",
+  })
+  @IsOptional()
+  @IsBoolean()
+  imageOnly?: boolean;
 }

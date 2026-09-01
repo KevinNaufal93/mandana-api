@@ -24,6 +24,7 @@ export type ContentBlockDto = {
   image: MediaImageDto | null;
   sortOrder: number;
   isActive: boolean;
+  imageOnly: boolean;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -46,6 +47,7 @@ export class ContentBlocksMapper {
         : null,
       sortOrder: block.sortOrder,
       isActive: block.isActive,
+      imageOnly: block.imageOnly,
       createdAt: block.createdAt,
       updatedAt: block.updatedAt,
     };
