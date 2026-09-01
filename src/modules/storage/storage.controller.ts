@@ -102,14 +102,29 @@ export class StorageController {
       'Current availability snapshot, with ETag/304 support — polling fallback for the SSE stream',
   })
   @ApiOkResponse({ type: StorageAvailabilityResponseDto })
-  async getAvailability(@Res() res: Response) {
+  async getAvailability(@Res() res: Response): Promise<void> {
     const snapshot = await this.availability.getSnapshot();
     const etag = `"${snapshot.version}"`;
 
+    // Must not `return` the res.status()/.json()/.end() chain — Response
+    // methods return `this` for chaining, and while @Res() puts Nest in
+    // "manual mode" (it never sends that return value itself), the value
+    // still flows through the global ClassSerializerInterceptor first.
+    // That calls class-transformer on it, which recurses into a live
+    // Express/Node Response — circular refs into the raw socket — and
+    // throws deep inside Node's own http internals (`this.removeListener
+    // is not a function` in node:_http_server's socketOnError). Ending
+    // each branch on its own statement keeps the handler's resolved value
+    // `undefined`, which every interceptor in the chain passes through
+    // untouched (ClassSerializerInterceptor.serialize bails out on
+    // anything that isn't an object; TransformInterceptor wraps it as
+    // `{ data: undefined }`, itself never sent — see the identical fix in
+    // HomepageController.getHomepage()).
     if (res.req.headers['if-none-match'] === etag) {
-      return res.status(304).end();
+      res.status(304).end();
+      return;
     }
-    return res
+    res
       .set('ETag', etag)
       .set('Cache-Control', 'no-cache')
       .json({ data: snapshot });

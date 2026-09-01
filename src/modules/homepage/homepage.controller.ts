@@ -16,17 +16,22 @@ export class HomepageController {
   @ApiOperation({
     summary: 'Aggregated homepage payload (hero, collections, recommendations)',
   })
-  async getHomepage(@Res() res: Response) {
+  async getHomepage(@Res() res: Response): Promise<void> {
     const data = await this.homepageService.getHomepage();
 
     const etag = `"${createHash('md5').update(JSON.stringify(data)).digest('hex')}"`;
     const ifNoneMatch = res.req.headers['if-none-match'];
 
+    // Must not `return` the res chain — see the identical, longer comment
+    // in StorageController.getAvailability(): res.json()/.end() return
+    // `this`, and passing that through the global
+    // ClassSerializerInterceptor crashes deep in Node's http internals.
     if (ifNoneMatch === etag) {
-      return res.status(304).end();
+      res.status(304).end();
+      return;
     }
 
-    return res
+    res
       .set('Cache-Control', 'public, max-age=60, stale-while-revalidate=300')
       .set('ETag', etag)
       .json({ data });
