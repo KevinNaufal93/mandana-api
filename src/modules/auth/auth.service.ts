@@ -5,6 +5,7 @@ import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import type { Cache } from 'cache-manager';
 import * as bcrypt from 'bcrypt';
 import { UsersService } from '../users/users.service';
+import { UsersMapper } from '../users/users.mapper';
 import {
   JwtPayload,
   STORAGE_STREAM_TICKET_PURPOSE,
@@ -20,6 +21,7 @@ const STREAM_TICKET_TTL_SECONDS = 60;
 export class AuthService {
   constructor(
     private readonly usersService: UsersService,
+    private readonly usersMapper: UsersMapper,
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
     @Inject(CACHE_MANAGER) private readonly cacheManager: Cache,
@@ -39,6 +41,22 @@ export class AuthService {
 
   async refresh(user: User) {
     return this.issueTokens(user);
+  }
+
+  /**
+   * GET /auth/me's `user` argument comes straight off JwtStrategy's
+   * `validate()`, which calls UsersService.findById with no `withPhoto` —
+   * deliberately, since that lookup runs on every authenticated request
+   * across the whole API and shouldn't pay for a join it almost never
+   * needs. This route is the one place that DOES need it (it's what
+   * paints the topbar avatar), so it pays for its own extra lookup here —
+   * once per call, not once per request.
+   */
+  async getProfile(userId: string) {
+    const user = await this.usersService.findByIdOrFail(userId, {
+      withPhoto: true,
+    });
+    return this.usersMapper.toDto(user);
   }
 
   /**

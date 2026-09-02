@@ -11,7 +11,11 @@ import { UpdateTruckClassDto } from './dto/update-truck-class.dto';
 import { QuoteMovingDto } from './dto/quote-moving.dto';
 import { MovingQuoteDto } from './dto/truck-class-response.dto';
 import { resolveUniqueSlug } from '../../common/utils/slugify';
-import { movingQuote, MovingAddonRate } from './moving-pricing';
+import {
+  movingQuote,
+  MovingAddonRate,
+  MovingQuoteResult,
+} from './moving-pricing';
 import { MovingAddonsService } from './moving-addons.service';
 import { MovingSettingsService } from './moving-settings.service';
 import { MovingAddon } from './entities/moving-addon.entity';
@@ -155,7 +159,17 @@ export class MovingService {
     await this.repo.remove(truck);
   }
 
-  async quote(dto: QuoteMovingDto): Promise<MovingQuoteDto> {
+  /**
+   * Validates the request and computes the priced result — shared by the
+   * public `quote()` action below and MovingLeadsService.create(), so a
+   * captured lead is always priced through the exact same validated path as
+   * `POST /moving/quote` (never trust a client-sent total). Returns the
+   * resolved `truck` entity too — MovingLeadsService needs `truck.name` for
+   * its snapshot columns.
+   */
+  async buildQuote(
+    dto: QuoteMovingDto,
+  ): Promise<{ truck: TruckClass; result: MovingQuoteResult }> {
     const truck = await this.findActiveBySlugOrFail(dto.truckSlug);
     const settings = await this.settingsService.get();
 
@@ -218,6 +232,11 @@ export class MovingService {
       },
     );
 
+    return { truck, result };
+  }
+
+  async quote(dto: QuoteMovingDto): Promise<MovingQuoteDto> {
+    const { truck, result } = await this.buildQuote(dto);
     return {
       truck: { slug: truck.slug, name: truck.name },
       ...result,

@@ -259,6 +259,104 @@ fetched config as the 3rd argument to `movingQuote()` client-side instead —
 that removes the "remember to change both repos" hazard for every value
 except the math itself.
 
+### POST /moving/leads (public) — new
+
+Persists the order a customer configured — truck, pickup, an ordered list of
+destinations, add-ons, and the priced result — the moment they click "Pesan
+via WhatsApp", before the real conversation/confirmation happens over
+WhatsApp with a human. This is the fix for the "No lead capture" gap
+previously flagged in §5.
+
+Same request shape as `POST /moving/quote` (identical `truckSlug` /
+`distanceMeters` / `roundTrip` / `tollRoute` / `declaredValue` / `addons`
+fields and validation — this endpoint literally extends `QuoteMovingDto` and
+prices through the same server-side path), plus `pickup` and `destinations`:
+
+```jsonc
+// Request
+{
+  "truckSlug": "cdd",
+  "distanceMeters": 45000,
+  "roundTrip": false,
+  "tollRoute": true,
+  "pickup": {
+    "address": "Jl. Sudirman No. 1, Jakarta Selatan",
+    "lat": -6.2088,
+    "lng": 106.8231
+  },
+  "destinations": [
+    { "address": "Jl. Gatot Subroto, Jakarta Selatan", "lat": -6.2297, "lng": 106.8253 },
+    { "address": "BSD City, Tangerang Selatan", "lat": -6.3021, "lng": 106.6528 },
+    { "address": "Bogor Kota", "lat": -6.5971, "lng": 106.8060 }
+  ]
+}
+
+// 201 response
+{
+  "data": {
+    "id": "uuid",
+    "reference": "MDN-MOV-A7K92X",
+    "status": "new",
+    "truckSlug": "cdd",
+    "truckName": "CDD (Colt Diesel Double)",
+    "pickupAddress": "Jl. Sudirman No. 1, Jakarta Selatan",
+    "pickupLat": -6.2088,
+    "pickupLng": 106.8231,
+    "destinations": [
+      { "stopIndex": 0, "address": "Jl. Gatot Subroto, Jakarta Selatan", "lat": -6.2297, "lng": 106.8253 },
+      { "stopIndex": 1, "address": "BSD City, Tangerang Selatan", "lat": -6.3021, "lng": 106.6528 },
+      { "stopIndex": 2, "address": "Bogor Kota", "lat": -6.5971, "lng": 106.8060 }
+    ],
+    "distanceKm": 45,
+    "includedKm": 5,
+    "chargeableKm": 40,
+    "roundTrip": false,
+    "tollRoute": true,
+    "declaredValue": null,
+    "baseFare": 850000,
+    "distanceFare": 320000,
+    "travelSubtotal": 1170000,
+    "tollFare": 0,
+    "addons": [],
+    "addonsTotal": 0,
+    "subtotal": 1170000,
+    "total": 1170000,
+    "minFareApplied": false,
+    "lowEstimate": 1050000,
+    "highEstimate": 1290000,
+    "currency": "IDR",
+    "customerName": null,
+    "phone": null,
+    "email": null,
+    "createdAt": "2026-09-02T04:00:00.000Z"
+  }
+}
+```
+
+Field notes:
+
+- **`destinations`** accepts 1–25 entries (no product limit — the array cap
+  is only an abuse guard, mirroring the existing `addons` field's own cap).
+  Order is preserved as `stopIndex`. Pricing is unaffected by stop count —
+  it still runs on the single `distanceMeters` total, same math as
+  `POST /moving/quote` (Rp/km pricing doesn't care how many stops produced
+  that total).
+- **`customerName`/`phone`/`email`** are optional and not currently sent by
+  the Moving Support page (it collects no contact fields) — future-proofing,
+  not a requirement.
+- No `whatsappMessage` in the response, unlike Storage/Event Support's quote
+  endpoints — for Moving Support the WA message is still assembled entirely
+  client-side and this call fires fire-and-forget alongside it, not before
+  it, so the server-generated `reference` isn't available in time to embed
+  in the WA text (a known, accepted limitation — admin correlates a WhatsApp
+  conversation to this record by timestamp + route/price).
+- Errors mirror `POST /moving/quote` exactly, since this reuses the same
+  validated pricing path: unknown/inactive `truckSlug` → `404`. Unknown/
+  inactive addon slug → `404`. A `toll`-kind slug in `addons[]` → `400`.
+  Duplicate addon slug → `400`. `insurance` (or any `percent` addon)
+  selected without `declaredValue` → `400`. Additionally: empty
+  `destinations` → `400` (`ArrayMinSize`).
+
 ## 4. Admin endpoints (not needed by the public page, for completeness)
 
 ```
@@ -276,6 +374,10 @@ DELETE /admin/moving/addons/:id                204
 
 GET    /admin/moving/settings                  singleton — GET/PATCH only, no :id
 PATCH  /admin/moving/settings
+
+GET    /admin/moving/leads                     paginated; ?status=new|contacted|converted|lost
+GET    /admin/moving/leads/:id                  includes destinations + add-on lines
+PATCH  /admin/moving/leads/:id                  status/adminNote only — no confirm/reject flow, nothing here is reserved
 ```
 
 Bearer JWT, `role: admin`. Attach an image the same way hero slides do:
@@ -290,12 +392,6 @@ one is already active → `409` (at most one toll rate can be live at a time).
 
 ## 5. Known gaps — flagged, not built in this phase
 
-- **No lead capture.** The page's payoff is a `wa.me` deep link built
-  entirely client-side; nothing on the backend records that a quote happened.
-  If the customer closes the tab before sending, there is no trace of the
-  lead anywhere. A `POST /moving/leads` + admin inbox (near-identical to the
-  existing [`inquiries`](../src/modules/inquiries/) module) would close this
-  — not built yet.
 - **The Google Routes distance proxy stays in the frontend's own Next.js
   route handler** (`/api/moving/route-distance`) for now. See
   [`moving-route-distance-proxy.md`](./moving-route-distance-proxy.md) for the
@@ -319,4 +415,8 @@ one is already active → `409` (at most one toll rate can be live at a time).
   /admin/moving/addons/:id` once the per-km rate is checked against real
   receipts). **Every seeded rate here is also a placeholder**, same caveat as
   the truck classes above.
+- Migration `1787600000000-AddMovingLeads` creates `moving_leads`,
+  `moving_lead_stops`, and `moving_lead_addons` (plus the
+  `moving_leads_status_enum` type) for the lead-capture endpoint in §3 above.
+  No seed data — an empty transactional table.
 - No new env vars for this phase.

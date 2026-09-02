@@ -10,6 +10,8 @@ import { MediaModule } from '../media/media.module';
   imports: [TypeOrmModule.forFeature([User]), MediaModule],
   providers: [UsersService, UsersMapper],
   controllers: [UsersAdminController],
-  exports: [UsersService],
+  // UsersMapper is also consumed by AuthService (GET /auth/me) — see
+  // AuthModule's import of this module.
+  exports: [UsersService, UsersMapper],
 })
 export class UsersModule {}
