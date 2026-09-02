@@ -162,11 +162,13 @@ list + addon list + this pricing config (keep it — it's the right UX for step
 authoritative, so a rate change takes effect without a frontend deploy.
 
 ```jsonc
-// Request — truckSlug/distanceMeters are all that's required; everything
-// else is optional and defaults to "no extras selected".
+// Request — truckSlug/legs are all that's required; everything else is
+// optional and defaults to "no extras selected". legs is an ORDERED array,
+// one entry per hop (pickup→stop1, stop1→stop2, ...) — send one entry for a
+// single destination.
 {
   "truckSlug": "cdd",
-  "distanceMeters": 20000,
+  "legs": [{ "distanceMeters": 20000 }],
   "roundTrip": false,
   "tollRoute": true,
   "declaredValue": 50000000,
@@ -202,6 +204,9 @@ authoritative, so a rate change takes effect without a frontend deploy.
     "minFareApplied": false,
     "lowEstimate": 1500000,
     "highEstimate": 1840000,
+    "legs": [
+      { "distanceKm": 20, "includedKm": 5, "chargeableKm": 15, "baseFare": 850000, "distanceFare": 120000, "subtotal": 970000 }
+    ],
     "currency": "IDR"
   }
 }
@@ -209,37 +214,73 @@ authoritative, so a rate change takes effect without a frontend deploy.
 
 Field notes:
 
-- **`roundTrip`** doubles `distanceFare` (and `tollFare`, if applicable) —
-  `tripMultiplier` echoes back `1` or `2`. `baseFare` and every add-on except
-  the toll row are charged once regardless.
-- **`tollRoute`** (default `true`) says whether `distanceMeters` was computed
-  via a toll-road route. **This must match what the FE's own Google Routes
-  call actually requested** — send `routeModifiers.avoidTolls: !tollRoute` on
-  that call, or `distanceMeters` and `tollFare` below will describe two
+- **`legs`** — each leg is priced independently against the truck's rate
+  card (a leg under `includedKm` still pays that leg's full flat `baseFare`,
+  no proration) and the leg subtotals are summed; `distanceKm` /
+  `includedKm` / `chargeableKm` / `baseFare` / `distanceFare` /
+  `travelSubtotal` at the top level are all **sums across `legs[]`** — for a
+  single-leg request, sum-of-one is numerically identical to the old
+  single-`distanceMeters` math, so a single-destination quote's price never
+  moves. The response's `legs[]` array is unrounded — only `total` /
+  `lowEstimate` / `highEstimate` are rounded — and deliberately has no
+  per-leg `minFareApplied` (see `minFareApplied` note below).
+- **`roundTrip`** — see "Round trip + multiple legs" right below; it's not a
+  flat "doubles distance" rule once there's more than one leg.
+- **`tollRoute`** (default `true`) says whether the trip was computed via a
+  toll-road route. **This must match what the FE's own Google Routes call
+  actually requested** — send `routeModifiers.avoidTolls: !tollRoute` on
+  that call, or the quoted legs and `tollFare` below will describe two
   different routes (see `moving-route-distance-proxy.md`). `tollFare` is `0`
   whenever no `toll`-kind addon is active yet (the seeded row starts
   inactive), regardless of `tollRoute` — the flag alone never invents a price.
 - **`declaredValue`** (Rupiah) is required only when a `percent`-priced addon
   (currently just `insurance`) is in `addons[]`; omit it otherwise. Missing it
   while `insurance` is selected → `400`.
-- **`minFareApplied`** only ever reflects `travelSubtotal` (`baseFare +
-  distanceFare`) against the truck's `minFare` — add-ons and toll are never
-  absorbed into the minimum, they're always added on top.
+- **`minFareApplied`** only ever reflects the summed `travelSubtotal`
+  (`baseFare + distanceFare` across every leg) against the truck's
+  `minFare`, applied **once**, after summing — never per leg (a leg under
+  `includedKm` already pays the full flat `baseFare`, which already acts as
+  a de facto per-leg floor; flooring again per leg would double-count). This
+  is why there's no `minFareApplied` field inside each `legs[]` entry — it
+  would be structurally meaningless at that level. Add-ons and toll are
+  never absorbed into the minimum either way, they're always added on top.
+- A non-`toll` kind (including any future addon kind) is never rejected by
+  kind in `addons[]` — only `toll` is (see below).
 - `addons[]` in the response is the priced breakdown for display — one line
   per requested slug, in the order the pricing engine processed them (not
   necessarily request order).
 
-`distanceMeters` is an input, not coordinates — reuse whatever distance the
-FE's own Google Routes call (or its Next.js proxy) already produced. If/when
-that proxy moves server-side (see §5), this DTO is designed to grow an
-optional `origin`/`destination` alternative without breaking this shape.
+#### Round trip + multiple legs — read this before assuming anything
+
+`roundTrip: true` behaves differently depending on leg count:
+
+- **`legs.length === 1`** (single destination — unchanged from before this
+  endpoint took `legs[]`): that one leg's `distanceFare` is doubled;
+  `baseFare` is not. `tripMultiplier` echoes `2`.
+- **`legs.length > 1`** (multi-stop): `roundTrip: true` does **NOT** double
+  any leg's distance fare — `tripMultiplier` echoes `1` regardless of the
+  flag. Want the return trip priced? Add it as its own explicit entry at the
+  end of `legs[]` (e.g. last stop → pickup); it prices like any other leg
+  (full `baseFare` + its own chargeable km) — this is deliberate, not a gap:
+  doubling every leg would mean retracing every stop in reverse, which
+  overstates a real direct return trip.
+- **Toll and any add-on with `doublesOnRoundTrip: true`** are unaffected by
+  leg count — they double whenever the bare `roundTrip` flag is `true`,
+  exactly as always, independent of how many legs there are. So `roundTrip`
+  is still worth sending on a multi-stop quote even without an explicit
+  return leg, if you want toll/addon doubling.
+
+Don't assume `roundTrip: true` alone doubles a multi-stop trip's distance the
+way it does for a single destination — it doesn't.
 
 Errors: unknown or inactive `truckSlug` → `404`. Unknown/inactive addon slug →
-`404`, naming the missing slug(s). A `toll`-kind slug in `addons[]` → `400`.
-Duplicate addon slug → `400`. `insurance` (or any `percent` addon) selected
-without `declaredValue` → `400`. `distanceMeters` outside `[1, 5_000_000]` or
-non-integer → `400` (global `ValidationPipe`, `forbidNonWhitelisted: true` —
-extra body fields also 400).
+`404`, naming the missing slug(s). A `toll`-kind slug in `addons[]` → `400`
+(any other kind prices normally, never rejected by kind). Duplicate addon
+slug → `400`. `insurance` (or any `percent` addon) selected without
+`declaredValue` → `400`. `legs` must be a non-empty array of 1–26 entries,
+each `{ distanceMeters }` an integer in `[1, 5_000_000]` → `400` otherwise
+(global `ValidationPipe`, `forbidNonWhitelisted: true` — a bare top-level
+`distanceMeters` is now an unrecognized field and also `400`s).
 
 **Recommended flow:** call this once distance + truck + any selected add-ons
 are set (same trigger point the FE already debounces Routes calls on), and
@@ -267,16 +308,22 @@ via WhatsApp", before the real conversation/confirmation happens over
 WhatsApp with a human. This is the fix for the "No lead capture" gap
 previously flagged in §5.
 
-Same request shape as `POST /moving/quote` (identical `truckSlug` /
-`distanceMeters` / `roundTrip` / `tollRoute` / `declaredValue` / `addons`
-fields and validation — this endpoint literally extends `QuoteMovingDto` and
-prices through the same server-side path), plus `pickup` and `destinations`:
+Same request shape as `POST /moving/quote` (identical `truckSlug` / `legs` /
+`roundTrip` / `tollRoute` / `declaredValue` / `addons` fields and validation
+— this endpoint literally extends `QuoteMovingDto` and prices through the
+same server-side path), plus `pickup` and `destinations`:
 
 ```jsonc
-// Request
+// Request — 3 destinations, so legs has 3 entries: pickup→dest1, dest1→dest2,
+// dest2→dest3. Same 45,000m total road distance as this doc's previous
+// (pre-per-leg) example, split into its real legs instead of pre-summed.
 {
   "truckSlug": "cdd",
-  "distanceMeters": 45000,
+  "legs": [
+    { "distanceMeters": 15000 },
+    { "distanceMeters": 20000 },
+    { "distanceMeters": 10000 }
+  ],
   "roundTrip": false,
   "tollRoute": true,
   "pickup": {
@@ -309,22 +356,27 @@ prices through the same server-side path), plus `pickup` and `destinations`:
       { "stopIndex": 2, "address": "Bogor Kota", "lat": -6.5971, "lng": 106.8060 }
     ],
     "distanceKm": 45,
-    "includedKm": 5,
-    "chargeableKm": 40,
+    "includedKm": 15,
+    "chargeableKm": 30,
     "roundTrip": false,
     "tollRoute": true,
     "declaredValue": null,
-    "baseFare": 850000,
-    "distanceFare": 320000,
-    "travelSubtotal": 1170000,
+    "baseFare": 2550000,
+    "distanceFare": 240000,
+    "travelSubtotal": 2790000,
     "tollFare": 0,
     "addons": [],
     "addonsTotal": 0,
-    "subtotal": 1170000,
-    "total": 1170000,
+    "subtotal": 2790000,
+    "total": 2790000,
     "minFareApplied": false,
-    "lowEstimate": 1050000,
-    "highEstimate": 1290000,
+    "lowEstimate": 2510000,
+    "highEstimate": 3070000,
+    "legs": [
+      { "distanceKm": 15, "includedKm": 5, "chargeableKm": 10, "baseFare": 850000, "distanceFare": 80000, "subtotal": 930000 },
+      { "distanceKm": 20, "includedKm": 5, "chargeableKm": 15, "baseFare": 850000, "distanceFare": 120000, "subtotal": 970000 },
+      { "distanceKm": 10, "includedKm": 5, "chargeableKm": 5, "baseFare": 850000, "distanceFare": 40000, "subtotal": 890000 }
+    ],
     "currency": "IDR",
     "customerName": null,
     "phone": null,
@@ -335,14 +387,22 @@ prices through the same server-side path), plus `pickup` and `destinations`:
 }
 ```
 
+Notice `travelSubtotal` is **2,790,000** here — vs. `1,170,000` in this doc's
+previous single-`distanceMeters` example for the exact same 45km trip. That
+difference is the whole reason this feature exists: three stops each pay
+their own flat `baseFare`, not one flat fare for the whole route.
+
 Field notes:
 
 - **`destinations`** accepts 1–25 entries (no product limit — the array cap
   is only an abuse guard, mirroring the existing `addons` field's own cap).
-  Order is preserved as `stopIndex`. Pricing is unaffected by stop count —
-  it still runs on the single `distanceMeters` total, same math as
-  `POST /moving/quote` (Rp/km pricing doesn't care how many stops produced
-  that total).
+  Order is preserved as `stopIndex`.
+- **`legs`** — **pricing now runs per leg** (see `POST /moving/quote`'s
+  field notes and "Round trip + multiple legs" section above, which apply
+  identically here). `legs.length` must equal `destinations.length` — or
+  `destinations.length + 1` when `roundTrip: true` and you choose to include
+  an explicit return leg (optional, not mandatory) — checked before any
+  pricing happens; a mismatch is `400`.
 - **`customerName`/`phone`/`email`** are optional and not currently sent by
   the Moving Support page (it collects no contact fields) — future-proofing,
   not a requirement.
@@ -362,7 +422,8 @@ Field notes:
   inactive addon slug → `404`. A `toll`-kind slug in `addons[]` → `400`.
   Duplicate addon slug → `400`. `insurance` (or any `percent` addon)
   selected without `declaredValue` → `400`. Additionally: empty
-  `destinations` → `400` (`ArrayMinSize`).
+  `destinations` → `400` (`ArrayMinSize`); `legs.length` not matching
+  `destinations.length` (±1 for an explicit round-trip return leg) → `400`.
 
 ## 4. Admin endpoints (not needed by the public page, for completeness)
 
@@ -429,4 +490,8 @@ one is already active → `409` (at most one toll rate can be live at a time).
 - Migration `1787700000000-AddMovingLeadNotes` adds the `notes` column to
   `moving_leads` (the "Additional notes" field) — additive follow-up, run
   after the migration above.
+- Migration `1787900000000-AddMovingLeadLegs` creates `moving_lead_legs` (a
+  per-leg priced breakdown snapshot, alongside the existing
+  `moving_lead_stops`/`moving_lead_addons`) for the per-leg pricing change in
+  §3 above — additive follow-up, run after the migration above. No seed data.
 - No new env vars for this phase.

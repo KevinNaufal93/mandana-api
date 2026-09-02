@@ -6,6 +6,7 @@ import { MovingSettings } from './entities/moving-settings.entity';
 import { MovingLead } from './entities/moving-lead.entity';
 import { MovingLeadStop } from './entities/moving-lead-stop.entity';
 import { MovingLeadAddon } from './entities/moving-lead-addon.entity';
+import { MovingLeadLeg } from './entities/moving-lead-leg.entity';
 import { MovingService } from './moving.service';
 import { MovingAddonsService } from './moving-addons.service';
 import { MovingSettingsService } from './moving-settings.service';
@@ -29,6 +30,7 @@ import { MediaModule } from '../media/media.module';
       MovingLead,
       MovingLeadStop,
       MovingLeadAddon,
+      MovingLeadLeg,
     ]),
     MediaModule,
   ],

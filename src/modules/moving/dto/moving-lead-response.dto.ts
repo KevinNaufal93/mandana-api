@@ -39,6 +39,21 @@ export class MovingLeadAddonLineDto {
   amount!: number;
 }
 
+export class MovingLeadLegDto {
+  @ApiProperty()
+  distanceKm!: number;
+  @ApiProperty()
+  includedKm!: number;
+  @ApiProperty()
+  chargeableKm!: number;
+  @ApiProperty({ description: 'Rupiah' })
+  baseFare!: number;
+  @ApiProperty({ description: 'Rupiah' })
+  distanceFare!: number;
+  @ApiProperty({ description: 'Rupiah' })
+  subtotal!: number;
+}
+
 /**
  * Public shape — returned by `POST /moving/leads`. No `adminNote`, mirroring
  * StorageBookingDto's omission of admin-only fields. No `whatsappMessage`
@@ -99,6 +114,8 @@ export class MovingLeadDto {
   lowEstimate!: number;
   @ApiProperty({ description: 'Rupiah' })
   highEstimate!: number;
+  @ApiProperty({ type: [MovingLeadLegDto] })
+  legs!: MovingLeadLegDto[];
   @ApiProperty({ example: 'IDR' })
   currency!: string;
   @ApiPropertyOptional({ nullable: true, type: String })

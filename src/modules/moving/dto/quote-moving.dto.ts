@@ -2,6 +2,7 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
   ArrayMaxSize,
+  ArrayMinSize,
   IsArray,
   IsBoolean,
   IsInt,
@@ -11,6 +12,20 @@ import {
   Min,
   ValidateNested,
 } from 'class-validator';
+
+export class QuoteMovingLegDto {
+  @ApiProperty({
+    example: 20000,
+    minimum: 1,
+    maximum: 5_000_000,
+    description:
+      'Road distance in meters for this leg only (pickup→stop1, stop1→stop2, ...). 5,000,000 m = 5,000 km, wider than Indonesia.',
+  })
+  @IsInt()
+  @Min(1)
+  @Max(5_000_000)
+  distanceMeters!: number;
+}
 
 export class QuoteMovingAddonDto {
   @ApiProperty({ example: 'helper', description: 'MovingAddon.slug' })
@@ -37,21 +52,23 @@ export class QuoteMovingDto {
   truckSlug!: string;
 
   @ApiProperty({
-    example: 151200,
-    minimum: 1,
-    maximum: 5_000_000,
+    type: [QuoteMovingLegDto],
+    minItems: 1,
+    maxItems: 26,
     description:
-      'Road distance in meters (from the client Routes call). 5,000,000 m = 5,000 km, wider than Indonesia.',
+      "Ordered legs of the trip — one entry per hop (pickup→stop1, stop1→stop2, ...). Each leg is priced independently against the truck's rate card and the leg subtotals are summed; a leg under includedKm still pays that leg's full flat baseFare (no proration). Send one entry for a single destination — reproduces today's math exactly. IMPORTANT: roundTrip does NOT auto-double distance once legs.length > 1 — include the actual return leg as its own explicit entry here if you want it priced (see moving-integration.md).",
   })
-  @IsInt()
-  @Min(1)
-  @Max(5_000_000)
-  distanceMeters!: number;
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(26)
+  @ValidateNested({ each: true })
+  @Type(() => QuoteMovingLegDto)
+  legs!: QuoteMovingLegDto[];
 
   @ApiPropertyOptional({
     default: false,
     description:
-      'Doubles the distance fare (and toll, if applicable) — the truck drives the route twice. Base fare and other add-ons are charged once.',
+      'Doubles the distance fare (and toll, if applicable) — the truck drives the route twice. Base fare and other add-ons are charged once. IMPORTANT: the distance-doubling part only applies when legs has exactly one entry (a single destination) — on a multi-leg (legs.length > 1) request this does NOT auto-double any leg\'s distance fare; include the actual return leg as its own entry in legs[] instead. Toll/add-on doubling (doublesOnRoundTrip) is unaffected either way. See moving-integration.md\'s "Round trip + multiple legs" section.',
   })
   @IsOptional()
   @IsBoolean()

@@ -147,6 +147,18 @@ export class MovingQuoteAddonLineDto {
   @ApiProperty({ description: 'Rupiah' }) amount!: number;
 }
 
+export class MovingQuoteLegDto {
+  @ApiProperty() distanceKm!: number;
+  @ApiProperty() includedKm!: number;
+  @ApiProperty() chargeableKm!: number;
+  @ApiProperty({ description: 'Rupiah' }) baseFare!: number;
+  @ApiProperty({ description: 'Rupiah' }) distanceFare!: number;
+  @ApiProperty({
+    description: 'Rupiah — baseFare + distanceFare for this leg only',
+  })
+  subtotal!: number;
+}
+
 export class MovingQuoteDto {
   @ApiProperty({ type: MovingQuoteTruckDto }) truck!: MovingQuoteTruckDto;
   @ApiProperty() distanceKm!: number;
@@ -181,6 +193,12 @@ export class MovingQuoteDto {
   @ApiProperty() minFareApplied!: boolean;
   @ApiProperty({ description: 'Rupiah' }) lowEstimate!: number;
   @ApiProperty({ description: 'Rupiah' }) highEstimate!: number;
+  @ApiProperty({
+    type: [MovingQuoteLegDto],
+    description:
+      'Per-leg breakdown, in request order. Unrounded — only the top-level total/lowEstimate/highEstimate are rounded. No per-leg minFareApplied by design (minFare floors the trip-wide sum once, not per leg).',
+  })
+  legs!: MovingQuoteLegDto[];
   @ApiProperty({ example: 'IDR' }) currency!: string;
 }
 

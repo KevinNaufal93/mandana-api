@@ -208,7 +208,7 @@ export class MovingService {
     const toll = tollRoute ? await this.addonsService.findActiveToll() : null;
 
     const result = movingQuote(
-      dto.distanceMeters,
+      dto.legs,
       {
         baseFare: truck.baseFare,
         perKmFare: truck.perKmFare,

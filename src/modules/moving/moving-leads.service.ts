@@ -1,9 +1,14 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, QueryFailedError, Repository } from 'typeorm';
 import { MovingLead } from './entities/moving-lead.entity';
 import { MovingLeadStop } from './entities/moving-lead-stop.entity';
 import { MovingLeadAddon } from './entities/moving-lead-addon.entity';
+import { MovingLeadLeg } from './entities/moving-lead-leg.entity';
 import { MovingLeadStatus } from './enums/moving-lead-status.enum';
 import { CreateMovingLeadDto } from './dto/create-moving-lead.dto';
 import { QueryMovingLeadsDto } from './dto/query-moving-leads.dto';
@@ -25,24 +30,26 @@ export class MovingLeadsService {
     private readonly stopRepo: Repository<MovingLeadStop>,
     @InjectRepository(MovingLeadAddon)
     private readonly addonRepo: Repository<MovingLeadAddon>,
+    @InjectRepository(MovingLeadLeg)
+    private readonly legRepo: Repository<MovingLeadLeg>,
     private readonly movingService: MovingService,
   ) {}
 
   async findOneOrFail(id: string): Promise<MovingLead> {
     const lead = await this.leadRepo.findOne({
       where: { id },
-      relations: { stops: true, addons: true },
+      relations: { stops: true, addons: true, legs: true },
     });
     if (!lead) throw new NotFoundException(`Moving lead ${id} not found`);
     return lead;
   }
 
   /** Filters shared by the count and id-page queries below — split out so
-   * neither query carries the joined `stops`/`addons` collections:
+   * neither query carries the joined `stops`/`addons`/`legs` collections:
    * paginating a query-builder with a joined one-to-many multiplies rows and
    * corrupts both `skip`/`take` and the total count (same hazard
    * EventBookingsService.findAllAdmin() documents — unlike Storage's admin
-   * listing, whose joins are all many-to-one, MovingLead has *two*
+   * listing, whose joins are all many-to-one, MovingLead has *three*
    * one-to-many children). Fetch matching ids first, then load the full
    * entity graph for just that page. */
   private buildFilteredQb(query: QueryMovingLeadsDto) {
@@ -74,7 +81,7 @@ export class MovingLeadsService {
         ? []
         : await this.leadRepo.find({
             where: { id: In(ids) },
-            relations: { stops: true, addons: true },
+            relations: { stops: true, addons: true, legs: true },
           });
 
     const byId = new Map(rows.map((r) => [r.id, r]));
@@ -99,6 +106,25 @@ export class MovingLeadsService {
    * copied verbatim.
    */
   async create(dto: CreateMovingLeadDto): Promise<MovingLead> {
+    // legs.length must match destinations.length — or destinations.length + 1
+    // when roundTrip is true and the caller chose to include an explicit
+    // return leg (optional, not mandatory: roundTrip alone still controls
+    // toll/addon doubling independent of leg count, see moving-pricing.ts).
+    // Cross-field, so it can't be expressed with class-validator alone.
+    const validLegCounts =
+      dto.roundTrip === true
+        ? [dto.destinations.length, dto.destinations.length + 1]
+        : [dto.destinations.length];
+    if (!validLegCounts.includes(dto.legs.length)) {
+      throw new BadRequestException(
+        `legs.length (${dto.legs.length}) must equal destinations.length (${dto.destinations.length})` +
+          (dto.roundTrip === true
+            ? ` or destinations.length + 1 (${dto.destinations.length + 1}) for an explicit return leg`
+            : '') +
+          '.',
+      );
+    }
+
     const { truck, result } = await this.movingService.buildQuote(dto);
 
     for (let attempt = 0; attempt < MAX_REFERENCE_ATTEMPTS; attempt++) {
@@ -151,10 +177,23 @@ export class MovingLeadsService {
             amount: line.amount,
           }),
         ),
+        // Snapshotted from the already-priced per-leg breakdown, same
+        // pattern as addons above — not re-derived from dto.legs.
+        legs: result.legs.map((leg, i) =>
+          this.legRepo.create({
+            legIndex: i,
+            distanceKm: leg.distanceKm,
+            includedKm: leg.includedKm,
+            chargeableKm: leg.chargeableKm,
+            baseFare: leg.baseFare,
+            distanceFare: leg.distanceFare,
+            subtotal: leg.subtotal,
+          }),
+        ),
       });
 
       try {
-        const saved = await this.leadRepo.save(lead); // cascades stops + addons
+        const saved = await this.leadRepo.save(lead); // cascades stops + addons + legs
         return this.findOneOrFail(saved.id);
       } catch (err) {
         const isReferenceCollision =

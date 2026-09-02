@@ -5,7 +5,7 @@ import { CreateMovingLeadDto } from './create-moving-lead.dto';
 function build(overrides: Record<string, unknown> = {}): CreateMovingLeadDto {
   return plainToInstance(CreateMovingLeadDto, {
     truckSlug: 'cdd',
-    distanceMeters: 20_000,
+    legs: [{ distanceMeters: 20_000 }],
     pickup: { lat: -6.2, lng: 106.8 },
     destinations: [{ lat: -6.3, lng: 106.9 }],
     ...overrides,
@@ -51,6 +51,28 @@ describe('CreateMovingLeadDto validation', () => {
   it('rejects a missing pickup', async () => {
     const errors = await validate(build({ pickup: undefined }));
     expect(errors.some((e) => e.property === 'pickup')).toBe(true);
+  });
+
+  it('accepts a many-leg list (up to the 26-entry cap)', async () => {
+    const legs = Array.from({ length: 26 }, () => ({ distanceMeters: 5_000 }));
+    const errors = await validate(build({ legs }));
+    expect(errors.some((e) => e.property === 'legs')).toBe(false);
+  });
+
+  it('rejects an empty legs array', async () => {
+    const errors = await validate(build({ legs: [] }));
+    expect(errors.some((e) => e.property === 'legs')).toBe(true);
+  });
+
+  it('rejects more than 26 legs', async () => {
+    const legs = Array.from({ length: 27 }, () => ({ distanceMeters: 5_000 }));
+    const errors = await validate(build({ legs }));
+    expect(errors.some((e) => e.property === 'legs')).toBe(true);
+  });
+
+  it('rejects an out-of-range distanceMeters on a leg', async () => {
+    const errors = await validate(build({ legs: [{ distanceMeters: 0 }] }));
+    expect(errors.some((e) => e.property === 'legs')).toBe(true);
   });
 
   it('still enforces inherited QuoteMovingDto rules — truckSlug is required', async () => {

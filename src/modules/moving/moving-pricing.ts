@@ -6,12 +6,19 @@
  *
  * IMPORTANT: this file's *function bodies* are mirrored in the frontend
  * repo — changing the math here without changing it there silently
- * desyncs the preview price from the quoted price. `MOVING_DEFAULTS`
- * itself is NOT part of that contract any more: it is only the
- * last-resort fallback used when no MovingSettings row exists yet. The
+ * desyncs the preview price from the quoted price. That now includes the
+ * per-leg banding below (`movingQuote()` takes an ordered `legs[]` array,
+ * not one summed `distanceMeters`) — porting the equivalent rewrite to
+ * `lib/moving/pricing.ts` is explicitly OUT OF SCOPE for this backend
+ * change; until it happens, the frontend's instant preview will disagree
+ * with the server-authoritative response for any multi-leg quote. See
+ * docs/moving-integration.md.
+ *
+ * `MOVING_DEFAULTS` itself is NOT part of the mirror contract: it is only
+ * the last-resort fallback used when no MovingSettings row exists yet. The
  * numbers that actually apply (roundToIdr, bandPct, defaultIncludedKm)
  * come from `GET /moving/pricing-config` at runtime — the frontend fetches
- * them rather than hardcoding its own copy. See docs/moving-integration.md.
+ * them rather than hardcoding its own copy.
  */
 
 export interface MovingPricingPolicy {
@@ -76,6 +83,27 @@ export interface MovingQuoteExtras {
   toll?: MovingAddonRate | null;
 }
 
+/** One leg of the trip (pickup→stop1, stop1→stop2, ...), as sent by the
+ * client — already-measured road distance, not coordinates. */
+export interface MovingLegInput {
+  distanceMeters: number;
+}
+
+/** One leg's own priced breakdown. Deliberately has no `minFareApplied` —
+ * `minFare` is a trip-level floor applied once after summing every leg's
+ * `subtotal` (see `movingQuote()`), never per leg, so a per-leg flag here
+ * would be structurally meaningless. `subtotal` is this leg's own
+ * `baseFare + distanceFare` — distinct from `MovingQuoteResult.travelSubtotal`,
+ * which is the trip-wide sum after the minFare floor. */
+export interface MovingQuoteLegResult {
+  distanceKm: number;
+  includedKm: number;
+  chargeableKm: number;
+  baseFare: number;
+  distanceFare: number;
+  subtotal: number;
+}
+
 export interface MovingQuoteResult {
   distanceKm: number;
   includedKm: number;
@@ -94,6 +122,11 @@ export interface MovingQuoteResult {
   minFareApplied: boolean;
   lowEstimate: number;
   highEstimate: number;
+  /** Per-leg breakdown, in request order — unrounded (only the top-level
+   * `total`/`lowEstimate`/`highEstimate` are rounded). Every other field
+   * above (`distanceKm`, `includedKm`, `chargeableKm`, `baseFare`,
+   * `distanceFare`, `travelSubtotal`) is the sum across this array. */
+  legs: MovingQuoteLegResult[];
 }
 
 /** Coerces a possibly-invalid numeric input to a finite, non-negative number. */
@@ -168,26 +201,58 @@ function computeAddonAmount(
 }
 
 /**
- * Computes a price band for a given road distance and truck rate card,
- * plus optional round trip, toll, and add-on fees. Defensively clamps
- * non-finite/negative input to an all-zero result rather than emitting
- * `NaN` — a broken number on screen is worse than a zero.
+ * Computes a price band for an ordered list of trip legs against a truck
+ * rate card, plus optional round trip, toll, and add-on fees. Each leg is
+ * banded independently against the same rate card — a leg under
+ * `includedKm` still pays that leg's full flat `baseFare`, no proration —
+ * and the per-leg subtotals are summed for the trip total; `minFare` floors
+ * that sum once, not per leg (see `MovingQuoteLegResult`'s doc comment).
+ *
+ * Round trip only auto-doubles distance for a single-leg request
+ * (`legs.length === 1`, `tripMultiplier` becomes 2 on that one leg's
+ * `distanceFare`) — this preserves today's exact single-destination
+ * behavior, which has real live traffic. For a multi-leg request,
+ * `roundTrip: true` does NOT double any leg's distance fare; the caller is
+ * expected to include the actual return leg as its own explicit entry in
+ * `legs[]` if they want it priced. Toll-fare doubling and any add-on's
+ * `doublesOnRoundTrip` are unaffected by this — both stay gated purely on
+ * the bare `roundTrip` flag, independent of leg count, exactly as before.
+ * See docs/moving-integration.md's "Round trip + multiple legs" section.
+ *
+ * Defensively clamps non-finite/negative input to an all-zero result
+ * rather than emitting `NaN` — a broken number on screen is worse than a
+ * zero. The whole-request guard fires when `legs` is empty OR no leg in it
+ * is individually valid (this exactly reproduces the old single-distance
+ * guard for `legs.length === 1`, including ignoring addons/toll entirely —
+ * NOT just zero-banding that one leg and letting minFare/addons/toll still
+ * apply to the resulting zero subtotal, which would silently overcharge
+ * since every seeded truck has `minFare === baseFare`). A genuine
+ * multi-leg request with a *mix* of valid and invalid legs does not hit
+ * this guard — only the bad leg zero-bands; everything else prices
+ * normally.
  */
 export function movingQuote(
-  distanceMeters: number,
+  legs: MovingLegInput[],
   rate: TruckRate,
   opts: Partial<MovingPricingPolicy> = {},
   extras: MovingQuoteExtras = {},
 ): MovingQuoteResult {
   const defaults = { ...MOVING_DEFAULTS, ...opts };
   const roundTrip = extras.roundTrip === true;
-  const tripMultiplier = roundTrip ? 2 : 1;
+  const tripMultiplier = roundTrip && legs.length === 1 ? 2 : 1;
   const tollRoute = extras.tollRoute !== false;
+  const includedKmFallback = nonNegative(
+    rate.includedKm ?? defaults.includedKm,
+  );
 
-  if (!Number.isFinite(distanceMeters) || distanceMeters <= 0) {
+  const isValidLeg = (leg: MovingLegInput) =>
+    Number.isFinite(leg.distanceMeters) && leg.distanceMeters > 0;
+
+  if (legs.length === 0 || !legs.some(isValidLeg)) {
     return {
+      legs: [],
       distanceKm: 0,
-      includedKm: nonNegative(rate.includedKm ?? defaults.includedKm),
+      includedKm: includedKmFallback,
       chargeableKm: 0,
       roundTrip,
       tripMultiplier,
@@ -206,21 +271,59 @@ export function movingQuote(
     };
   }
 
-  const baseFare = nonNegative(rate.baseFare);
+  const baseFareRate = nonNegative(rate.baseFare);
   const perKmFare = nonNegative(rate.perKmFare);
-  const includedKm = nonNegative(rate.includedKm ?? defaults.includedKm);
   const minFare = nonNegative(rate.minFare ?? 0);
 
-  const distanceKm = Math.round((distanceMeters / 1000) * 10) / 10;
-  const chargeableKm = Math.max(0, distanceKm - includedKm);
-  const distanceFare = Math.round(chargeableKm * perKmFare) * tripMultiplier;
-  const travelSubtotal = baseFare + distanceFare;
+  const legResults: MovingQuoteLegResult[] = legs.map((leg) => {
+    if (!isValidLeg(leg)) {
+      return {
+        distanceKm: 0,
+        includedKm: includedKmFallback,
+        chargeableKm: 0,
+        baseFare: 0,
+        distanceFare: 0,
+        subtotal: 0,
+      };
+    }
+    const distanceKm = Math.round((leg.distanceMeters / 1000) * 10) / 10;
+    const chargeableKm = Math.max(0, distanceKm - includedKmFallback);
+    const distanceFare = Math.round(chargeableKm * perKmFare) * tripMultiplier;
+    return {
+      distanceKm,
+      includedKm: includedKmFallback,
+      chargeableKm,
+      baseFare: baseFareRate,
+      distanceFare,
+      subtotal: baseFareRate + distanceFare,
+    };
+  });
 
-  // min_fare floors the travel portion only — before toll and add-ons, so a
-  // helper fee or toll can't silently absorb the stated minimum on a short
-  // job (see moving-integration.md).
-  const minFareApplied = minFare > travelSubtotal;
-  const travelSubtotalAfterMin = minFareApplied ? minFare : travelSubtotal;
+  const sumLegs = (pick: (leg: MovingQuoteLegResult) => number) =>
+    legResults.reduce((total, leg) => total + pick(leg), 0);
+
+  // distanceKm/chargeableKm are re-snapped to the 1-decimal grid after
+  // summing — adding several already-rounded x.1 values can leave
+  // IEEE-754 dust (e.g. 239.2 + 472.5 + ... -> 2025.3999999999999) that
+  // would otherwise leak into the JSON response verbatim. Unlike a
+  // persisted MovingLead (numeric(7,1) cleans this on write), a bare
+  // /moving/quote response is never round-tripped through Postgres, so
+  // nothing else fixes this up.
+  const distanceKm = Math.round(sumLegs((l) => l.distanceKm) * 10) / 10;
+  const chargeableKm = Math.round(sumLegs((l) => l.chargeableKm) * 10) / 10;
+  const includedKm = sumLegs((l) => l.includedKm);
+  const baseFare = sumLegs((l) => l.baseFare);
+  const distanceFare = sumLegs((l) => l.distanceFare);
+  const travelSubtotalPreMin = sumLegs((l) => l.subtotal);
+
+  // min_fare floors the summed travel portion once, after every leg is
+  // added up — never per leg (a leg under includedKm already pays the
+  // full flat baseFare with no proration, which already acts as a de
+  // facto per-leg floor; flooring again per leg would double-count) — and
+  // still before toll and add-ons, so a helper fee or toll can't silently
+  // absorb the stated minimum on a short job (see moving-integration.md).
+  const minFareApplied = minFare > travelSubtotalPreMin;
+  const travelSubtotal = minFareApplied ? minFare : travelSubtotalPreMin;
 
   const declaredValue = nonNegative(extras.declaredValue);
 
@@ -234,6 +337,7 @@ export function movingQuote(
     );
     // You pay the toll both ways on a round trip — same doublesOnRoundTrip
     // switch as any other add-on line, seeded true on the toll row.
+    // Independent of leg count, unlike distance's tripMultiplier above.
     tollFare =
       roundTrip && extras.toll.doublesOnRoundTrip ? amount * 2 : amount;
   }
@@ -258,7 +362,7 @@ export function movingQuote(
   );
   const addonsTotal = addons.reduce((sum, line) => sum + line.amount, 0);
 
-  const subtotal = travelSubtotalAfterMin + tollFare + addonsTotal;
+  const subtotal = travelSubtotal + tollFare + addonsTotal;
   const total = roundTo(subtotal, defaults.roundToIdr);
 
   const bandFraction = defaults.bandPct / 100;
@@ -266,6 +370,7 @@ export function movingQuote(
   const highEstimate = roundTo(total * (1 + bandFraction), defaults.roundToIdr);
 
   return {
+    legs: legResults,
     distanceKm,
     includedKm,
     chargeableKm,
@@ -273,7 +378,7 @@ export function movingQuote(
     tripMultiplier,
     baseFare,
     distanceFare,
-    travelSubtotal: travelSubtotalAfterMin,
+    travelSubtotal,
     tollRoute,
     tollFare,
     addons,

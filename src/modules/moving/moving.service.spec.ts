@@ -125,7 +125,7 @@ describe('MovingService', () => {
 
   const baseDto: QuoteMovingDto = {
     truckSlug: 'cdd',
-    distanceMeters: 20_000,
+    legs: [{ distanceMeters: 20_000 }],
   };
 
   describe('buildQuote', () => {
@@ -203,6 +203,16 @@ describe('MovingService', () => {
         minFareApplied: false,
         lowEstimate: 870_000,
         highEstimate: 1_070_000,
+        legs: [
+          {
+            distanceKm: 20,
+            includedKm: 5,
+            chargeableKm: 15,
+            baseFare: 850_000,
+            distanceFare: 120_000,
+            subtotal: 970_000,
+          },
+        ],
         currency: 'IDR',
       });
     });

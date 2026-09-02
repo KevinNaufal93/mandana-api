@@ -140,6 +140,16 @@ export class MovingMapper {
       minFareApplied: lead.minFareApplied,
       lowEstimate: lead.lowEstimate,
       highEstimate: lead.highEstimate,
+      legs: [...lead.legs]
+        .sort((a, b) => a.legIndex - b.legIndex)
+        .map((l) => ({
+          distanceKm: toNumber(l.distanceKm) ?? l.distanceKm,
+          includedKm: l.includedKm,
+          chargeableKm: toNumber(l.chargeableKm) ?? l.chargeableKm,
+          baseFare: l.baseFare,
+          distanceFare: l.distanceFare,
+          subtotal: l.subtotal,
+        })),
       currency: 'IDR',
       customerName: lead.customerName,
       phone: lead.phone,

@@ -7,6 +7,16 @@ const cdd: TruckRate = {
   minFare: 850_000,
 };
 
+// Pick Up Bak's real seeded rate (src/database/migrations/1786500000000-AddMovingTruckClasses.ts) —
+// used for the multi-leg tests below since it's the FE requirements doc's
+// own worked example.
+const pickupBak: TruckRate = {
+  baseFare: 250_000,
+  perKmFare: 4_500,
+  includedKm: 5,
+  minFare: 250_000,
+};
+
 const helper: MovingAddonRate = {
   slug: 'helper',
   name: 'Helper',
@@ -65,7 +75,7 @@ const tollEstimate: MovingAddonRate = {
 
 describe('movingQuote — regression (no extras)', () => {
   it('matches the pre-addon behavior exactly for a 20km trip', () => {
-    const result = movingQuote(20_000, cdd);
+    const result = movingQuote([{ distanceMeters: 20_000 }], cdd);
 
     expect(result.distanceKm).toBe(20);
     expect(result.chargeableKm).toBe(15);
@@ -83,12 +93,24 @@ describe('movingQuote — regression (no extras)', () => {
     expect(result.tollFare).toBe(0);
     expect(result.addons).toEqual([]);
     expect(result.addonsTotal).toBe(0);
+
+    // single-leg breakdown reproduces the aggregate exactly
+    expect(result.legs).toEqual([
+      {
+        distanceKm: 20,
+        includedKm: 5,
+        chargeableKm: 15,
+        baseFare: 850_000,
+        distanceFare: 120_000,
+        subtotal: 970_000,
+      },
+    ]);
   });
 
   it('still returns all-zero, never NaN, for non-finite/non-positive distance', () => {
     for (const bad of [0, -5, NaN, Infinity]) {
       const result = movingQuote(
-        bad,
+        [{ distanceMeters: bad }],
         cdd,
         {},
         { addons: [{ rate: helper, quantity: 2 }] },
@@ -96,15 +118,41 @@ describe('movingQuote — regression (no extras)', () => {
       expect(result.total).toBe(0);
       expect(result.addons).toEqual([]);
       expect(result.tollFare).toBe(0);
+      expect(result.legs).toEqual([]);
       expect(Number.isFinite(result.total)).toBe(true);
     }
+  });
+
+  it('an empty legs array short-circuits to the same all-zero shape', () => {
+    const result = movingQuote([], cdd);
+    expect(result.total).toBe(0);
+    expect(result.legs).toEqual([]);
+    expect(result.includedKm).toBe(5); // still populated, mirroring the single-value guard
+  });
+
+  it('a mix of one valid + one invalid leg only zero-bands the bad one', () => {
+    const result = movingQuote(
+      [{ distanceMeters: 20_000 }, { distanceMeters: 0 }],
+      cdd,
+    );
+    expect(result.legs[1]).toEqual({
+      distanceKm: 0,
+      includedKm: 5,
+      chargeableKm: 0,
+      baseFare: 0,
+      distanceFare: 0,
+      subtotal: 0,
+    });
+    expect(result.total).toBe(970_000); // unaffected by the bad leg
   });
 });
 
 describe('movingQuote — opts override (settings row)', () => {
   it('a custom bandPct changes the low/high band but not the total', () => {
-    const base = movingQuote(20_000, cdd);
-    const wide = movingQuote(20_000, cdd, { bandPct: 15 });
+    const base = movingQuote([{ distanceMeters: 20_000 }], cdd);
+    const wide = movingQuote([{ distanceMeters: 20_000 }], cdd, {
+      bandPct: 15,
+    });
 
     expect(wide.total).toBe(base.total);
     expect(wide.lowEstimate).not.toBe(base.lowEstimate);
@@ -112,22 +160,31 @@ describe('movingQuote — opts override (settings row)', () => {
   });
 
   it('bandPct: 0 collapses low/high onto total', () => {
-    const result = movingQuote(20_000, cdd, { bandPct: 0 });
+    const result = movingQuote([{ distanceMeters: 20_000 }], cdd, {
+      bandPct: 0,
+    });
     expect(result.lowEstimate).toBe(result.total);
     expect(result.highEstimate).toBe(result.total);
   });
 
   it('a custom roundToIdr changes the rounding step', () => {
-    const result = movingQuote(20_000, cdd, { roundToIdr: 1_000 });
+    const result = movingQuote([{ distanceMeters: 20_000 }], cdd, {
+      roundToIdr: 1_000,
+    });
     // subtotal 970,000 is already a multiple of 1,000
     expect(result.total).toBe(970_000);
   });
 });
 
 describe('movingQuote — round trip', () => {
-  it('doubles distanceFare but not baseFare', () => {
-    const oneWay = movingQuote(20_000, cdd);
-    const roundTrip = movingQuote(20_000, cdd, {}, { roundTrip: true });
+  it('doubles distanceFare but not baseFare (single leg)', () => {
+    const oneWay = movingQuote([{ distanceMeters: 20_000 }], cdd);
+    const roundTrip = movingQuote(
+      [{ distanceMeters: 20_000 }],
+      cdd,
+      {},
+      { roundTrip: true },
+    );
 
     expect(roundTrip.tripMultiplier).toBe(2);
     expect(roundTrip.baseFare).toBe(oneWay.baseFare);
@@ -135,9 +192,14 @@ describe('movingQuote — round trip', () => {
   });
 
   it('doubles the toll fare (doublesOnRoundTrip: true on the seeded row)', () => {
-    const oneWay = movingQuote(20_000, cdd, {}, { toll: tollEstimate });
+    const oneWay = movingQuote(
+      [{ distanceMeters: 20_000 }],
+      cdd,
+      {},
+      { toll: tollEstimate },
+    );
     const roundTrip = movingQuote(
-      20_000,
+      [{ distanceMeters: 20_000 }],
       cdd,
       {},
       { roundTrip: true, toll: tollEstimate },
@@ -149,7 +211,7 @@ describe('movingQuote — round trip', () => {
 
   it('does not double a non-toll addon whose doublesOnRoundTrip is false', () => {
     const roundTrip = movingQuote(
-      20_000,
+      [{ distanceMeters: 20_000 }],
       cdd,
       {},
       { roundTrip: true, addons: [{ rate: helper, quantity: 2 }] },
@@ -165,7 +227,7 @@ const cddWithHigherMinFare: TruckRate = { ...cdd, minFare: 1_000_000 };
 describe('movingQuote — minFare floors travel only', () => {
   it('a short trip under minFare plus a helper equals minFare + helper, not more', () => {
     const result = movingQuote(
-      1_000, // 1km, well under the included 5km
+      [{ distanceMeters: 1_000 }], // 1km, well under the included 5km
       cddWithHigherMinFare,
       {},
       { addons: [{ rate: helper, quantity: 1 }] },
@@ -179,7 +241,7 @@ describe('movingQuote — minFare floors travel only', () => {
 
   it('a toll on a below-minimum job is added, not absorbed', () => {
     const result = movingQuote(
-      1_000,
+      [{ distanceMeters: 1_000 }],
       cddWithHigherMinFare,
       {},
       { toll: tollEstimate },
@@ -207,7 +269,7 @@ describe('movingQuote — pricing models', () => {
       doublesOnRoundTrip: false,
     };
     const result = movingQuote(
-      20_000,
+      [{ distanceMeters: 20_000 }],
       cdd,
       {},
       { addons: [{ rate: packaging, quantity: 99 }] },
@@ -218,7 +280,7 @@ describe('movingQuote — pricing models', () => {
 
   it('per_unit: multiplies unitPrice by the clamped quantity', () => {
     const result = movingQuote(
-      20_000,
+      [{ distanceMeters: 20_000 }],
       cdd,
       {},
       { addons: [{ rate: waitingTime, quantity: 3 }] },
@@ -229,7 +291,7 @@ describe('movingQuote — pricing models', () => {
 
   it('per_unit: clamps quantity to maxQty', () => {
     const result = movingQuote(
-      20_000,
+      [{ distanceMeters: 20_000 }],
       cdd,
       {},
       { addons: [{ rate: helper, quantity: 99 }] },
@@ -240,7 +302,7 @@ describe('movingQuote — pricing models', () => {
 
   it('per_unit: clamps quantity to minQty when below it', () => {
     const result = movingQuote(
-      20_000,
+      [{ distanceMeters: 20_000 }],
       cdd,
       {},
       { addons: [{ rate: helper, quantity: 0 }] },
@@ -250,7 +312,7 @@ describe('movingQuote — pricing models', () => {
 
   it('percent: computes premium from declaredValue and percentBps', () => {
     const result = movingQuote(
-      20_000,
+      [{ distanceMeters: 20_000 }],
       cdd,
       {},
       { declaredValue: 50_000_000, addons: [{ rate: insurance, quantity: 1 }] },
@@ -261,7 +323,7 @@ describe('movingQuote — pricing models', () => {
 
   it('percent: minCharge lifts a small premium up to the floor', () => {
     const result = movingQuote(
-      20_000,
+      [{ distanceMeters: 20_000 }],
       cdd,
       {},
       { declaredValue: 1_000_000, addons: [{ rate: insurance, quantity: 1 }] },
@@ -272,7 +334,7 @@ describe('movingQuote — pricing models', () => {
 
   it('percent: declaredValue absent/0 yields a zero premium from the pure function', () => {
     const result = movingQuote(
-      20_000,
+      [{ distanceMeters: 20_000 }],
       cdd,
       {},
       { addons: [{ rate: insurance, quantity: 1 }] },
@@ -286,7 +348,7 @@ describe('movingQuote — pricing models', () => {
   it('maxCharge caps a large flat/per_unit amount', () => {
     const cappedHelper: MovingAddonRate = { ...helper, maxCharge: 500_000 };
     const result = movingQuote(
-      20_000,
+      [{ distanceMeters: 20_000 }],
       cdd,
       {},
       { addons: [{ rate: cappedHelper, quantity: 6 }] },
@@ -295,13 +357,28 @@ describe('movingQuote — pricing models', () => {
   });
 
   it('toll per_unit scales on distanceKm and ignores requested quantity', () => {
-    const result = movingQuote(35_000, cdd, {}, { toll: tollEstimate });
+    const result = movingQuote(
+      [{ distanceMeters: 35_000 }],
+      cdd,
+      {},
+      { toll: tollEstimate },
+    );
     expect(result.tollFare).toBe(45_500); // 35km * 1,300
   });
 
   it('toll: null yields zero tollFare and an unchanged subtotal', () => {
-    const withToll = movingQuote(20_000, cdd, {}, { toll: tollEstimate });
-    const withoutToll = movingQuote(20_000, cdd, {}, { toll: null });
+    const withToll = movingQuote(
+      [{ distanceMeters: 20_000 }],
+      cdd,
+      {},
+      { toll: tollEstimate },
+    );
+    const withoutToll = movingQuote(
+      [{ distanceMeters: 20_000 }],
+      cdd,
+      {},
+      { toll: null },
+    );
     expect(withoutToll.tollFare).toBe(0);
     expect(withoutToll.subtotal).toBe(withToll.subtotal - withToll.tollFare);
   });
@@ -309,17 +386,118 @@ describe('movingQuote — pricing models', () => {
 
 describe('movingQuote — tollRoute echo', () => {
   it('defaults to true when omitted', () => {
-    const result = movingQuote(20_000, cdd);
+    const result = movingQuote([{ distanceMeters: 20_000 }], cdd);
     expect(result.tollRoute).toBe(true);
   });
 
   it('echoes false when explicitly set, independent of whether a toll fare applies', () => {
     const result = movingQuote(
-      20_000,
+      [{ distanceMeters: 20_000 }],
       cdd,
       {},
       { tollRoute: false, toll: tollEstimate },
     );
     expect(result.tollRoute).toBe(false);
+  });
+});
+
+describe('movingQuote — multi-leg', () => {
+  it('prices each leg independently and sums — NOT the old whole-trip math for the same total distance', () => {
+    const result = movingQuote(
+      [
+        { distanceMeters: 5_000 },
+        { distanceMeters: 10_000 },
+        { distanceMeters: 2_000 },
+      ],
+      pickupBak,
+    );
+
+    expect(result.legs).toEqual([
+      {
+        distanceKm: 5,
+        includedKm: 5,
+        chargeableKm: 0,
+        baseFare: 250_000,
+        distanceFare: 0,
+        subtotal: 250_000,
+      },
+      {
+        distanceKm: 10,
+        includedKm: 5,
+        chargeableKm: 5,
+        baseFare: 250_000,
+        distanceFare: 22_500,
+        subtotal: 272_500,
+      },
+      {
+        distanceKm: 2,
+        includedKm: 5,
+        chargeableKm: 0,
+        baseFare: 250_000,
+        distanceFare: 0,
+        subtotal: 250_000,
+      },
+    ]);
+    expect(result.distanceKm).toBe(17);
+    expect(result.includedKm).toBe(15);
+    expect(result.chargeableKm).toBe(5);
+    expect(result.baseFare).toBe(750_000); // 3 x 250,000 - NOT one flat baseFare
+    expect(result.distanceFare).toBe(22_500); // only leg 2's chargeable km
+    expect(result.travelSubtotal).toBe(772_500);
+    expect(result.minFareApplied).toBe(false);
+    expect(result.total).toBe(770_000);
+    expect(result.lowEstimate).toBe(690_000);
+    expect(result.highEstimate).toBe(850_000);
+    expect(result.tripMultiplier).toBe(1);
+  });
+
+  it('roundTrip: true on a multi-leg request does NOT double any leg distanceFare, but toll still doubles', () => {
+    const result = movingQuote(
+      [
+        { distanceMeters: 5_000 },
+        { distanceMeters: 10_000 },
+        { distanceMeters: 2_000 },
+      ],
+      pickupBak,
+      {},
+      { roundTrip: true, toll: tollEstimate },
+    );
+
+    expect(result.tripMultiplier).toBe(1); // NOT 2 - legs.length > 1
+    expect(result.distanceFare).toBe(22_500); // unchanged from the non-roundTrip case above
+    expect(result.travelSubtotal).toBe(772_500); // unchanged
+    expect(result.tollFare).toBe(44_200); // (1,300 * 17km = 22,100) x 2, doubled independent of leg count
+    expect(result.subtotal).toBe(816_700);
+    expect(result.total).toBe(820_000);
+    expect(result.lowEstimate).toBe(740_000);
+    expect(result.highEstimate).toBe(900_000);
+  });
+
+  it('minFare floors the SUM once — two legs each below a hypothetical per-leg floor, but the sum is not', () => {
+    // cddWithHigherMinFare: baseFare 850,000, minFare 1,000,000 — each leg's
+    // own subtotal (850,000) is individually below minFare, but the summed
+    // total (1,700,000) already clears it, so nothing is floored. A buggy
+    // per-leg-floor implementation would instead produce 2,000,000.
+    const result = movingQuote(
+      [{ distanceMeters: 1_000 }, { distanceMeters: 1_000 }],
+      cddWithHigherMinFare,
+    );
+    expect(result.minFareApplied).toBe(false);
+    expect(result.travelSubtotal).toBe(1_700_000);
+  });
+
+  it('minFare floors the SUM once when the summed total is still below it — not doubled-floored', () => {
+    const cheapRate: TruckRate = {
+      baseFare: 400_000,
+      perKmFare: 8_000,
+      includedKm: 5,
+      minFare: 1_000_000,
+    };
+    const result = movingQuote(
+      [{ distanceMeters: 1_000 }, { distanceMeters: 1_000 }],
+      cheapRate,
+    );
+    expect(result.minFareApplied).toBe(true);
+    expect(result.travelSubtotal).toBe(1_000_000); // floored once to the flat minFare, not 2,000,000
   });
 });

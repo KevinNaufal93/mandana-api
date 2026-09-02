@@ -58,8 +58,16 @@ Body: { "origin": {"lat":-6.2,"lng":106.8}, "destination": {"lat":-6.9,"lng":107
 502 UPSTREAM_ERROR    non-2xx or timeout from Google
 ```
 
+> **Correction — see `docs/moving-integration.md`.** `POST /moving/quote`
+> now takes an ordered `legs[]` array (one `{ distanceMeters }` per hop),
+> not a single `distanceMeters` number — this was in fact a breaking change
+> to the request shape, not the purely-additive growth path sketched below.
+> If this proxy is ever built, its natural integration point becomes
+> computing `legs[]` server-side (one entry per waypoint hop) rather than a
+> single pre-summed total.
+
 `POST /moving/quote` (already built) is designed to absorb this later without
-a breaking change — it currently takes `distanceMeters` directly; a future
+a breaking change — ~~it currently takes `distanceMeters` directly~~; a future
 version could accept `origin`/`destination` instead and internally call this
 proxy, collapsing two round-trips into one for the FE.
 
@@ -197,7 +205,8 @@ ops-configured toll estimate (`moving_addons.kind = 'toll'` — see
 
 **If volume ever justifies it:** build this proxy for real (still "not
 built" as of this writing — today the FE calls Google directly and this
-backend only receives `distanceMeters`), add `GOOGLE_MAPS_SERVER_API_KEY` to
+backend only receives `legs[]`, an ordered array of per-hop `distanceMeters`
+— see the correction note above), add `GOOGLE_MAPS_SERVER_API_KEY` to
 `env.validation.ts` + `configuration.ts` per the section above, add a
 `toll_golongan_multiplier_bps` column to `truck_classes`, and Redis-cache by
 4dp-quantized coordinates for 24h as already specified. `MovingQuoteExtras.toll`

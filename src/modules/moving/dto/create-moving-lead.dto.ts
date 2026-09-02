@@ -16,12 +16,15 @@ import { MovingPointDto } from './moving-point.dto';
 
 /**
  * Body for `POST /moving/leads`. Extends QuoteMovingDto to inherit
- * `truckSlug`/`distanceMeters`/`roundTrip`/`tollRoute`/`declaredValue`/`addons`
- * — and their validators — verbatim, so the exact same request that would be
- * sent to `/moving/quote` also captures a lead by adding `pickup` and
- * `destinations`. Pricing itself still runs on the single `distanceMeters`
- * total (see MovingService.buildQuote()) — `destinations` is captured for
- * the record, not priced per leg.
+ * `truckSlug`/`legs`/`roundTrip`/`tollRoute`/`declaredValue`/`addons` — and
+ * their validators — verbatim, so the exact same request that would be sent
+ * to `/moving/quote` also captures a lead by adding `pickup` and
+ * `destinations`. Pricing now runs per leg against `legs[]` (see
+ * MovingService.buildQuote() / moving-pricing.ts) — `legs.length` must equal
+ * `destinations.length`, or `destinations.length + 1` when `roundTrip` is
+ * true and the caller includes an explicit return leg, enforced by
+ * `MovingLeadsService.create()` (400 on mismatch — cross-field, not
+ * encodable purely in class-validator since it spans two sibling arrays).
  */
 export class CreateMovingLeadDto extends QuoteMovingDto {
   @ApiProperty({ type: MovingPointDto })

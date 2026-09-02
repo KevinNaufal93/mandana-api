@@ -91,13 +91,23 @@ route order:
 The response echoes them back as `data.destinations[]`, each carrying a
 `stopIndex` (0-based, matches the order submitted).
 
-**Important — `distanceMeters` stays a single number.** Pricing
+> **Superseded — see `docs/moving-integration.md`'s updated `POST
+> /moving/quote` section.** The paragraph below is no longer accurate: the
+> backend now takes an ordered `legs[]` array (one `{ distanceMeters }`
+> entry per hop) and prices each leg independently, summing the results —
+> this was a breaking request-shape change, not the "no new pricing field"
+> outcome described below. See moving-integration.md for the new contract,
+> including the round-trip + multi-leg interaction (`roundTrip: true` does
+> NOT auto-double a multi-stop trip's distance — the return leg must be sent
+> as its own explicit entry in `legs[]` if you want it priced).
+
+**Important — `distanceMeters` stays a single number.** ~~Pricing
 (`POST /moving/quote`, unchanged) doesn't know or care how many stops
 produced that total — Rp/km math is the same whether it's one leg or five.
 So the only new client-side work for distance is: **compute the total road
 distance across every leg** (pickup → stop 1 → stop 2 → ... → stop N) and
 send that one summed number, exactly like today. No new pricing field, no
-per-leg pricing.
+per-leg pricing.~~ (superseded, see the callout above)
 
 ### What to build
 

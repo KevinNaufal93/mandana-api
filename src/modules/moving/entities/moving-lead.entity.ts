@@ -3,6 +3,7 @@ import { BaseEntity } from '../../../common/entities/base.entity';
 import { MovingLeadStatus } from '../enums/moving-lead-status.enum';
 import { MovingLeadStop } from './moving-lead-stop.entity';
 import { MovingLeadAddon } from './moving-lead-addon.entity';
+import { MovingLeadLeg } from './moving-lead-leg.entity';
 
 /**
  * A captured Moving Support lead — persisted the moment a customer clicks
@@ -133,4 +134,7 @@ export class MovingLead extends BaseEntity {
 
   @OneToMany(() => MovingLeadAddon, (addon) => addon.lead, { cascade: true })
   addons!: MovingLeadAddon[];
+
+  @OneToMany(() => MovingLeadLeg, (leg) => leg.lead, { cascade: true })
+  legs!: MovingLeadLeg[];
 }
