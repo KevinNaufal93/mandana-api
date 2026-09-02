@@ -52,6 +52,7 @@ is **no** `/properties/featured` endpoint — use this instead.
           "ctaText": "string | null",
           "ctaLink": "string | null",
           "sortOrder": 0,
+          "imageOnly": false,
           "image": { "url": "...", "srcset": "...", "alt": "...", "width": 1920, "height": 1080 }
         }
       ]

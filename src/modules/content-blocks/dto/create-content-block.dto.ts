@@ -76,7 +76,7 @@ export class CreateContentBlockDto {
   @ApiPropertyOptional({
     default: false,
     description:
-      "Service card only: when true, the public site renders just the image (the artwork already has the title/description baked in) and skips the text overlay. Requires mediaAssetId.",
+      'Hero or service card: when true, the public site renders just the image (the artwork already has the title/description baked in) and skips the text overlay. Requires mediaAssetId.',
   })
   @IsOptional()
   @IsBoolean()

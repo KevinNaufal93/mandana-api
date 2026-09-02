@@ -59,7 +59,7 @@ export class ContentBlocksService {
     }
     if (dto.imageOnly && !dto.mediaAssetId) {
       throw new BadRequestException(
-        'A service card in image-only mode requires an image (mediaAssetId).',
+        'An image-only content block requires an image (mediaAssetId).',
       );
     }
 
@@ -98,7 +98,7 @@ export class ContentBlocksService {
     const nextImageOnly = dto.imageOnly ?? block.imageOnly;
     if (nextImageOnly && !nextMediaAssetId) {
       throw new BadRequestException(
-        'A service card in image-only mode requires an image (mediaAssetId) — either keep the existing one or attach a replacement before removing it.',
+        'An image-only content block requires an image (mediaAssetId) — either keep the existing one or attach a replacement before removing it.',
       );
     }
 

@@ -62,6 +62,7 @@ export class HomepageService {
           ctaText: s.ctaText,
           ctaLink: s.link,
           sortOrder: s.sortOrder,
+          imageOnly: s.imageOnly,
           // mediaAsset is guaranteed non-null for a hero-type block — see
           // chk_content_blocks_hero_requires_media in the owning migration.
           image: this.mediaService.buildImageDto(s.mediaAsset!),

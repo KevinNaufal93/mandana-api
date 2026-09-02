@@ -34,6 +34,7 @@ body.
 | `ctaText` | CTA button label | *unused — omit it* |
 | `link` | CTA target, e.g. `/properties?listingType=sale` | Card href, e.g. `/moving` |
 | `mediaAssetId` | **Required** — a hero with no image is invalid | Optional — the 4 seeded cards ship with none |
+| `imageOnly` | Optional, default `false`. When `true`, the public homepage renders just the slide's image and skips the title/subtitle/CTA text overlay — the artwork already has that copy baked in. Requires `mediaAssetId` (already required for hero, so this only matters if you're also clearing the image). | Optional, default `false`. When `true`, the public homepage renders just the card's image and skips the title/description text overlay. Requires `mediaAssetId`. |
 
 `sortOrder` and `isActive` apply to both — see §6.
 
@@ -50,7 +51,7 @@ body.
     "image": { "url": "...", "srcset": "...", "srcsetAvif": "...",
                "placeholder": "data:image/webp;base64,...", "alt": null,
                "width": 1920, "height": 1080 },
-    "sortOrder": 0, "isActive": true,
+    "sortOrder": 0, "isActive": true, "imageOnly": false,
     "createdAt": "...", "updatedAt": "..." } ] }
 ```
 
