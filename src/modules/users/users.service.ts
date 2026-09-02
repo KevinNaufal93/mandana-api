@@ -25,12 +25,28 @@ export class UsersService {
     return this.usersRepository.findOne({ where: { email } });
   }
 
-  findById(id: string): Promise<User | null> {
-    return this.usersRepository.findOne({ where: { id } });
+  /**
+   * `withPhoto` loads the `photoMediaAsset` relation so a response can be
+   * run through UsersMapper. Defaults to off because this method is also
+   * every JWT strategy's per-request identity lookup (jwt/jwt-refresh/
+   * jwt-stream .strategy.ts) — those never render a photo, so they
+   * shouldn't pay for the join on every authenticated request.
+   */
+  findById(
+    id: string,
+    opts: { withPhoto?: boolean } = {},
+  ): Promise<User | null> {
+    return this.usersRepository.findOne({
+      where: { id },
+      relations: opts.withPhoto ? { photoMediaAsset: true } : undefined,
+    });
   }
 
-  async findByIdOrFail(id: string): Promise<User> {
-    const user = await this.findById(id);
+  async findByIdOrFail(
+    id: string,
+    opts: { withPhoto?: boolean } = {},
+  ): Promise<User> {
+    const user = await this.findById(id, opts);
     if (!user) throw new NotFoundException(`User ${id} not found`);
     return user;
   }
@@ -52,7 +68,10 @@ export class UsersService {
   // ─── Admin methods ────────────────────────────────────────────────────────
 
   findAll(): Promise<User[]> {
-    return this.usersRepository.find({ order: { createdAt: 'DESC' } });
+    return this.usersRepository.find({
+      order: { createdAt: 'DESC' },
+      relations: { photoMediaAsset: true },
+    });
   }
 
   async createUser(dto: CreateUserDto): Promise<User> {
@@ -74,7 +93,7 @@ export class UsersService {
   }
 
   async updateUser(id: string, dto: UpdateUserDto): Promise<User> {
-    const user = await this.findByIdOrFail(id);
+    const user = await this.findByIdOrFail(id, { withPhoto: true });
 
     if (dto.name !== undefined) user.name = dto.name;
     if (dto.role !== undefined) user.role = dto.role;
@@ -101,6 +120,12 @@ export class UsersService {
       alt: user.name,
     });
     user.photoMediaAssetId = asset.id;
+    // Also set the relation object itself (not just its FK column) so the
+    // saved-and-returned `user` already carries a renderable photo for
+    // UsersMapper — cheaper than a second findById(..., {withPhoto:true})
+    // round-trip, and correct: no `cascade` on this relation, so save()
+    // persists via photoMediaAssetId only and never re-writes `asset`.
+    user.photoMediaAsset = asset;
     return this.usersRepository.save(user);
   }
 }
