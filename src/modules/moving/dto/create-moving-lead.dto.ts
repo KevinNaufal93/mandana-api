@@ -64,4 +64,15 @@ export class CreateMovingLeadDto extends QuoteMovingDto {
   @IsOptional()
   @IsEmail()
   email?: string;
+
+  @ApiPropertyOptional({
+    example:
+      'Barang mudah pecah, tolong hati-hati. Butuh 2 orang angkat ke lantai 3.',
+    description:
+      'Customer-provided additional notes/instructions — the web form’s "Additional notes" field.',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(2000)
+  notes?: string;
 }

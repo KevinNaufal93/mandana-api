@@ -33,7 +33,10 @@ const baseResult: MovingQuoteResult = {
   highEstimate: 1_070_000,
 };
 
-function makeDto(destinationCount: number): CreateMovingLeadDto {
+function makeDto(
+  destinationCount: number,
+  overrides: Partial<CreateMovingLeadDto> = {},
+): CreateMovingLeadDto {
   return {
     truckSlug: 'cdd',
     distanceMeters: 20_000,
@@ -43,6 +46,7 @@ function makeDto(destinationCount: number): CreateMovingLeadDto {
       lat: -6.2 - i * 0.01,
       lng: 106.8 + i * 0.01,
     })),
+    ...overrides,
   };
 }
 
@@ -53,6 +57,7 @@ interface CreatedLeadInput {
   status: MovingLeadStatus;
   truckSlug: string;
   truckName: string;
+  notes: string | null;
   stops: {
     stopIndex: number;
     address: string | null;
@@ -140,6 +145,22 @@ describe('MovingLeadsService', () => {
     expect(saved.status).toBe(MovingLeadStatus.NEW);
     expect(saved.truckSlug).toBe('cdd');
     expect(saved.truckName).toBe('CDD (Colt Diesel Double)');
+  });
+
+  it('persists the customer-provided "Additional notes" text when sent', async () => {
+    await service.create(
+      makeDto(1, { notes: 'Barang mudah pecah, tolong hati-hati.' }),
+    );
+
+    const saved = savedLeadArgs(leadRepo.save);
+    expect(saved.notes).toBe('Barang mudah pecah, tolong hati-hati.');
+  });
+
+  it('defaults notes to null when omitted', async () => {
+    await service.create(makeDto(1));
+
+    const saved = savedLeadArgs(leadRepo.save);
+    expect(saved.notes).toBeNull();
   });
 
   it('persists an unlimited, ordered destination list — 3 stops in submitted order', async () => {

@@ -288,7 +288,8 @@ prices through the same server-side path), plus `pickup` and `destinations`:
     { "address": "Jl. Gatot Subroto, Jakarta Selatan", "lat": -6.2297, "lng": 106.8253 },
     { "address": "BSD City, Tangerang Selatan", "lat": -6.3021, "lng": 106.6528 },
     { "address": "Bogor Kota", "lat": -6.5971, "lng": 106.8060 }
-  ]
+  ],
+  "notes": "Barang mudah pecah, tolong hati-hati. Butuh 2 orang angkat ke lantai 3."
 }
 
 // 201 response
@@ -328,6 +329,7 @@ prices through the same server-side path), plus `pickup` and `destinations`:
     "customerName": null,
     "phone": null,
     "email": null,
+    "notes": "Barang mudah pecah, tolong hati-hati. Butuh 2 orang angkat ke lantai 3.",
     "createdAt": "2026-09-02T04:00:00.000Z"
   }
 }
@@ -344,6 +346,11 @@ Field notes:
 - **`customerName`/`phone`/`email`** are optional and not currently sent by
   the Moving Support page (it collects no contact fields) — future-proofing,
   not a requirement.
+- **`notes`** (optional, max 2000 chars) is the web form's "Additional
+  notes" field — free text the customer types for anything the structured
+  fields don't capture (fragile items, floor/access notes, special timing).
+  Distinct from the admin-only `adminNote` on the admin endpoints below,
+  which a customer never sends or sees.
 - No `whatsappMessage` in the response, unlike Storage/Event Support's quote
   endpoints — for Moving Support the WA message is still assembled entirely
   client-side and this call fires fire-and-forget alongside it, not before
@@ -419,4 +426,7 @@ one is already active → `409` (at most one toll rate can be live at a time).
   `moving_lead_stops`, and `moving_lead_addons` (plus the
   `moving_leads_status_enum` type) for the lead-capture endpoint in §3 above.
   No seed data — an empty transactional table.
+- Migration `1787700000000-AddMovingLeadNotes` adds the `notes` column to
+  `moving_leads` (the "Additional notes" field) — additive follow-up, run
+  after the migration above.
 - No new env vars for this phase.

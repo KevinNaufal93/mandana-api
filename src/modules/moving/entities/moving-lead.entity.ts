@@ -119,6 +119,12 @@ export class MovingLead extends BaseEntity {
   @Column({ type: 'varchar', length: 255, nullable: true })
   email!: string | null;
 
+  // Customer-provided free text ("Additional notes" on the web form) — e.g.
+  // "barang mudah pecah", "butuh 2 orang angkat ke lantai 3". Distinct from
+  // `adminNote` below, which is staff-internal and never customer-supplied.
+  @Column({ type: 'text', nullable: true })
+  notes!: string | null;
+
   @Column({ name: 'admin_note', type: 'text', nullable: true })
   adminNote!: string | null;
 

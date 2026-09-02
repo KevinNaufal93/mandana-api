@@ -107,6 +107,12 @@ export class MovingLeadDto {
   phone!: string | null;
   @ApiPropertyOptional({ nullable: true, type: String })
   email!: string | null;
+  @ApiPropertyOptional({
+    nullable: true,
+    type: String,
+    description: 'Customer-provided additional notes/instructions',
+  })
+  notes!: string | null;
   @ApiProperty()
   createdAt!: Date;
 }

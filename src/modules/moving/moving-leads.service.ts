@@ -129,6 +129,7 @@ export class MovingLeadsService {
         customerName: dto.customerName ?? null,
         phone: dto.phone ?? null,
         email: dto.email ?? null,
+        notes: dto.notes ?? null,
         // Array order -> stopIndex: this is the "unlimited destinations"
         // piece — see MovingLeadStop's doc comment.
         stops: dto.destinations.map((d, i) =>

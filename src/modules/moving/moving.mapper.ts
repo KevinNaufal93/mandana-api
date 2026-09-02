@@ -144,6 +144,7 @@ export class MovingMapper {
       customerName: lead.customerName,
       phone: lead.phone,
       email: lead.email,
+      notes: lead.notes,
       createdAt: lead.createdAt,
     };
   }

@@ -57,4 +57,16 @@ describe('CreateMovingLeadDto validation', () => {
     const errors = await validate(build({ truckSlug: undefined }));
     expect(errors.some((e) => e.property === 'truckSlug')).toBe(true);
   });
+
+  it('accepts an optional "Additional notes" string', async () => {
+    const errors = await validate(
+      build({ notes: 'Barang mudah pecah, tolong hati-hati.' }),
+    );
+    expect(errors).toHaveLength(0);
+  });
+
+  it('rejects notes longer than 2000 characters', async () => {
+    const errors = await validate(build({ notes: 'a'.repeat(2001) }));
+    expect(errors.some((e) => e.property === 'notes')).toBe(true);
+  });
 });
