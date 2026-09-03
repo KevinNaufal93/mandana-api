@@ -51,12 +51,48 @@ export class MovingLeadsService {
    * EventBookingsService.findAllAdmin() documents — unlike Storage's admin
    * listing, whose joins are all many-to-one, MovingLead has *three*
    * one-to-many children). Fetch matching ids first, then load the full
-   * entity graph for just that page. */
+   * entity graph for just that page.
+   *
+   * Do NOT add a join here. `findAllAdmin()` below reads this builder via
+   * `getRawMany()`, and TypeORM only promotes `.skip()`/`.take()` into SQL
+   * LIMIT/OFFSET when the builder has zero join attributes — add one join
+   * and the LIMIT silently disappears while `getCount()` still reports the
+   * right total, so the bug would present as "meta.total is right but data
+   * has every matching row." To filter on a child table (e.g. destination
+   * address), use an EXISTS subquery instead. */
   private buildFilteredQb(query: QueryMovingLeadsDto) {
+    const { status, from, to, search } = query;
     const qb = this.leadRepo.createQueryBuilder('l');
-    if (query.status) {
-      qb.andWhere('l.status = :status', { status: query.status });
+
+    if (status) qb.andWhere('l.status = :status', { status });
+
+    // `createdAt` is a bare TIMESTAMP storing the DB's own UTC clock (no
+    // event window to compare against here, unlike Event Support's
+    // date-typed startDate/endDate) — both bounds are snapped to inclusive
+    // Jakarta calendar days via a fixed -7h shift (Indonesia is UTC+7, no
+    // DST, same shortcut event-pricing.ts's todayInJakarta() takes), so a
+    // lead captured at 03:00 WIB isn't misfiled under the previous day.
+    // Written as >= / < rather than wrapping createdAt in DATE() so the
+    // clauses stay sargable for a future index.
+    if (from) {
+      qb.andWhere("l.createdAt >= :from::date - INTERVAL '7 hours'", {
+        from,
+      });
     }
+    if (to) {
+      qb.andWhere(
+        "l.createdAt < :to::date + INTERVAL '1 day' - INTERVAL '7 hours'",
+        { to },
+      );
+    }
+
+    if (search) {
+      qb.andWhere(
+        '(l.reference ILIKE :search OR l.customerName ILIKE :search OR l.phone ILIKE :search)',
+        { search: `%${search}%` },
+      );
+    }
+
     return qb;
   }
 

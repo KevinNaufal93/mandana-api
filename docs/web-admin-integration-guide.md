@@ -232,12 +232,18 @@ with a user token — you generally can't, and shouldn't try to.
 |---|---|---|---|
 | Content blocks (hero + service strip) | `/admin/content-blocks` | via `/homepage` only | [content-blocks-admin-integration.md](content-blocks-admin-integration.md) |
 | Event support categories/items | `/admin/event-support` | `/event-support/*` | [event-support-admin-integration.md](event-support-admin-integration.md) |
-| Moving truck classes | `/admin/moving/truck-classes` | `/moving/*` | [moving-integration.md](moving-integration.md) |
-| Moving add-ons | `/admin/moving/addons` | `/moving/*` | [moving-integration.md](moving-integration.md) |
+| Moving truck classes | `/admin/moving/truck-classes` | `/moving/*` | [moving-admin-integration.md](moving-admin-integration.md) |
+| Moving add-ons | `/admin/moving/addons` | `/moving/*` | [moving-admin-integration.md](moving-admin-integration.md) |
 | Storage unit types/facilities | `/admin/storage/units`, `/admin/storage` | `/storage/*` | [storage-integration.md](storage-integration.md) |
 | Collections | `/admin/collections` | via `/homepage` + `/collections/:slug` | [homepage-integration.md](homepage-integration.md) |
 | Media library (upload/browse/delete) | `/admin/media` | — (never public) | §2 above |
 | Properties (multi-image, own staging system) | `/admin/properties` | `/properties*` | out of scope here — see `lib/properties/image-staging.ts` |
+
+Two more Moving admin surfaces exist but aren't image-bearing, so they're
+not rows above: `/admin/moving/settings` (a pricing-policy singleton) and
+`/admin/moving/leads` (read + triage of captured leads, no image field).
+Both are covered in the same
+[moving-admin-integration.md](moving-admin-integration.md).
 
 ## 10. Checklist for onboarding a new asset type
 

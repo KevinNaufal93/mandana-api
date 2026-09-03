@@ -56,6 +56,13 @@ export class TruckClassDto {
     number | null;
   @ApiPropertyOptional({ nullable: true, type: Number }) minFare!:
     number | null;
+  @ApiPropertyOptional({
+    nullable: true,
+    type: String,
+    description:
+      'Raw id of the attached asset — what an admin edit form binds its image picker to. `image` below is the rendered projection of the same row.',
+  })
+  mediaAssetId!: string | null;
   @ApiPropertyOptional({ nullable: true, type: TruckImageDto })
   image!: TruckImageDto | null;
   @ApiProperty() isActive!: boolean;
@@ -96,6 +103,13 @@ export class MovingAddonDto {
   @ApiProperty() minQty!: number;
   @ApiProperty() maxQty!: number;
   @ApiProperty() doublesOnRoundTrip!: boolean;
+  @ApiPropertyOptional({
+    nullable: true,
+    type: String,
+    description:
+      'Raw id of the attached asset — what an admin edit form binds its image picker to. `image` below is the rendered projection of the same row.',
+  })
+  mediaAssetId!: string | null;
   @ApiPropertyOptional({ nullable: true, type: TruckImageDto })
   image!: TruckImageDto | null;
   @ApiProperty() isActive!: boolean;

@@ -10,8 +10,39 @@ import { MovingLeadAddon } from './entities/moving-lead-addon.entity';
 import { MovingLeadLeg } from './entities/moving-lead-leg.entity';
 import { MovingLeadStatus } from './enums/moving-lead-status.enum';
 import { CreateMovingLeadDto } from './dto/create-moving-lead.dto';
+import { QueryMovingLeadsDto } from './dto/query-moving-leads.dto';
 import { MovingQuoteResult } from './moving-pricing';
 import { POSTGRES_UNIQUE_VIOLATION } from '../../common/utils/booking-reference';
+
+/** Chainable stand-in for the SelectQueryBuilder findAllAdmin() builds via
+ * buildFilteredQb(). That builder is created twice per findAllAdmin() call
+ * (once for the count, once for the id page) — each createQueryBuilder()
+ * call below returns a fresh QbMock and pushes it onto `qbs`, so a test can
+ * assert both halves received identical filters. */
+interface QbMock {
+  andWhere: jest.Mock;
+  select: jest.Mock;
+  orderBy: jest.Mock;
+  addOrderBy: jest.Mock;
+  skip: jest.Mock;
+  take: jest.Mock;
+  getCount: jest.Mock;
+  getRawMany: jest.Mock;
+}
+
+function makeQb(): QbMock {
+  const qb = {} as QbMock;
+  const ret = () => qb;
+  qb.andWhere = jest.fn(ret);
+  qb.select = jest.fn(ret);
+  qb.orderBy = jest.fn(ret);
+  qb.addOrderBy = jest.fn(ret);
+  qb.skip = jest.fn(ret);
+  qb.take = jest.fn(ret);
+  qb.getCount = jest.fn().mockResolvedValue(0);
+  qb.getRawMany = jest.fn().mockResolvedValue([]);
+  return qb;
+}
 
 const truck = { slug: 'cdd', name: 'CDD (Colt Diesel Double)' };
 
@@ -121,6 +152,12 @@ interface LegInput {
   subtotal: number;
 }
 
+function makeQuery(
+  overrides: Partial<QueryMovingLeadsDto> = {},
+): QueryMovingLeadsDto {
+  return { page: 1, limit: 12, ...overrides };
+}
+
 /** Reads the `leadRepo.save()` argument from a given call, cast once here
  * rather than at every call site — `jest.Mock` (untyped) makes `.mock.calls`
  * an `any[][]`, so this is the one place that leaves `any`. */
@@ -131,17 +168,31 @@ function savedLeadArgs(mock: jest.Mock, callIndex = 0): CreatedLeadInput {
 
 describe('MovingLeadsService', () => {
   let service: MovingLeadsService;
-  let leadRepo: { create: jest.Mock; save: jest.Mock; findOne: jest.Mock };
+  let leadRepo: {
+    create: jest.Mock;
+    save: jest.Mock;
+    findOne: jest.Mock;
+    find: jest.Mock;
+    createQueryBuilder: jest.Mock;
+  };
   let stopRepo: { create: jest.Mock };
   let addonRepo: { create: jest.Mock };
   let legRepo: { create: jest.Mock };
   let movingService: { buildQuote: jest.Mock };
+  let qbs: QbMock[];
 
   beforeEach(async () => {
+    qbs = [];
     leadRepo = {
       create: jest.fn((input: CreatedLeadInput) => input),
       save: jest.fn(),
       findOne: jest.fn(),
+      find: jest.fn().mockResolvedValue([]),
+      createQueryBuilder: jest.fn(() => {
+        const qb = makeQb();
+        qbs.push(qb);
+        return qb;
+      }),
     };
     stopRepo = { create: jest.fn((input: StopInput) => input) };
     addonRepo = { create: jest.fn((input: AddonLineInput) => input) };
@@ -290,6 +341,103 @@ describe('MovingLeadsService', () => {
           }),
         ),
       ).rejects.toThrow(BadRequestException);
+    });
+  });
+
+  describe('findAllAdmin', () => {
+    it('applies no filter clause when the query has none', async () => {
+      await service.findAllAdmin(makeQuery());
+
+      expect(qbs).toHaveLength(2); // count phase, then the id-page phase
+      expect(qbs[0].andWhere).not.toHaveBeenCalled();
+      expect(qbs[1].andWhere).not.toHaveBeenCalled();
+    });
+
+    it('filters by status', async () => {
+      await service.findAllAdmin(makeQuery({ status: MovingLeadStatus.NEW }));
+
+      expect(qbs[0].andWhere).toHaveBeenCalledWith('l.status = :status', {
+        status: MovingLeadStatus.NEW,
+      });
+    });
+
+    it('binds the Jakarta-day-shifted from/to bounds', async () => {
+      await service.findAllAdmin(
+        makeQuery({ from: '2026-09-01', to: '2026-09-03' }),
+      );
+
+      const andWhereCalls = qbs[0].andWhere.mock.calls as [
+        string,
+        Record<string, unknown>,
+      ][];
+      const fromCall = andWhereCalls.find((c) => c[0].includes('>='));
+      expect(fromCall).toEqual([
+        "l.createdAt >= :from::date - INTERVAL '7 hours'",
+        { from: '2026-09-01' },
+      ]);
+
+      const toCall = andWhereCalls.find((c) =>
+        c[0].includes("INTERVAL '1 day'"),
+      );
+      expect(toCall).toEqual([
+        "l.createdAt < :to::date + INTERVAL '1 day' - INTERVAL '7 hours'",
+        { to: '2026-09-03' },
+      ]);
+    });
+
+    it('ORs search across reference/customerName/phone in a single andWhere', async () => {
+      await service.findAllAdmin(makeQuery({ search: 'budi' }));
+
+      expect(qbs[0].andWhere).toHaveBeenCalledWith(
+        '(l.reference ILIKE :search OR l.customerName ILIKE :search OR l.phone ILIKE :search)',
+        { search: '%budi%' },
+      );
+      // exactly one andWhere call for this filter — splitting the OR across
+      // three separate andWhere()s would silently turn it into an AND.
+      expect(qbs[0].andWhere).toHaveBeenCalledTimes(1);
+    });
+
+    it('applies identical filters to both the count and id-page query', async () => {
+      await service.findAllAdmin(
+        makeQuery({ status: MovingLeadStatus.CONTACTED, search: 'MDN' }),
+      );
+
+      expect(qbs[0].andWhere.mock.calls).toEqual(qbs[1].andWhere.mock.calls);
+    });
+
+    it('short-circuits without hydrating when the id page is empty', async () => {
+      const result = await service.findAllAdmin(makeQuery());
+
+      expect(leadRepo.find).not.toHaveBeenCalled();
+      expect(result.data).toEqual([]);
+      expect(result.meta).toEqual({
+        total: 0,
+        page: 1,
+        limit: 12,
+        totalPages: 0,
+      });
+    });
+
+    it('preserves id-page order through the byId hydration re-sort', async () => {
+      leadRepo.createQueryBuilder = jest
+        .fn()
+        .mockImplementationOnce(() => {
+          const qb = makeQb();
+          qb.getCount.mockResolvedValue(2);
+          qbs.push(qb);
+          return qb;
+        })
+        .mockImplementationOnce(() => {
+          const qb = makeQb();
+          qb.getRawMany.mockResolvedValue([{ id: 'b' }, { id: 'a' }]);
+          qbs.push(qb);
+          return qb;
+        });
+      leadRepo.find.mockResolvedValue([{ id: 'a' }, { id: 'b' }]);
+
+      const result = await service.findAllAdmin(makeQuery());
+
+      expect(result.data.map((d) => d.id)).toEqual(['b', 'a']);
     });
   });
 

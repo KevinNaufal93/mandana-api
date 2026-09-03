@@ -48,6 +48,7 @@ ignores it and never returns retired classes). Sorted `sortOrder ASC, name ASC`.
       "perKmFare": 4500,
       "includedKm": 5,
       "minFare": 250000,
+      "mediaAssetId": null,
       "image": null,
       "isActive": true,
       "sortOrder": 10
@@ -74,6 +75,11 @@ Notes vs. the FE's original contract sketch:
   works; add `srcset` when ready for responsive images.
 - No truck classes carry an image yet (seed data has `mediaAssetId: null`).
   Handle `image: null` in the truck card.
+- `mediaAssetId` (the raw attached-asset id, alongside the built `image`
+  object) is present on this response mainly for the **admin** panel's
+  benefit — see [`moving-admin-integration.md`](./moving-admin-integration.md) §2
+  — but it's the same mapper for both surfaces, so the public page gets it
+  too. Safe to ignore here; nothing about `image` changed.
 
 **The swap in `lib/api/trucks.ts`** is exactly what the FE's own plan
 sketched — call the real endpoint and unwrap `data.data`:
@@ -114,6 +120,7 @@ insurance, and a toll estimate. Active-only, same active-flag convention as
       "minQty": 1,
       "maxQty": 6,
       "doublesOnRoundTrip": false,
+      "mediaAssetId": null,
       "image": null,
       "isActive": true,
       "sortOrder": 10
@@ -425,38 +432,14 @@ Field notes:
   `destinations` → `400` (`ArrayMinSize`); `legs.length` not matching
   `destinations.length` (±1 for an explicit round-trip return leg) → `400`.
 
-## 4. Admin endpoints (not needed by the public page, for completeness)
+## 4. Admin endpoints (not needed by the public page)
 
-```
-GET    /admin/moving/truck-classes            includes inactive; ?isActive=true|false
-GET    /admin/moving/truck-classes/:id
-POST   /admin/moving/truck-classes
-PATCH  /admin/moving/truck-classes/:id
-DELETE /admin/moving/truck-classes/:id         204
-
-GET    /admin/moving/addons                    includes inactive; ?isActive=true|false
-GET    /admin/moving/addons/:id
-POST   /admin/moving/addons
-PATCH  /admin/moving/addons/:id
-DELETE /admin/moving/addons/:id                204
-
-GET    /admin/moving/settings                  singleton — GET/PATCH only, no :id
-PATCH  /admin/moving/settings
-
-GET    /admin/moving/leads                     paginated; ?status=new|contacted|converted|lost
-GET    /admin/moving/leads/:id                  includes destinations + add-on lines
-PATCH  /admin/moving/leads/:id                  status/adminNote only — no confirm/reject flow, nothing here is reserved
-```
-
-Bearer JWT, `role: admin`. Attach an image the same way hero slides do:
-upload via the existing `POST /admin/media/upload`, then pass the returned
-`mediaAssetId` in the create/update body.
-
-**Add-on cross-field rules**, enforced server-side (not encodable purely in
-class-validator, so they 400 from the service instead): `pricingModel:
-"percent"` requires `percentBps > 0`; `flat`/`per_unit` require `unitPrice >
-0`; `maxQty` must be `>= minQty`; activating a second `kind: "toll"` row while
-one is already active → `409` (at most one toll rate can be live at a time).
+Not this doc's concern — see
+[`docs/moving-admin-integration.md`](./moving-admin-integration.md) for the
+full admin contract (truck-class/add-on CRUD, the pricing-policy singleton,
+and lead triage), written for the admin panel. Keeping it in one place
+instead of two so the endpoint list, the add-on cross-field rules, and the
+media-upload note don't drift out of sync.
 
 ## 5. Known gaps — flagged, not built in this phase
 

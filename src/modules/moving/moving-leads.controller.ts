@@ -69,7 +69,8 @@ export class MovingLeadsAdminController {
 
   @Get()
   @ApiOperation({
-    summary: 'List Moving Support leads (paginated, filterable by status)',
+    summary:
+      'List Moving Support leads (paginated; filter by status, capture-date range, and free-text search over reference / customer name / phone)',
   })
   @ApiOkResponse({ type: MovingLeadAdminListResponseDto })
   async findAll(@Query() query: QueryMovingLeadsDto) {
