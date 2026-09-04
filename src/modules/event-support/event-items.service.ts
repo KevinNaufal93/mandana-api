@@ -95,11 +95,16 @@ export class EventItemsService {
   ): Promise<PaginatedResult<EventItem>> {
     const { page, limit, categorySlug, kind } = query;
 
+    // Inner join, not left: `category_id` is NOT NULL, and deactivating a
+    // category has to hide its items from the catalog too — otherwise the
+    // tab disappears from GET /event-support/categories while its items
+    // keep coming back here.
     const qb = this.itemRepo
       .createQueryBuilder('i')
-      .leftJoinAndSelect('i.category', 'category')
+      .innerJoinAndSelect('i.category', 'category')
       .leftJoinAndSelect('i.mediaAsset', 'mediaAsset')
-      .where('i.status = :status', { status: EventItemStatus.PUBLISHED });
+      .where('i.status = :status', { status: EventItemStatus.PUBLISHED })
+      .andWhere('category.isActive = true');
 
     if (categorySlug)
       qb.andWhere('category.slug = :categorySlug', { categorySlug });
