@@ -15,13 +15,17 @@
 > ⚠️ **Phase 4 update:** `listingType` gained a third value, `new` ("Properti Baru"),
 > and every card/detail response now also carries `handoverDate`/`constructionStatus`.
 > See `docs/new-property-listing-type.md` and the "Properti Baru" section below.
+>
+> ⚠️ **Phase 5 update:** `GET /properties/:slug` gained a `promoCards` array — an
+> admin-managed promo card for the sidebar, directly below the agent card. Purely
+> additive; see "Promo cards" below.
 
 ## Summary
 
 | Endpoint | Status |
 | --- | --- |
 | `GET /properties` | ⚠️ **Changed** — `address` removed, `latitude`/`longitude` are now fuzzed (~300 m), `locationPrecision`/`approximateRadiusM` added, `description` is now HTML with a new plain-text `descriptionText` sibling. Every other field is unchanged. |
-| `GET /properties/:slug` | ✅ Existing route, richer payload — now includes `amenities`, `agent`, a deterministically-ordered gallery, and fuzzed location (see below). `latitude`/`longitude`/`price`/`areaSqm` are JSON **numbers**, not strings. `description` is now HTML — see "Rich text description" below. |
+| `GET /properties/:slug` | ✅ Existing route, richer payload — now includes `amenities`, `agent`, a deterministically-ordered gallery, fuzzed location, and `promoCards` (see below). `latitude`/`longitude`/`price`/`areaSqm` are JSON **numbers**, not strings. `description` is now HTML — see "Rich text description" below. |
 | `GET /properties/:slug/similar` | 🆕 New — "Pilihan Properti Serupa" |
 | `GET /amenities` | 🆕 New — full facility picklist (for icon/label lookup, if you render facility filters later) |
 
@@ -57,6 +61,17 @@ Same route as before. Response shape:
     "whatsapp": "+628777123456", "phone": "08777123456",
     "photo": { "url": "...", "srcset": "...", "alt": "Ahmad F.", "width": 400, "height": 400 }
   },
+  "promoCards": [
+    {
+      "id": "8b2e...", "title": "Jasa Inspeksi Properti",
+      "body": "Pastikan kondisi bangunan sebelum Anda membeli.",
+      "ctaText": "Jadwalkan Inspeksi", "ctaLink": "https://wa.me/628123456789",
+      "imageOnly": false, "sortOrder": 0,
+      "image": { "url": "...", "srcset": "...", "srcsetAvif": "",
+        "placeholder": "data:image/webp;base64,...", "alt": "Inspeksi properti",
+        "width": 800, "height": 450 }
+    }
+  ],
   "createdAt": "2026-07-01T03:12:00.000Z", "updatedAt": "2026-08-01T09:40:00.000Z"
 } }
 ```
@@ -211,6 +226,47 @@ Two extra fields ship on every card and detail response, only ever non-`null` wh
 
 Full details in `docs/new-property-listing-type.md`, including the badge-mapping and
 "no filter now returns three types" callouts for the listing page.
+
+---
+
+## Promo cards 🆕
+
+`promoCards` is a new array on `GET /properties/:slug`, meant to render in the sidebar
+directly below the agent card. Each entry is an admin-managed card — a property
+inspection service, a Mandana service ad, or a plain poster image.
+
+**`promoCards` is always `[]`, never `null`/absent, when nothing applies.** That
+emptiness *is* "no card" — map over the array and render nothing when it's empty; no
+separate "has promo" flag exists or is needed.
+
+```jsonc
+{
+  "id": "8b2e...",
+  "title": "Jasa Inspeksi Properti",
+  "body": "Pastikan kondisi bangunan sebelum Anda membeli.",
+  "ctaText": "Jadwalkan Inspeksi",
+  "ctaLink": "https://wa.me/628123456789",
+  "imageOnly": false,
+  "sortOrder": 0,
+  "image": { "url": "...", "srcset": "...", "srcsetAvif": "",
+    "placeholder": "data:image/webp;base64,...", "alt": "Inspeksi properti",
+    "width": 800, "height": 450 }
+}
+```
+
+- **The server resolves everything** — active/inactive, and which listing type(s) a
+  card targets (Dijual / Disewa / Properti Baru, or every listing type by default) —
+  against *this* property's `listingType` before the response is built. You do zero
+  filtering; render whatever you're given, in the order given (`sortOrder` ascending).
+- `image` can be `null` — a card with no attached image, or (rare) one whose image
+  failed to build server-side; a card is simply omitted from the array in the latter
+  case if `imageOnly` is true (an image-only card with no image would render as
+  nothing at all).
+- `imageOnly: true` means the artwork already carries the title/body/button copy —
+  render just the `image`, no text overlay.
+- Same `image` shape as everywhere else in this response (`agent.photo`, `images[]`).
+- Not a breaking change — ships independently of when you start rendering it; type
+  the field optional on your side if you want to deploy before or after this lands.
 
 ---
 

@@ -33,7 +33,10 @@ import {
   PropertyMapper,
   PropertyCard,
   PropertyDetail,
+  PublicPropertyDetail,
 } from './property.mapper';
+import { PropertyPromoMapper } from './property-promo.mapper';
+import { ContentBlocksService } from '../content-blocks/content-blocks.service';
 import { resolveUniqueSlug } from '../../common/utils/slugify';
 import { richTextToPlain } from '../../common/rich-text';
 
@@ -78,6 +81,8 @@ export class PropertiesService {
     private readonly amenitiesRepo: Repository<Amenity>,
     private readonly mediaService: MediaService,
     private readonly mapper: PropertyMapper,
+    private readonly contentBlocksService: ContentBlocksService,
+    private readonly promoMapper: PropertyPromoMapper,
     @InjectDataSource()
     private readonly dataSource: DataSource,
     @Optional() private readonly cache?: HomepageCacheService,
@@ -149,13 +154,25 @@ export class PropertiesService {
     };
   }
 
-  async findBySlug(slug: string): Promise<PropertyDetail> {
+  async findBySlug(slug: string): Promise<PublicPropertyDetail> {
     const property = await this.propertiesRepo.findOne({
       where: { slug, status: PropertyStatus.PUBLISHED },
       relations: DETAIL_RELATIONS,
     });
     if (!property) throw new NotFoundException(`Property '${slug}' not found`);
-    return this.mapper.toDetail(property, { exact: false });
+
+    // Sequential, not Promise.all: this query is keyed on property.listingType,
+    // which only exists once the findOne above has resolved, and a 404 above
+    // should short-circuit before firing it at all.
+    const promoBlocks =
+      await this.contentBlocksService.findActivePropertyPromos(
+        property.listingType,
+      );
+
+    return {
+      ...this.mapper.toDetail(property, { exact: false }),
+      promoCards: this.promoMapper.toCards(promoBlocks),
+    };
   }
 
   findAllTypes(): Promise<PropertyType[]> {

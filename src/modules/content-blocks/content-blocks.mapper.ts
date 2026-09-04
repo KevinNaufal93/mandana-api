@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { MediaService, MediaImageDto } from '../media/media.service';
 import { ContentBlock } from './entities/content-block.entity';
 import { ContentBlockType } from './enums/content-block-type.enum';
+import { ListingType } from '../properties/enums/listing-type.enum';
 
 /**
  * Every other module with images (event-support, moving, storage,
@@ -25,6 +26,7 @@ export type ContentBlockDto = {
   sortOrder: number;
   isActive: boolean;
   imageOnly: boolean;
+  listingTypeScope: ListingType[] | null;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -48,6 +50,7 @@ export class ContentBlocksMapper {
       sortOrder: block.sortOrder,
       isActive: block.isActive,
       imageOnly: block.imageOnly,
+      listingTypeScope: block.listingTypeScope,
       createdAt: block.createdAt,
       updatedAt: block.updatedAt,
     };

@@ -1,13 +1,24 @@
 import { ApiPropertyOptional, OmitType, PartialType } from '@nestjs/swagger';
-import { IsOptional, IsUUID } from 'class-validator';
+import {
+  ArrayUnique,
+  IsArray,
+  IsEnum,
+  IsOptional,
+  IsUUID,
+} from 'class-validator';
 import { CreateContentBlockDto } from './create-content-block.dto';
+import { ListingType } from '../../properties/enums/listing-type.enum';
 
-// mediaAssetId is omitted from the base before PartialType so it can be
-// redeclared below as `string | null` (a plain `Partial<Create...>` only
-// widens required -> optional, not optional-string -> optional-nullable —
-// TypeScript rejects redeclaring an inherited property with a wider type).
+// mediaAssetId and listingTypeScope are omitted from the base before
+// PartialType so each can be redeclared below as nullable (a plain
+// `Partial<Create...>` only widens required -> optional, not
+// optional-X -> optional-nullable — TypeScript rejects redeclaring an
+// inherited property with a wider type).
 export class UpdateContentBlockDto extends PartialType(
-  OmitType(CreateContentBlockDto, ['mediaAssetId'] as const),
+  OmitType(CreateContentBlockDto, [
+    'mediaAssetId',
+    'listingTypeScope',
+  ] as const),
 ) {
   // `null` is accepted to explicitly clear an existing block's image.
   // @IsOptional() makes class-validator treat both `undefined` and `null`
@@ -19,4 +30,16 @@ export class UpdateContentBlockDto extends PartialType(
   @IsOptional()
   @IsUUID()
   mediaAssetId?: string | null;
+
+  // `null` (like `[]` on create) explicitly clears an existing promo
+  // card's scope back to "every listing type" — ContentBlocksService
+  // normalizes both to NULL. Whether that's allowed on the block's
+  // (possibly also-changing) type is, again, a cross-field decision that
+  // lives in ContentBlocksService.update(), not here.
+  @ApiPropertyOptional({ enum: ListingType, isArray: true, nullable: true })
+  @IsOptional()
+  @IsArray()
+  @ArrayUnique()
+  @IsEnum(ListingType, { each: true })
+  listingTypeScope?: ListingType[] | null;
 }

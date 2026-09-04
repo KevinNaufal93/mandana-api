@@ -11,16 +11,23 @@ import {
 } from './properties.controller';
 import { PropertyTypesController } from './property-types.controller';
 import { PropertyMapper } from './property.mapper';
+import { PropertyPromoMapper } from './property-promo.mapper';
 import { MediaModule } from '../media/media.module';
 import { HomepageCacheModule } from '../homepage/homepage-cache.module';
+import { ContentBlocksModule } from '../content-blocks/content-blocks.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([Property, PropertyType, PropertyImage, Amenity]),
     MediaModule,
     HomepageCacheModule,
+    // Acyclic: ContentBlocksModule only reaches TypeOrmModule,
+    // HomepageCacheModule, and MediaModule — it never imports
+    // PropertiesModule. Pulled in so findBySlug() can source promoCards
+    // via ContentBlocksService.findActivePropertyPromos().
+    ContentBlocksModule,
   ],
-  providers: [PropertiesService, PropertyMapper],
+  providers: [PropertiesService, PropertyMapper, PropertyPromoMapper],
   controllers: [
     PropertiesController,
     PropertiesAdminController,

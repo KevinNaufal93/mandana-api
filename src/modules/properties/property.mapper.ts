@@ -6,6 +6,7 @@ import { ConstructionStatus } from './enums/construction-status.enum';
 import { MediaService, MediaImageDto } from '../media/media.service';
 import { fuzzCoordinates, APPROX_RADIUS_M } from './location-privacy';
 import { richTextToPlain } from '../../common/rich-text';
+import { PropertyPromoCard } from './property-promo.mapper';
 
 export interface PropertyCard {
   id: string;
@@ -80,6 +81,18 @@ export type PropertyDetail =
       locationPrecision: 'approximate';
       approximateRadiusM: number;
     });
+
+/**
+ * The public `GET /properties/:slug` response: `toDetail(..., { exact:
+ * false })` plus admin-managed promo cards. Assembled in
+ * `PropertiesService.findBySlug` — kept out of `PropertyMapper.toDetail`
+ * itself so that method stays synchronous and pure, and so `adminFindOne`
+ * (which shares `toDetail` but always passes `{ exact: true }`) never
+ * grows a `promoCards` key it has no use for.
+ */
+export type PublicPropertyDetail = PropertyDetail & {
+  promoCards: PropertyPromoCard[];
+};
 
 /** Numeric/decimal Postgres columns come back from `pg` as strings — normalize them. */
 function toNumber(value: unknown): number | null {

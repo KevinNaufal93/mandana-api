@@ -20,9 +20,12 @@ import { CreateContentBlockDto } from './dto/create-content-block.dto';
 import { UpdateContentBlockDto } from './dto/update-content-block.dto';
 import { QueryContentBlocksDto } from './dto/query-content-blocks.dto';
 
-// No public route here, same as hero_slides/service_cards before it — the
-// landing page consumes these exclusively through GET /homepage's cached,
-// per-type payload (see HomepageService), never this controller directly.
+// No public route here. Hero slides and service cards are consumed
+// exclusively through GET /homepage's cached, per-type payload (see
+// HomepageService); property_promo cards are consumed through
+// GET /properties/:slug (see PropertiesService.findBySlug), scoped to the
+// requested property's listingType. Neither reaches the public web
+// through this controller directly.
 @ApiTags('admin / content-blocks')
 @ApiBearerAuth()
 @Roles(UserRole.ADMIN)
@@ -36,7 +39,7 @@ export class ContentBlocksController {
   @Get()
   @ApiOperation({
     summary:
-      'List content blocks (admin) — hero slides, service cards, etc. Filter with ?type=',
+      'List content blocks (admin) — hero slides, service cards, property promo cards, etc. Filter with ?type=',
   })
   async findAll(@Query() query: QueryContentBlocksDto) {
     const blocks = await this.contentBlocksService.findAll(query);

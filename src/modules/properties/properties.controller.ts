@@ -18,6 +18,7 @@ import {
   ApiBearerAuth,
   ApiBody,
   ApiConsumes,
+  ApiOkResponse,
   ApiOperation,
   ApiQuery,
   ApiTags,
@@ -34,6 +35,7 @@ import { CreatePropertyDto } from './dto/create-property.dto';
 import { UpdatePropertyDto } from './dto/update-property.dto';
 import { AddPropertyImageDto } from './dto/add-property-image.dto';
 import { UpdatePropertyImageDto } from './dto/update-property-image.dto';
+import { PropertyDetailResponseDto } from './dto/property-response.dto';
 
 // ─── Public controller ────────────────────────────────────────────────────────
 
@@ -70,7 +72,13 @@ export class PropertiesController {
   }
 
   @Get(':slug')
-  @ApiOperation({ summary: 'Get a single published property by slug' })
+  @ApiOperation({
+    summary: 'Get a single published property by slug',
+    description:
+      'Includes `promoCards` — admin-managed cards for the sidebar directly below ' +
+      'the agent card, always an array, empty when nothing is active/matching.',
+  })
+  @ApiOkResponse({ type: PropertyDetailResponseDto })
   findOne(@Param('slug') slug: string) {
     return this.propertiesService.findBySlug(slug);
   }
