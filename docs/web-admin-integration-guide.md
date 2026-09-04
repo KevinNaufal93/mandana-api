@@ -21,8 +21,16 @@ The Content Media Management screen maps directly onto
 | Edit a card/slide | `PATCH /admin/content-blocks/:id` |
 | Remove | `DELETE /admin/content-blocks/:id` |
 
-Full request/response bodies, the hero-requires-image rule, and the
-upload flow are in
+Wire a "Promo Cards" screen (property detail sidebar cards) onto the
+same endpoint the same way, whenever that tab gets built:
+
+| UI | API |
+|---|---|
+| "Promo Cards" tab | `GET /admin/content-blocks?type=property_promo` |
+| Add a promo card | `POST /admin/content-blocks` with `type: "property_promo"` |
+
+Full request/response bodies, the hero-requires-image rule, the
+promo-card-only `listingTypeScope` field, and the upload flow are in
 [docs/content-blocks-admin-integration.md](content-blocks-admin-integration.md)
 — don't duplicate that here, just point the screen at it.
 
@@ -226,11 +234,21 @@ exactly what the public site will render, check whether a public read
 path exists for it before assuming you can just call the admin endpoint
 with a user token — you generally can't, and shouldn't try to.
 
+**Content blocks are also the one module where that answer is
+type-dependent, not module-wide.** `type: "hero"` and `"service_card"`
+rows follow the paragraph above — no public route, `/homepage` only.
+`type: "property_promo"` rows are the exception: they *do* have a public
+surfacing, `promoCards` on `GET /properties/:slug` (still never
+`/admin/content-blocks` directly with a user token — the public path is
+a different endpoint entirely, on the properties module, not this one).
+Concretely: don't assume "content blocks" as a whole answers checklist
+item 5 in §10 the same way for every row you fetch — check the `type`.
+
 ## 9. Current map of admin-manageable, image-bearing modules
 
 | Module | Admin base path | Public read | Doc |
 |---|---|---|---|
-| Content blocks (hero + service strip) | `/admin/content-blocks` | via `/homepage` only | [content-blocks-admin-integration.md](content-blocks-admin-integration.md) |
+| Content blocks (hero + service strip + property promo cards) | `/admin/content-blocks` | type-dependent — hero/service_card via `/homepage`; property_promo via `/properties/:slug` (`promoCards`) — see §8 | [content-blocks-admin-integration.md](content-blocks-admin-integration.md) |
 | Event support categories/items | `/admin/event-support` | `/event-support/*` | [event-support-admin-integration.md](event-support-admin-integration.md) |
 | Moving truck classes | `/admin/moving/truck-classes` | `/moving/*` | [moving-admin-integration.md](moving-admin-integration.md) |
 | Moving add-ons | `/admin/moving/addons` | `/moving/*` | [moving-admin-integration.md](moving-admin-integration.md) |
