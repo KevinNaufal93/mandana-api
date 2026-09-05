@@ -71,6 +71,36 @@ export class CreateStorageUnitTypeDto {
   minDurationMonths?: number;
 
   @ApiPropertyOptional({
+    example: 200000,
+    minimum: 0,
+    description:
+      'Rupiah, integer. Independent of monthlyRate, never derived from it — set explicitly for every unit type opted into weekly pricing.',
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  weeklyRate?: number;
+
+  @ApiPropertyOptional({
+    default: false,
+    description:
+      'Opts this unit type into weekly pricing. Requires a positive weeklyRate (here or already on the record) — enabling this without one is a 400.',
+  })
+  @IsOptional()
+  @IsBoolean()
+  supportsWeekly?: boolean;
+
+  @ApiPropertyOptional({
+    example: 1,
+    minimum: 1,
+    description: 'Falls back to 1 when unset.',
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  minDurationWeeks?: number;
+
+  @ApiPropertyOptional({
     description:
       'Upload an image first via POST /admin/media/upload, then pass its id',
   })

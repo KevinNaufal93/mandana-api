@@ -20,6 +20,16 @@ export class CreateStorageInventoryDto {
   @Min(0)
   monthlyRateOverride?: number;
 
+  @ApiPropertyOptional({
+    minimum: 0,
+    description:
+      "Rupiah, integer. Overrides the unit type's base weeklyRate for this facility — independent of monthlyRateOverride.",
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  weeklyRateOverride?: number;
+
   @ApiPropertyOptional({ default: true })
   @IsOptional()
   @IsBoolean()

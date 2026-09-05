@@ -7,6 +7,7 @@ import { StorageBooking } from './entities/storage-booking.entity';
 import { StorageUnitStatus } from './enums/storage-unit-status.enum';
 import { MediaService } from '../media/media.service';
 import { richTextToPlain } from '../../common/rich-text';
+import { UNIT_LABELS } from './storage-pricing';
 import {
   StorageAvailabilityFacilityDto,
   StorageAvailabilityLayoutUnitDto,
@@ -59,6 +60,9 @@ export class StorageMapper {
       dimensions: this.buildDimensions(u),
       monthlyRate: u.monthlyRate,
       minDurationMonths: u.minDurationMonths,
+      weeklyRate: u.weeklyRate,
+      supportsWeekly: u.supportsWeekly,
+      minDurationWeeks: u.minDurationWeeks,
       image: this.buildImage(u.mediaAsset),
       isActive: u.isActive,
       sortOrder: u.sortOrder,
@@ -96,6 +100,7 @@ export class StorageMapper {
       unitTypeId: inv.unitTypeId,
       unitTypeSlug: inv.unitType.slug,
       monthlyRateOverride: inv.monthlyRateOverride,
+      weeklyRateOverride: inv.weeklyRateOverride,
       isActive: inv.isActive,
     };
   }
@@ -205,6 +210,8 @@ export class StorageMapper {
         occupied: counts.occupied,
         maintenance: counts.maintenance,
         monthlyRate: inv.monthlyRateOverride ?? inv.unitType.monthlyRate,
+        weeklyRate: inv.weeklyRateOverride ?? inv.unitType.weeklyRate,
+        supportsWeekly: inv.unitType.supportsWeekly,
       });
     }
 
@@ -227,7 +234,7 @@ export class StorageMapper {
       `No. Referensi: ${booking.reference}`,
       `Lokasi: ${booking.facility.name}`,
       `Ukuran: ${booking.unitType.name} x${booking.quantity}`,
-      `Mulai: ${booking.startDate} (${booking.durationMonths} bulan)`,
+      `Mulai: ${booking.startDate} (${booking.durationUnits} ${UNIT_LABELS[booking.durationUnit]})`,
       `Total: ${money(booking.total)}`,
       '',
       'Mohon konfirmasi ketersediaan dan langkah selanjutnya.',
@@ -251,6 +258,10 @@ export class StorageMapper {
       startDate: booking.startDate,
       durationMonths: booking.durationMonths,
       endDate: booking.endDate,
+      durationUnit: booking.durationUnit,
+      duration: booking.durationUnits,
+      unitRate: booking.unitRate,
+      unitLabel: UNIT_LABELS[booking.durationUnit],
       monthlyRate: booking.monthlyRate,
       subtotal: booking.subtotal,
       discountAmount: booking.discountAmount,
@@ -278,6 +289,10 @@ export class StorageMapper {
       startDate: booking.startDate,
       durationMonths: booking.durationMonths,
       endDate: booking.endDate,
+      durationUnit: booking.durationUnit,
+      duration: booking.durationUnits,
+      unitRate: booking.unitRate,
+      unitLabel: UNIT_LABELS[booking.durationUnit],
       monthlyRate: booking.monthlyRate,
       subtotal: booking.subtotal,
       discountAmount: booking.discountAmount,

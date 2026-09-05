@@ -34,6 +34,11 @@ export class StorageInventory extends BaseEntity {
   @Column({ name: 'monthly_rate_override', type: 'int', nullable: true })
   monthlyRateOverride!: number | null;
 
+  // Sibling override for StorageUnitType.weeklyRate. Independent of
+  // monthlyRateOverride — a facility can override one without the other.
+  @Column({ name: 'weekly_rate_override', type: 'int', nullable: true })
+  weeklyRateOverride!: number | null;
+
   @Column({ name: 'is_active', default: true })
   isActive!: boolean;
 }

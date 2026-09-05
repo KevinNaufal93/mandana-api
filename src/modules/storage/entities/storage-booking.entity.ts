@@ -3,6 +3,7 @@ import { BaseEntity } from '../../../common/entities/base.entity';
 import { StorageFacility } from './storage-facility.entity';
 import { StorageUnitType } from './storage-unit-type.entity';
 import { StorageBookingStatus } from '../enums/storage-booking-status.enum';
+import { StorageDurationUnit } from '../enums/storage-duration-unit.enum';
 import { User } from '../../users/entities/user.entity';
 
 /**
@@ -48,11 +49,33 @@ export class StorageBooking extends BaseEntity {
   @Column({ name: 'start_date', type: 'date' })
   startDate!: string;
 
-  @Column({ name: 'duration_months', type: 'int' })
-  durationMonths!: number;
+  // Null on a weekly booking — see durationUnit/durationUnits below, which
+  // are the source of truth for every booking. Kept (rather than replaced)
+  // because it's still the honest answer for every monthly booking and
+  // several readers (the WhatsApp template, admin exports) key off it.
+  @Column({ name: 'duration_months', type: 'int', nullable: true })
+  durationMonths!: number | null;
 
   @Column({ name: 'end_date', type: 'date' })
   endDate!: string;
+
+  @Column({
+    name: 'duration_unit',
+    type: 'enum',
+    enum: StorageDurationUnit,
+    default: StorageDurationUnit.MONTH,
+  })
+  durationUnit!: StorageDurationUnit;
+
+  // The billable count in durationUnit's unit — weeks or months. The
+  // generic sibling of durationMonths; unlike it, always set.
+  @Column({ name: 'duration_units', type: 'int' })
+  durationUnits!: number;
+
+  // The rate actually applied per durationUnit, snapshotted at booking
+  // time — the generic sibling of monthlyRate below.
+  @Column({ name: 'unit_rate', type: 'int' })
+  unitRate!: number;
 
   @Column({
     type: 'enum',
@@ -63,7 +86,9 @@ export class StorageBooking extends BaseEntity {
 
   // Money snapshotted at request time — a later rate change must never
   // rewrite a historical booking's price. Integer Rupiah, same rationale as
-  // StorageUnitType.monthlyRate.
+  // StorageUnitType.monthlyRate. Always set (even on a weekly booking) as
+  // the reference monthly rate at booking time — unitRate above is what
+  // was actually billed.
   @Column({ name: 'monthly_rate', type: 'int' })
   monthlyRate!: number;
 

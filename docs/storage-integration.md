@@ -58,6 +58,9 @@ shape family as `GET /moving/truck-classes`.
       "dimensions": { "lengthCm": 200, "widthCm": 150, "heightCm": 170 },
       "monthlyRate": 650000,
       "minDurationMonths": 1,
+      "weeklyRate": 200000,
+      "supportsWeekly": true,
+      "minDurationWeeks": 1,
       "image": null,
       "isActive": true,
       "sortOrder": 20
@@ -72,6 +75,15 @@ shape family as `GET /moving/truck-classes`.
 - `dimensions` is `null` unless length/width/height are all set.
 - `image` is the same `{ url, srcset, alt, width, height } | null` shape as
   everywhere else. No unit types carry an image in the seed data yet.
+- **`weeklyRate` is independent of `monthlyRate`, never derived from it** —
+  same reasoning as Event Support's `hourlyRate` vs `pricePerDay` (a short
+  stay costs more per unit of time to service than a month amortizes to).
+  `supportsWeekly` is the opt-in; every unit type ships with it `false` and
+  `weeklyRate: null` until an admin turns it on
+  (`PATCH /admin/storage/unit-types/:id`) — nothing changes for existing
+  customers on deploy. `minDurationWeeks` falls back to `1` when `null`. See
+  [storage-admin-integration.md](storage-admin-integration.md) for the admin
+  contract and the invariant behind `supportsWeekly`.
 
 ### `GET /storage/facilities`
 
@@ -125,8 +137,8 @@ rather than an `md5` of the whole response, so it's identical to the
         "facilitySlug": "bsd-city",
         "facilityName": "Mandana Storage BSD City",
         "units": [
-          { "unitTypeSlug": "small", "total": 20, "available": 20, "monthlyRate": 350000 },
-          { "unitTypeSlug": "medium", "total": 12, "available": 9, "monthlyRate": 650000 }
+          { "unitTypeSlug": "small", "total": 20, "available": 20, "monthlyRate": 350000, "weeklyRate": null, "supportsWeekly": false },
+          { "unitTypeSlug": "medium", "total": 12, "available": 9, "monthlyRate": 650000, "weeklyRate": 200000, "supportsWeekly": true }
         ]
       }
     ]
@@ -135,10 +147,18 @@ rather than an `md5` of the whole response, so it's identical to the
 ```
 
 - `available` is already clamped `≥ 0` — never negative.
-- `monthlyRate` here already accounts for a per-facility override, if one is
-  set — always use this value for display, not `StorageUnitType.monthlyRate`.
+- `monthlyRate`/`weeklyRate` here already account for a per-facility
+  override, if one is set — always use these values for display, not
+  `StorageUnitType.monthlyRate`/`weeklyRate`. `weeklyRate` is `null` unless
+  `supportsWeekly` is `true`.
 - Send `If-None-Match: "<version>"` (quoted, matches the `ETag` header
   literally) on repeat polls → `304` with no body.
+- **One-time `version` churn on deploy.** `version` hashes the complete
+  snapshot body (see `storage-floor-plan-response.md` §5) — adding
+  `weeklyRate`/`supportsWeekly` changes that hash for every facility the
+  first time this runs after deploy, so every cached client `ETag` misses
+  once and the SSE stream pushes one full frame to every connected listener.
+  Harmless, but expected — not a sign anything is wrong.
 
 ### `GET /storage/availability/stream` — SSE, public, counts only
 
@@ -195,7 +215,7 @@ Authoritative price for a facility + unit type + duration. Mirrors
 but use this response for anything that ships in the WhatsApp message.
 
 ```jsonc
-// Request
+// Request — monthly (unchanged, still accepted)
 { "facilitySlug": "bsd-city", "unitTypeSlug": "medium", "quantity": 1, "durationMonths": 6 }
 
 // 200 response
@@ -206,6 +226,10 @@ but use this response for anything that ships in the WhatsApp message.
     "monthlyRate": 650000,
     "quantity": 1,
     "durationMonths": 6,
+    "durationUnit": "month",
+    "duration": 6,
+    "unitRate": 650000,
+    "unitLabel": "bulan",
     "subtotal": 3900000,
     "discountPct": 10,
     "discountAmount": 390000,
@@ -215,16 +239,54 @@ but use this response for anything that ships in the WhatsApp message.
 }
 ```
 
+```jsonc
+// Request — weekly (new)
+{ "facilitySlug": "bsd-city", "unitTypeSlug": "medium", "quantity": 1, "durationUnit": "week", "duration": 3 }
+
+// 200 response
+{
+  "data": {
+    "facility": { "slug": "bsd-city", "name": "Mandana Storage BSD City" },
+    "unitType": { "slug": "medium", "name": "Medium" },
+    "monthlyRate": 650000,
+    "quantity": 1,
+    "durationMonths": null,
+    "durationUnit": "week",
+    "duration": 3,
+    "unitRate": 200000,
+    "unitLabel": "minggu",
+    "subtotal": 600000,
+    "discountPct": 0,
+    "discountAmount": 0,
+    "total": 600000,
+    "currency": "IDR"
+  }
+}
+```
+
+**Additive, not breaking.** `durationMonths` still works exactly as before
+and is equivalent to `durationUnit: "month"` — provide exactly one of
+`durationMonths` or (`durationUnit` + `duration`). `monthlyRate` is always
+present as the reference monthly rate, even on a weekly quote; `unitRate` is
+what was actually applied. A weekly request against a unit type that hasn't
+been opted into weekly pricing (`supportsWeekly: false` or no `weeklyRate`
+set) → `400` naming the unit type.
+
 Errors: unknown/inactive `facilitySlug` or `unitTypeSlug`, or a combination
-with no inventory row at all → `404`. Out-of-range `quantity`/`durationMonths`
-→ `400` (global `ValidationPipe`, `forbidNonWhitelisted: true`).
+with no inventory row at all → `404`. Out-of-range `quantity`/`duration`, or
+sending both/neither of `durationMonths`/`duration` → `400` (global
+`ValidationPipe`, `forbidNonWhitelisted: true`).
 
 **Constants must stay in sync.** `STORAGE_DEFAULTS` (`roundToIdr: 1_000`, the
 duration-discount tiers: 0% under 3mo, 5% at 3mo+, 10% at 6mo+, 15% at 12mo+)
 lives in `storage-pricing.ts` in this repo. If you build a client-side instant
 estimate (recommended, same UX reasoning as Moving), mirror these constants
 exactly — there is no shared source between the two repos today. Cross-check
-periodically: same inputs should produce byte-identical totals.
+periodically: same inputs should produce byte-identical totals. **These
+tiers are month-only** — a weekly quote's `discountPct` is always `0`, never
+derived from them (13 weeks must not quietly land in the 3-month bracket). A
+mirrored client-side estimate must apply the same rule: no discount logic on
+a weekly quote, full stop.
 
 ### `POST /storage/bookings`
 
@@ -233,7 +295,7 @@ reserve a unit** — only a confirmed booking (admin action) takes stock, so
 `available` in the snapshot above won't move when this resolves.
 
 ```jsonc
-// Request
+// Request — same durationMonths | (durationUnit + duration) choice as the quote endpoint
 {
   "customerName": "Budi Santoso",
   "email": "budi@example.com",
@@ -263,6 +325,10 @@ reserve a unit** — only a confirmed booking (admin action) takes stock, so
     "startDate": "2026-09-01",
     "durationMonths": 6,
     "endDate": "2027-03-01",
+    "durationUnit": "month",
+    "duration": 6,
+    "unitRate": 650000,
+    "unitLabel": "bulan",
     "monthlyRate": 650000,
     "subtotal": 3900000,
     "discountAmount": 390000,
@@ -273,6 +339,11 @@ reserve a unit** — only a confirmed booking (admin action) takes stock, so
   }
 }
 ```
+
+A weekly booking (`{ "durationUnit": "week", "duration": 3, ... }`) returns
+`"durationMonths": null`, `"endDate"` computed as exactly `7 × duration` days
+after `startDate` (no calendar-month clamping — a week is a fixed-length
+unit), and a `whatsappMessage` reading e.g. `"Mulai: 2026-09-01 (3 minggu)"`.
 
 **`whatsappMessage` is plain text, not a URL.** The API has no business
 WhatsApp number of its own — `NEXT_PUBLIC_MANDANA_WHATSAPP` is (and stays)
@@ -292,7 +363,10 @@ if (waNumber) {
 Errors: unknown/inactive facility or unit type, or no inventory row for that
 pair → `404`. `quantity` greater than the facility's total capacity for that
 unit type → `400` (a sanity bound, not the concurrency check — see below).
-`durationMonths` under the unit type's `minDurationMonths` → `400`.
+`durationMonths` under the unit type's `minDurationMonths` → `400`; a weekly
+`duration` under `minDurationWeeks` (falls back to 1) → `400` the same way.
+A weekly booking against a unit type not opted into weekly pricing → `400`,
+same rule as the quote endpoint.
 
 **On persistence, not reservation:** because pending doesn't hold stock, two
 customers can request the same last unit — both succeed, and it's the admin
@@ -301,14 +375,17 @@ see below), which is where the real oversell guard lives. Design this into
 the UI: after submitting, show the reference code and "menunggu konfirmasi
 tim kami," not "unit reserved."
 
-## 4. Admin endpoints (for completeness — no admin panel yet in `mandana-web`)
+## 4. Admin endpoints
 
-Bearer JWT, `role: admin`, same as every other admin surface.
+Bearer JWT, `role: admin`, same as every other admin surface. Full contract
+(request/response shapes, the `supportsWeekly` invariant, money conventions)
+is in [storage-admin-integration.md](storage-admin-integration.md) — this
+table is the quick route reference.
 
 ```
 GET|POST|PATCH|DELETE  /admin/storage/unit-types[/:id]
 GET|POST|PATCH|DELETE  /admin/storage/facilities[/:id]
-GET|POST|PATCH|DELETE  /admin/storage/inventory[/:id]      totalUnits / occupiedUnits / monthlyRateOverride
+GET|POST|PATCH|DELETE  /admin/storage/inventory[/:id]      monthlyRateOverride / weeklyRateOverride
 GET|POST|PATCH|DELETE  /admin/storage/units[/:id]           individual physical units, see storage-floor-plan-response.md §3
 POST                    /admin/storage/units/bulk           { facilityId, unitTypeId, count, codePrefix } — add capacity fast
 DELETE                  /admin/storage/units/bulk           { ids: string[] } — atomic, 404 naming any id(s) not found
@@ -391,5 +468,7 @@ es.addEventListener("availability", (e) => { /* same handling as the public stre
   seeds 4 unit types (`small`, `medium`, `large`, `extra-large`) × 2
   facilities (`bsd-city`, `kelapa-gading`) = 8 inventory rows, so the page
   has real data to render on day one.
+- Migration `1788100000000-AddStorageWeeklyPricing` adds weekly pricing —
+  behaviour-neutral, every unit type ships with `supportsWeekly: false`.
 - No new env vars for this phase — the SSE ticket reuses the existing
   `JWT_ACCESS_SECRET`.

@@ -43,6 +43,20 @@ export class StorageUnitType extends BaseEntity {
   @Column({ name: 'min_duration_months', type: 'int', default: 1 })
   minDurationMonths!: number;
 
+  // Rupiah, integer — independent of monthlyRate, never derived from it (a
+  // short stay costs more per unit of time to service than a month
+  // amortizes to). Null means this unit type is not sold weekly regardless
+  // of supportsWeekly.
+  @Column({ name: 'weekly_rate', type: 'int', nullable: true })
+  weeklyRate!: number | null;
+
+  @Column({ name: 'supports_weekly', default: false })
+  supportsWeekly!: boolean;
+
+  // Smallest billable weekly duration; null falls back to 1 week.
+  @Column({ name: 'min_duration_weeks', type: 'int', nullable: true })
+  minDurationWeeks!: number | null;
+
   @ManyToOne(() => MediaAsset, {
     nullable: true,
     eager: false,

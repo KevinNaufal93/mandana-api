@@ -252,7 +252,7 @@ item 5 in §10 the same way for every row you fetch — check the `type`.
 | Event support categories/items | `/admin/event-support` | `/event-support/*` | [event-support-admin-integration.md](event-support-admin-integration.md) |
 | Moving truck classes | `/admin/moving/truck-classes` | `/moving/*` | [moving-admin-integration.md](moving-admin-integration.md) |
 | Moving add-ons | `/admin/moving/addons` | `/moving/*` | [moving-admin-integration.md](moving-admin-integration.md) |
-| Storage unit types/facilities | `/admin/storage/units`, `/admin/storage` | `/storage/*` | [storage-integration.md](storage-integration.md) |
+| Storage unit types/facilities | `/admin/storage/units`, `/admin/storage` | `/storage/*` | [storage-admin-integration.md](storage-admin-integration.md) |
 | Collections | `/admin/collections` | via `/homepage` + `/collections/:slug` | [homepage-integration.md](homepage-integration.md) |
 | Media library (upload/browse/delete) | `/admin/media` | — (never public) | §2 above |
 | Properties (multi-image, own staging system) | `/admin/properties` | `/properties*` | out of scope here — see `lib/properties/image-staging.ts` |

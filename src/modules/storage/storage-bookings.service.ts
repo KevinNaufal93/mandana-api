@@ -17,7 +17,13 @@ import { User } from '../users/entities/user.entity';
 import { StorageService } from './storage.service';
 import { StorageAvailabilityService } from './storage-availability.service';
 import { StorageMapper } from './storage.mapper';
-import { addMonthsToDateString, storageQuote } from './storage-pricing';
+import { StorageDurationUnit } from './enums/storage-duration-unit.enum';
+import {
+  addMonthsToDateString,
+  addWeeksToDateString,
+  resolveStorageRates,
+  storageQuote,
+} from './storage-pricing';
 import {
   generateBookingReference,
   MAX_REFERENCE_ATTEMPTS,
@@ -105,19 +111,39 @@ export class StorageBookingsService {
         `${facility.name} only has ${totalUnits} ${unitType.name} unit(s) in total`,
       );
     }
-    if (dto.durationMonths < unitType.minDurationMonths) {
+
+    // Exactly one of these is set — enforced by @ValidStorageDuration() on
+    // the DTO. durationMonths (legacy) implies 'month'.
+    const durationUnit = dto.durationUnit ?? StorageDurationUnit.MONTH;
+    const duration = dto.durationMonths ?? dto.duration!;
+
+    const rates = resolveStorageRates(unitType, inventory);
+
+    if (durationUnit === StorageDurationUnit.WEEK) {
+      const isWeeklyEligible =
+        Boolean(rates.supportsWeekly) && (rates.weeklyRate ?? 0) > 0;
+      if (!isWeeklyEligible) {
+        throw new BadRequestException(
+          `${unitType.name} is not available for weekly booking`,
+        );
+      }
+      const minWeeks = unitType.minDurationWeeks ?? 1;
+      if (duration < minWeeks) {
+        throw new BadRequestException(
+          `${unitType.name} requires a minimum of ${minWeeks} week(s)`,
+        );
+      }
+    } else if (duration < unitType.minDurationMonths) {
       throw new BadRequestException(
         `${unitType.name} requires a minimum of ${unitType.minDurationMonths} month(s)`,
       );
     }
 
-    const rate = inventory.monthlyRateOverride ?? unitType.monthlyRate;
-    const priced = storageQuote(
-      { monthlyRate: rate },
-      quantity,
-      dto.durationMonths,
-    );
-    const endDate = addMonthsToDateString(dto.startDate, dto.durationMonths);
+    const priced = storageQuote(rates, quantity, duration, durationUnit);
+    const endDate =
+      durationUnit === StorageDurationUnit.WEEK
+        ? addWeeksToDateString(dto.startDate, duration)
+        : addMonthsToDateString(dto.startDate, duration);
 
     for (let attempt = 0; attempt < MAX_REFERENCE_ATTEMPTS; attempt++) {
       const booking = this.bookingRepo.create({
@@ -130,9 +156,12 @@ export class StorageBookingsService {
         unitTypeId: unitType.id,
         quantity,
         startDate: dto.startDate,
-        durationMonths: dto.durationMonths,
+        durationMonths: priced.durationMonths,
         endDate,
-        monthlyRate: rate,
+        durationUnit,
+        durationUnits: duration,
+        unitRate: priced.unitRate,
+        monthlyRate: rates.monthlyRate,
         subtotal: priced.subtotal,
         discountAmount: priced.discountAmount,
         total: priced.total,

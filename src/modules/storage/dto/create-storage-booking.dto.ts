@@ -2,6 +2,7 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   IsDateString,
   IsEmail,
+  IsEnum,
   IsInt,
   IsOptional,
   IsString,
@@ -10,6 +11,8 @@ import {
   Min,
   MinLength,
 } from 'class-validator';
+import { StorageDurationUnit } from '../enums/storage-duration-unit.enum';
+import { ValidStorageDuration } from './storage-duration.validator';
 
 export class CreateStorageBookingDto {
   @ApiProperty({ example: 'Budi Santoso' })
@@ -58,9 +61,34 @@ export class CreateStorageBookingDto {
   @IsDateString({ strict: true })
   startDate!: string;
 
-  @ApiProperty({ example: 6, minimum: 1, maximum: 60 })
+  @ApiPropertyOptional({
+    example: 6,
+    minimum: 1,
+    maximum: 60,
+    description:
+      'Legacy field, still accepted — equivalent to durationUnit: "month". Provide exactly one of durationMonths or (durationUnit + duration).',
+  })
+  @IsOptional()
   @IsInt()
   @Min(1)
   @Max(60)
-  durationMonths!: number;
+  durationMonths?: number;
+
+  @ApiPropertyOptional({
+    enum: StorageDurationUnit,
+    example: StorageDurationUnit.WEEK,
+    description: 'Required together with `duration`.',
+  })
+  @IsOptional()
+  @IsEnum(StorageDurationUnit)
+  durationUnit?: StorageDurationUnit;
+
+  @ApiPropertyOptional({
+    example: 3,
+    minimum: 1,
+    description:
+      "Billable count in durationUnit's unit — up to 60 for months, 260 for weeks. Deliberately NOT @IsOptional() — see QuoteStorageDto.duration.",
+  })
+  @ValidStorageDuration()
+  duration?: number;
 }

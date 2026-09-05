@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { FindOptionsWhere, Repository } from 'typeorm';
 import { StorageUnitType } from './entities/storage-unit-type.entity';
@@ -13,8 +17,9 @@ import { CreateStorageInventoryDto } from './dto/create-storage-inventory.dto';
 import { UpdateStorageInventoryDto } from './dto/update-storage-inventory.dto';
 import { QuoteStorageDto } from './dto/quote-storage.dto';
 import { StorageQuoteDto } from './dto/storage-response.dto';
+import { StorageDurationUnit } from './enums/storage-duration-unit.enum';
 import { resolveUniqueSlug } from '../../common/utils/slugify';
-import { storageQuote } from './storage-pricing';
+import { resolveStorageRates, storageQuote } from './storage-pricing';
 import { StorageAvailabilityService } from './storage-availability.service';
 
 @Injectable()
@@ -73,6 +78,24 @@ export class StorageService {
     return unitType;
   }
 
+  /** §weekly-pricing invariant: a unit type with `supportsWeekly: true` must
+   * always carry a positive `weeklyRate` — otherwise a later quote() call
+   * would silently 400 (or worse, fall back to $0) and the admin's "weekly"
+   * toggle would lie. Checked against the resolved (post-merge) values, so
+   * a PATCH that sets `supportsWeekly: true` without ever sending
+   * `weeklyRate` on a unit type that has none is caught too. Mirrors
+   * EventItemsService.assertHourlyRateInvariant. */
+  private assertWeeklyRateInvariant(
+    supportsWeekly: boolean,
+    weeklyRate: number | null,
+  ): void {
+    if (supportsWeekly && !(weeklyRate !== null && weeklyRate > 0)) {
+      throw new BadRequestException(
+        'supportsWeekly requires a positive weeklyRate',
+      );
+    }
+  }
+
   async createUnitType(
     dto: CreateStorageUnitTypeDto,
   ): Promise<StorageUnitType> {
@@ -80,6 +103,10 @@ export class StorageService {
       this.unitTypeRepo,
       dto.slug ?? dto.name,
     );
+
+    const weeklyRate = dto.weeklyRate ?? null;
+    const supportsWeekly = dto.supportsWeekly ?? false;
+    this.assertWeeklyRateInvariant(supportsWeekly, weeklyRate);
 
     const unitType = this.unitTypeRepo.create({
       name: dto.name,
@@ -91,6 +118,9 @@ export class StorageService {
       heightCm: dto.heightCm ?? null,
       monthlyRate: dto.monthlyRate,
       minDurationMonths: dto.minDurationMonths ?? 1,
+      weeklyRate,
+      supportsWeekly,
+      minDurationWeeks: dto.minDurationWeeks ?? null,
       mediaAssetId: dto.mediaAssetId ?? null,
       isActive: dto.isActive ?? true,
       sortOrder: dto.sortOrder ?? 0,
@@ -115,6 +145,14 @@ export class StorageService {
           )
         : undefined;
 
+    const resolvedWeeklyRate =
+      dto.weeklyRate !== undefined ? dto.weeklyRate : unitType.weeklyRate;
+    const resolvedSupportsWeekly =
+      dto.supportsWeekly !== undefined
+        ? dto.supportsWeekly
+        : unitType.supportsWeekly;
+    this.assertWeeklyRateInvariant(resolvedSupportsWeekly, resolvedWeeklyRate);
+
     Object.assign(unitType, {
       ...(dto.name !== undefined && { name: dto.name }),
       ...(slug !== undefined && { slug }),
@@ -128,6 +166,15 @@ export class StorageService {
       ...(dto.monthlyRate !== undefined && { monthlyRate: dto.monthlyRate }),
       ...(dto.minDurationMonths !== undefined && {
         minDurationMonths: dto.minDurationMonths,
+      }),
+      ...(dto.weeklyRate !== undefined && {
+        weeklyRate: dto.weeklyRate ?? null,
+      }),
+      ...(dto.supportsWeekly !== undefined && {
+        supportsWeekly: dto.supportsWeekly,
+      }),
+      ...(dto.minDurationWeeks !== undefined && {
+        minDurationWeeks: dto.minDurationWeeks ?? null,
       }),
       ...(dto.mediaAssetId !== undefined && {
         mediaAssetId: dto.mediaAssetId ?? null,
@@ -304,6 +351,7 @@ export class StorageService {
       facilityId: dto.facilityId,
       unitTypeId: dto.unitTypeId,
       monthlyRateOverride: dto.monthlyRateOverride ?? null,
+      weeklyRateOverride: dto.weeklyRateOverride ?? null,
       isActive: dto.isActive ?? true,
     });
     // A racing duplicate (facilityId, unitTypeId) pair surfaces as the
@@ -325,6 +373,9 @@ export class StorageService {
       ...(dto.unitTypeId !== undefined && { unitTypeId: dto.unitTypeId }),
       ...(dto.monthlyRateOverride !== undefined && {
         monthlyRateOverride: dto.monthlyRateOverride ?? null,
+      }),
+      ...(dto.weeklyRateOverride !== undefined && {
+        weeklyRateOverride: dto.weeklyRateOverride ?? null,
       }),
       ...(dto.isActive !== undefined && { isActive: dto.isActive }),
     });
@@ -384,18 +435,32 @@ export class StorageService {
     const { facility, unitType, inventory } =
       await this.resolveBookableInventory(dto.facilitySlug, dto.unitTypeSlug);
 
-    const rate = inventory.monthlyRateOverride ?? unitType.monthlyRate;
+    // Exactly one of these is set — enforced by @ValidStorageDuration() on
+    // the DTO. durationMonths (legacy) implies 'month'.
+    const durationUnit = dto.durationUnit ?? StorageDurationUnit.MONTH;
+    const duration = dto.durationMonths ?? dto.duration!;
+
+    const rates = resolveStorageRates(unitType, inventory);
+    const isWeeklyEligible =
+      Boolean(rates.supportsWeekly) && (rates.weeklyRate ?? 0) > 0;
+    if (durationUnit === StorageDurationUnit.WEEK && !isWeeklyEligible) {
+      throw new BadRequestException(
+        `${unitType.name} is not available for weekly booking`,
+      );
+    }
+
     const quantity = dto.quantity ?? 1;
-    const result = storageQuote(
-      { monthlyRate: rate },
-      quantity,
-      dto.durationMonths,
-    );
+    const result = storageQuote(rates, quantity, duration, durationUnit);
 
     return {
       facility: { slug: facility.slug, name: facility.name },
       unitType: { slug: unitType.slug, name: unitType.name },
       ...result,
+      // storage-pricing.ts is decorator-free and mirrored byte-for-byte in
+      // the frontend repo, so it deals in the plain 'week' | 'month' union
+      // rather than this Nest-flavoured enum — same underlying string
+      // values, safe to re-type at this boundary.
+      durationUnit: result.durationUnit as StorageDurationUnit,
       currency: 'IDR',
     };
   }

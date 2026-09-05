@@ -1,6 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { StorageBookingStatus } from '../enums/storage-booking-status.enum';
 import { StorageUnitStatus } from '../enums/storage-unit-status.enum';
+import { StorageDurationUnit } from '../enums/storage-duration-unit.enum';
 
 /**
  * Response-shape DTOs, declared purely so Swagger/OpenAPI can describe the
@@ -54,6 +55,15 @@ export class StorageUnitTypeDto {
   dimensions!: StorageDimensionsDto | null;
   @ApiProperty({ description: 'Rupiah, integer' }) monthlyRate!: number;
   @ApiProperty() minDurationMonths!: number;
+  @ApiPropertyOptional({
+    nullable: true,
+    type: Number,
+    description: 'Rupiah, integer. Independent of monthlyRate.',
+  })
+  weeklyRate!: number | null;
+  @ApiProperty() supportsWeekly!: boolean;
+  @ApiPropertyOptional({ nullable: true, type: Number }) minDurationWeeks!:
+    number | null;
   @ApiPropertyOptional({ nullable: true, type: StorageImageDto })
   image!: StorageImageDto | null;
   @ApiProperty() isActive!: boolean;
@@ -118,6 +128,8 @@ export class StorageInventoryDto {
   @ApiProperty() unitTypeSlug!: string;
   @ApiPropertyOptional({ nullable: true, type: Number }) monthlyRateOverride!:
     number | null;
+  @ApiPropertyOptional({ nullable: true, type: Number }) weeklyRateOverride!:
+    number | null;
   @ApiProperty() isActive!: boolean;
 }
 
@@ -176,6 +188,14 @@ export class StorageAvailabilityUnitDto {
   @ApiProperty() occupied!: number;
   @ApiProperty() maintenance!: number;
   @ApiProperty({ description: 'Rupiah, integer' }) monthlyRate!: number;
+  @ApiPropertyOptional({
+    nullable: true,
+    type: Number,
+    description:
+      'Rupiah, integer. Already override-resolved, like monthlyRate.',
+  })
+  weeklyRate!: number | null;
+  @ApiProperty() supportsWeekly!: boolean;
 }
 
 export class StorageAvailabilityLayoutUnitDto {
@@ -258,11 +278,35 @@ export class StorageQuoteDto {
   facility!: StorageQuoteFacilityDto;
   @ApiProperty({ type: StorageQuoteUnitTypeDto })
   unitType!: StorageQuoteUnitTypeDto;
-  @ApiProperty({ description: 'Rupiah' }) monthlyRate!: number;
+  @ApiProperty({
+    description:
+      'Rupiah — the reference monthly rate, always present regardless of durationUnit',
+  })
+  monthlyRate!: number;
   @ApiProperty() quantity!: number;
-  @ApiProperty() durationMonths!: number;
+  @ApiPropertyOptional({
+    nullable: true,
+    type: Number,
+    description:
+      'Present only when durationUnit is "month"; null for a weekly quote.',
+  })
+  durationMonths!: number | null;
+  @ApiProperty({ enum: StorageDurationUnit })
+  durationUnit!: StorageDurationUnit;
+  @ApiProperty({ description: "Billable count in durationUnit's unit" })
+  duration!: number;
+  @ApiProperty({
+    description: 'Rupiah — the rate actually applied per durationUnit',
+  })
+  unitRate!: number;
+  @ApiProperty({ example: 'bulan', description: '"bulan" | "minggu"' })
+  unitLabel!: string;
   @ApiProperty({ description: 'Rupiah' }) subtotal!: number;
-  @ApiProperty() discountPct!: number;
+  @ApiProperty({
+    description:
+      'Always 0 for a weekly quote — the duration-discount tiers are month-only.',
+  })
+  discountPct!: number;
   @ApiProperty({ description: 'Rupiah' }) discountAmount!: number;
   @ApiProperty({ description: 'Rupiah' }) total!: number;
   @ApiProperty({ example: 'IDR' }) currency!: string;
@@ -288,9 +332,20 @@ export class StorageBookingDto {
   @ApiProperty() unitTypeName!: string;
   @ApiProperty() quantity!: number;
   @ApiProperty() startDate!: string;
-  @ApiProperty() durationMonths!: number;
+  @ApiPropertyOptional({ nullable: true, type: Number }) durationMonths!:
+    number | null;
   @ApiProperty() endDate!: string;
-  @ApiProperty({ description: 'Rupiah' }) monthlyRate!: number;
+  @ApiProperty({ enum: StorageDurationUnit })
+  durationUnit!: StorageDurationUnit;
+  @ApiProperty() duration!: number;
+  @ApiProperty({
+    description: 'Rupiah — the rate actually applied per durationUnit',
+  })
+  unitRate!: number;
+  @ApiProperty({ example: 'bulan', description: '"bulan" | "minggu"' })
+  unitLabel!: string;
+  @ApiProperty({ description: 'Rupiah — the reference monthly rate' })
+  monthlyRate!: number;
   @ApiProperty({ description: 'Rupiah' }) subtotal!: number;
   @ApiProperty({ description: 'Rupiah' }) discountAmount!: number;
   @ApiProperty({ description: 'Rupiah' }) total!: number;
@@ -322,9 +377,20 @@ export class StorageBookingAdminDto {
   @ApiProperty() unitTypeName!: string;
   @ApiProperty() quantity!: number;
   @ApiProperty() startDate!: string;
-  @ApiProperty() durationMonths!: number;
+  @ApiPropertyOptional({ nullable: true, type: Number }) durationMonths!:
+    number | null;
   @ApiProperty() endDate!: string;
-  @ApiProperty({ description: 'Rupiah' }) monthlyRate!: number;
+  @ApiProperty({ enum: StorageDurationUnit })
+  durationUnit!: StorageDurationUnit;
+  @ApiProperty() duration!: number;
+  @ApiProperty({
+    description: 'Rupiah — the rate actually applied per durationUnit',
+  })
+  unitRate!: number;
+  @ApiProperty({ example: 'bulan', description: '"bulan" | "minggu"' })
+  unitLabel!: string;
+  @ApiProperty({ description: 'Rupiah — the reference monthly rate' })
+  monthlyRate!: number;
   @ApiProperty({ description: 'Rupiah' }) subtotal!: number;
   @ApiProperty({ description: 'Rupiah' }) discountAmount!: number;
   @ApiProperty({ description: 'Rupiah' }) total!: number;
