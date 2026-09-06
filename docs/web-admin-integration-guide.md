@@ -259,8 +259,8 @@ item 5 in §10 the same way for every row you fetch — check the `type`.
 
 Two more Moving admin surfaces exist but aren't image-bearing, so they're
 not rows above: `/admin/moving/settings` (a pricing-policy singleton) and
-`/admin/moving/leads` (read + triage of captured leads, no image field).
-Both are covered in the same
+`/admin/moving/bookings` (review + status transitions on captured bookings,
+no image field). Both are covered in the same
 [moving-admin-integration.md](moving-admin-integration.md).
 
 ## 10. Checklist for onboarding a new asset type

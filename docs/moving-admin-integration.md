@@ -2,9 +2,9 @@
 
 Audience: the admin panel — truck-class and add-on catalog management for
 the Moving Support ("Mandana Move") module, the pricing-policy singleton,
-and triaging leads captured from the public quote page. See
+and reviewing bookings captured from the public quote page. See
 [`docs/moving-integration.md`](./moving-integration.md) for the public
-catalog/quote/lead-capture contract this data feeds.
+catalog/quote/booking-capture contract this data feeds.
 
 ## 1. Base URL, auth & response envelope
 
@@ -21,7 +21,7 @@ endpoints are unpaginated plain arrays, filterable only by
 `?isActive=true|false` (omit it to get both active and inactive rows —
 sending anything other than the literal string `true` is treated as
 `false`, not rejected). Settings is a GET/PATCH singleton with no list at
-all. **Only `/leads` paginates** (default `page=1&limit=12`, max
+all. **Only `/bookings` paginates** (default `page=1&limit=12`, max
 `limit=100`) — it's the one surface here that grows unbounded. Build your
 truck-class and add-on screens as plain tables, not paginated grids.
 
@@ -80,8 +80,8 @@ Three things to get right before you build the edit screen:
   name-only edit. Send the existing `slug` explicitly alongside a `name`
   change if you want it to survive; a collision is suffixed `-2`/`-3`
   silently, never a 409. This matters because the public doc promises
-  `?truck=<slug>` deep links keep working, and because past leads snapshot
-  `truckSlug` as a plain string (§6) — a silent re-slug desyncs both.
+  `?truck=<slug>` deep links keep working, and because past bookings
+  snapshot `truckSlug` as a plain string (§6) — a silent re-slug desyncs both.
 - **`mediaAssetId` ↔ `image`.** Bind your image picker's value to
   `mediaAssetId` (the raw id) and render the preview from `image` (the
   built `{ url, srcset, ... }` projection of that same asset) — they
@@ -93,7 +93,7 @@ Three things to get right before you build the edit screen:
   §2/§3 for the full upload-then-attach flow and the shared image component;
   it's identical here.
 - **`DELETE` is an unguarded hard delete.** It returns **204** even if 500
-  leads reference that truck by slug — there's no 409, nothing blocks it.
+  bookings reference that truck by slug — there's no 409, nothing blocks it.
   Deliberate, not an oversight — see §6 for why.
 
 ## 3. Add-ons
@@ -141,7 +141,7 @@ the stored `unitPrice` is `0` from when it was a percent row.
 
 Same slug-regeneration and unguarded-hard-delete behavior as truck classes
 (§2) applies here — renaming an add-on changes its slug silently, and
-`DELETE` never checks whether any lead's `addons[]` references it.
+`DELETE` never checks whether any booking's `addons[]` references it.
 
 ## 4. Settings singleton
 
@@ -165,28 +165,37 @@ This row **auto-seeds** the first time it's read if missing (from
 `roundToIdr: 10_000, bandPct: 10, defaultIncludedKm: 5`) — `GET /settings`
 can never 404.
 
-Changing any of this **reprices every subsequent quote and lead capture
+Changing any of this **reprices every subsequent quote and booking capture
 immediately** — no deploy, no cache to bust. It changes **nothing** about a
-lead already captured: every lead snapshots its own priced figures at
+booking already captured: every booking snapshots its own priced figures at
 submission time (§6). The public `GET /moving/pricing-config` serves this
 same row read-only, so the customer-facing preview picks up a change the
 moment you save it here.
 
-## 5. Leads
+## 5. Bookings
 
-`GET /leads?status&from&to&search&page&limit` · `GET /leads/:id` ·
-`PATCH /leads/:id`
+`GET /bookings?status&search&from&to&sortBy&sortOrder&page&limit` ·
+`GET /bookings/:id` · `PATCH /bookings/:id` (adminNote only) ·
+`PATCH /bookings/:id/confirm` · `PATCH /bookings/:id/reject` ·
+`PATCH /bookings/:id/cancel` · `PATCH /bookings/:id/complete`
+
+See [`docs/booking-list-contract.md`](./booking-list-contract.md) for the
+query-param conventions shared with Smart Storage and Event Support
+(pagination, `search`, the Jakarta-day `from`/`to` semantics, `sortBy`/
+`sortOrder`). This section covers only what's specific to Moving.
 
 ```jsonc
-// GET /leads?status=new&search=budi&from=2026-09-01&to=2026-09-03 →
+// GET /bookings?status=pending&search=budi&from=2026-09-01&to=2026-09-03 →
 {
   "data": [
     {
-      "id": "uuid", "reference": "MDN-MOV-A7K92X", "status": "new",
-      // ...every field from the public MovingLeadDto (destinations[],
+      "id": "uuid", "reference": "MDN-MOV-A7K92X", "status": "pending",
+      // ...every field from the public MovingBookingDto (destinations[],
       // legs[], addons[], every priced figure) — see
-      // moving-integration.md §3's POST /moving/leads response — plus:
+      // moving-integration.md §3's POST /moving/bookings response — plus:
       "adminNote": null,
+      "confirmedAt": null,
+      "confirmedByName": null,
       "updatedAt": "2026-09-02T04:00:00.000Z"
     }
   ],
@@ -194,59 +203,72 @@ moment you save it here.
 }
 ```
 
-| Param | Matches |
-|---|---|
-| `status` | Exact — `new`, `contacted`, `converted`, `lost`. |
-| `from` / `to` | Inclusive **Jakarta calendar days** on capture time (`createdAt`) — unlike Event Support's `from`/`to`, which bound a booking's *event window*, a lead has no event window. Any time component you send is ignored; a full local day either side of the boundary counts. |
-| `search` | Case-insensitive substring over `reference`, `customerName`, and `phone` — but **today only `reference` is ever populated** (the public web form collects no contact fields), so in practice this searches reference alone until that changes. |
+`sortBy` accepts `createdAt` (default), `reference`, or `total`. There is no
+`startDate`/window sort here — unlike Storage/Event, a booking has no rental
+window of its own to sort by.
 
-An empty `?status=` and an empty `?search=` behave differently: the former
-fails enum validation and **400**s, the latter is simply a no-op filter.
-**Omit a filter key you're not using — don't send it blank.**
+**Status is a real state machine now**, matching Storage's graph exactly
+(including the same five values — Moving picked up `rejected` alongside
+Storage/Event's `pending`/`confirmed`/`cancelled`/`completed`, replacing the
+old CRM-only `new`/`contacted`/`converted`/`lost`):
 
-```jsonc
-// PATCH /leads/:id → { "status": "contacted", "adminNote": "Follow-up dijadwalkan 3 Sep" }
-// ← 200, full lead + adminNote/updatedAt reflecting the change
+```
+pending ──confirm──▶ confirmed ──complete──▶ completed
+   │                     │
+   └──reject──▶ rejected └──cancel──▶ cancelled
 ```
 
-**What this screen deliberately can't do.** No `POST` — a lead is only ever
-created by the public quote-and-WhatsApp flow — and no `DELETE`. `status`
-is pure free-form CRM triage: any of the four values to any other, with
-**no legal-transition table and no 409** — the deliberate opposite of Event
-Support's `pending → confirmed → completed` state machine, because nothing
-here is "reserved" the way stock is. If you're building this screen right
-after the Event Support one, don't go looking for a confirm/cancel action
-or a transition table; there isn't one. Each list row is the **complete**
-lead object — destinations, add-ons, and the per-leg price breakdown
-included — so no separate detail fetch is needed to render a row, but it
-does mean a high `?limit` on multi-stop leads is a heavier response than
-the equivalent Event Support booking row.
+Each transition takes an optional `{ "adminNote": "..." }` body and returns
+the full updated booking. Calling one from the wrong starting status is
+**409** (`"Booking MDN-MOV-... is confirmed, cannot reject"`) — the same
+shape as Storage's and Event Support's transition errors. `confirm` also
+stamps `confirmedAt`/`confirmedByName` from the acting admin. **Unlike
+Storage/Event, none of these four transitions touch inventory** — Moving
+reserves nothing, so there's no 409 from a stock shortfall, only from an
+illegal status change.
 
-## 6. What a lead snapshots, and why
+`PATCH /bookings/:id` (no suffix) is now **adminNote-only** — sending
+`status` in that body is a **400** (the global `ValidationPipe` rejects
+unrecognized fields), not a silent no-op. Change status exclusively through
+the four transition routes above.
 
-Every price field on a lead — `baseFare`, `distanceFare`, `travelSubtotal`,
+```jsonc
+// PATCH /bookings/:id/confirm → { "adminNote": "Dikonfirmasi via telepon" }
+// ← 200, full booking with status: "confirmed", confirmedAt/confirmedByName set
+```
+
+Each list row is the **complete** booking object — destinations, add-ons,
+and the per-leg price breakdown included — so no separate detail fetch is
+needed to render a row, but it does mean a high `?limit` on multi-stop
+bookings is a heavier response than the equivalent Event Support booking
+row. Still no `POST` here — a booking is only ever created by the public
+quote-and-WhatsApp flow — and no `DELETE`.
+
+## 6. What a booking snapshots, and why
+
+Every price field on a booking — `baseFare`, `distanceFare`, `travelSubtotal`,
 `total`, every `legs[]` entry, every `addons[]` line — plus `truckSlug` and
 `truckName` themselves, is a **point-in-time snapshot**, computed once via
 the exact same pricing path `POST /moving/quote` uses, at the moment the
 customer clicked "Pesan via WhatsApp." None of it is a live join back to the
 catalog:
 
-- There is **no foreign key** from a lead to `truck_classes`, and none from
-  a lead's add-on lines to `moving_addons`. `truckSlug`/`truckName` are
-  copied strings; each add-on line copies its own `name`/`unitPrice`/`amount`
-  at the moment it was priced.
+- There is **no foreign key** from a booking to `truck_classes`, and none
+  from a booking's add-on lines to `moving_addons`. `truckSlug`/`truckName`
+  are copied strings; each add-on line copies its own
+  `name`/`unitPrice`/`amount` at the moment it was priced.
 - This is exactly why §2/§3's `DELETE` is unguarded: a real foreign key
-  would permanently block deleting a truck class or add-on that any lead
+  would permanently block deleting a truck class or add-on that any booking
   ever referenced (or force a soft-delete dance). The snapshot design means
-  catalog cleanup and lead history never fight each other.
-- The flip side: a lead can point at a `truckSlug` that's since been
+  catalog cleanup and booking history never fight each other.
+- The flip side: a booking can point at a `truckSlug` that's since been
   renamed, deactivated, or deleted outright, and there is no join path to
-  repair or even detect that from the lead alone. Don't build a "click
-  through to the truck class" link on a lead row — there may be nothing on
-  the other end.
+  repair or even detect that from the booking alone. Don't build a "click
+  through to the truck class" link on a booking row — there may be nothing
+  on the other end.
 - A later change to a rate card, an add-on's price, or the settings
-  singleton (§4) **never** rewrites a number on an already-captured lead.
-  If a customer disputes a quoted price, the lead's own stored fields are
+  singleton (§4) **never** rewrites a number on an already-captured booking.
+  If a customer disputes a quoted price, the booking's own stored fields are
   the source of truth, not a live recalculation.
 
 ## 7. Money
@@ -275,12 +297,16 @@ Same envelope as the rest of the API:
   "error": { "message": "...", "error": "Conflict", "statusCode": 409 } }
 ```
 
-**409** fires only from activating a second active `kind: "toll"` add-on
-(§3) — it's the module's *only* 409, and explicitly: **there is no
-delete-time 409 anywhere in Moving**, unlike Event Support's category/item
-deletes. **400** comes from the add-on cross-field rules (§3) and from
-every ordinary DTO validator — an out-of-range `sortOrder`, a malformed
-`from`/`to`, an unknown `status`, a `unitPrice`/`percentBps` of `0`. **404**
-on any `:id` that doesn't resolve. A duplicate `slug` you supply yourself
-never 409s — it's silently suffixed `-2`, `-3`, ... (§2/§3) — read back
-`data.slug` after create if you need to know what actually landed.
+**409** fires from two unrelated places: activating a second active
+`kind: "toll"` add-on (§3), and calling a booking transition (§5) from the
+wrong starting status. Explicitly: **there is still no delete-time 409
+anywhere in Moving**, unlike Event Support's category/item deletes — and
+Moving's transition 409s never involve inventory, unlike Storage's/Event's
+(nothing here is reserved). **400** comes from the add-on cross-field rules
+(§3) and from every ordinary DTO validator — an out-of-range `sortOrder`, a
+malformed `from`/`to`, an unknown `status`, a `unitPrice`/`percentBps` of
+`0`, or a `status` key sent to the adminNote-only `PATCH /bookings/:id`
+(§5). **404** on any `:id` that doesn't resolve. A duplicate `slug` you
+supply yourself never 409s — it's silently suffixed `-2`, `-3`, ... (§2/§3)
+— read back `data.slug` after create if you need to know what actually
+landed.

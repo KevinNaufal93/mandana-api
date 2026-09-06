@@ -1,9 +1,11 @@
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
-import { CreateMovingLeadDto } from './create-moving-lead.dto';
+import { CreateMovingBookingDto } from './create-moving-booking.dto';
 
-function build(overrides: Record<string, unknown> = {}): CreateMovingLeadDto {
-  return plainToInstance(CreateMovingLeadDto, {
+function build(
+  overrides: Record<string, unknown> = {},
+): CreateMovingBookingDto {
+  return plainToInstance(CreateMovingBookingDto, {
     truckSlug: 'cdd',
     legs: [{ distanceMeters: 20_000 }],
     pickup: { lat: -6.2, lng: 106.8 },
@@ -12,7 +14,7 @@ function build(overrides: Record<string, unknown> = {}): CreateMovingLeadDto {
   });
 }
 
-describe('CreateMovingLeadDto validation', () => {
+describe('CreateMovingBookingDto validation', () => {
   it('accepts a valid single-destination body', async () => {
     const errors = await validate(build());
     expect(errors).toHaveLength(0);

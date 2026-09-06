@@ -1,15 +1,17 @@
 import { Column, Entity, JoinColumn, ManyToOne, OneToMany } from 'typeorm';
 import { BaseEntity } from '../../../common/entities/base.entity';
 import { EventBookingStatus } from '../enums/event-booking-status.enum';
+import { EventBookingSource } from '../enums/event-booking-source.enum';
 import { EventBookingItem } from './event-booking-item.entity';
 import { User } from '../../users/entities/user.entity';
 import { naiveLocalDateTimeTransformer } from './naive-datetime.transformer';
 
 /**
- * An admin-recorded event-support booking. All real booking happens over
- * WhatsApp — there is no public write endpoint — so every row here is
- * created by an admin (`createdBy`), acting as the guard the product asked
- * for: every booking is attributable to the admin who took it.
+ * An event-support booking, submitted either by a customer directly
+ * (`source: 'public'`, via POST /event-support/bookings, `createdBy: null`)
+ * or recorded by an admin after a WhatsApp conversation (`source: 'admin'`,
+ * `createdBy` set from `@CurrentUser()`). Either way, pricing is always
+ * recomputed server-side — never trusted from the request.
  *
  * `startDate`/`endDate` are the min/max across `items`, denormalized here
  * purely so the admin list can filter/sort by event window without joining.
@@ -73,6 +75,13 @@ export class EventBooking extends BaseEntity {
     default: EventBookingStatus.PENDING,
   })
   status!: EventBookingStatus;
+
+  @Column({
+    type: 'enum',
+    enum: EventBookingSource,
+    default: EventBookingSource.ADMIN,
+  })
+  source!: EventBookingSource;
 
   @Column({ type: 'int' })
   subtotal!: number;

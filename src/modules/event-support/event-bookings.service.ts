@@ -7,16 +7,26 @@ import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
 import { DataSource, In, QueryFailedError, Repository } from 'typeorm';
 import { EventBooking } from './entities/event-booking.entity';
 import { EventBookingItem } from './entities/event-booking-item.entity';
+import { EventSupportSettings } from './entities/event-support-settings.entity';
 import { EventBookingStatus } from './enums/event-booking-status.enum';
+import { EventBookingSource } from './enums/event-booking-source.enum';
+import { EventBookingSort } from './enums/event-booking-sort.enum';
+import { EventBillingMode } from './enums/event-billing-mode.enum';
 import { CreateEventBookingDto } from './dto/create-event-booking.dto';
+import { CreatePublicEventBookingDto } from './dto/create-public-event-booking.dto';
 import { QueryEventBookingsDto } from './dto/query-event-bookings.dto';
 import { TransitionEventBookingDto } from './dto/transition-event-booking.dto';
 import { PaginatedResult } from '../../common/interfaces/paginated-result.interface';
 import { User } from '../users/entities/user.entity';
-import { EventItemsService } from './event-items.service';
+import {
+  EventItemsService,
+  EventQuoteComputation,
+} from './event-items.service';
 import { EventAvailabilityService } from './event-availability.service';
 import { EventSupportSettingsService } from './event-support-settings.service';
 import { aggregateEventQuote, computeLine } from './event-pricing';
+import { applyJakartaDayRange } from '../../common/utils/jakarta-day-range';
+import { SortOrder } from '../../common/enums/sort-order.enum';
 import {
   generateBookingReference,
   MAX_REFERENCE_ATTEMPTS,
@@ -30,6 +40,50 @@ interface LockedItemRow {
   stockQuantity: number;
   name: string;
 }
+
+/** Everything saveBookingWithReference() needs to build one EventBookingItem
+ * row — shared by both create() (admin, itemId-keyed) and createPublic()
+ * (public, slug-keyed via EventItemsService.quote()). `days` is deliberately
+ * NOT here: it is recomputed centrally from startDate/endDate in
+ * saveBookingWithReference(), since neither caller's source data carries it
+ * pre-computed. */
+interface BookingLineInput {
+  itemId: string;
+  itemName: string;
+  quantity: number;
+  startDate: string;
+  endDate: string;
+  dropoffAt: string;
+  pickupAt: string;
+  billingMode: EventBillingMode;
+  pricePerDay: number;
+  unitPrice: number;
+  unitLabel: 'jam' | 'hari';
+  billableUnits: number;
+  extraHours: number | null;
+  extraHoursTotal: number | null;
+  lineTotal: number;
+}
+
+interface BookingHeaderInput {
+  customerName: string;
+  phone: string | null;
+  email: string | null;
+  eventLocation: string | null;
+  notes: string | null;
+  source: EventBookingSource;
+  createdById: string | null;
+}
+
+/** Allow-listed sortBy -> column map: TypeScript enforces every enum value
+ * has an entry (a missing one is a compile error), and user input is only
+ * ever used as a lookup key here — never interpolated into SQL. */
+const EVENT_SORT_COLUMNS: Record<EventBookingSort, string> = {
+  [EventBookingSort.CREATED_AT]: 'b.createdAt',
+  [EventBookingSort.REFERENCE]: 'b.reference',
+  [EventBookingSort.TOTAL]: 'b.total',
+  [EventBookingSort.START_DATE]: 'b.startDate',
+};
 
 @Injectable()
 export class EventBookingsService {
@@ -59,17 +113,30 @@ export class EventBookingsService {
    * query-builder with a joined one-to-many multiplies rows and corrupts
    * both `skip`/`take` and the total count (unlike storage's admin listing,
    * whose joins are all many-to-one). Fetch matching ids first, then load
-   * the full entity graph for just that page. */
+   * the full entity graph for just that page.
+   *
+   * Do NOT add a join here — see MovingBookingsService.buildFilteredQb()'s
+   * doc comment for why: TypeORM only promotes skip()/take() into SQL
+   * LIMIT/OFFSET when the builder has zero join attributes. */
   private buildFilteredQb(query: QueryEventBookingsDto) {
-    const { status, from, to, search } = query;
+    const { status, from, to, startFrom, startTo, search } = query;
     const qb = this.bookingRepo.createQueryBuilder('b');
 
     if (status) qb.andWhere('b.status = :status', { status });
-    if (from) qb.andWhere('b.endDate >= :from', { from });
-    if (to) qb.andWhere('b.startDate <= :to', { to });
+
+    applyJakartaDayRange(qb, 'b.createdAt', from, to);
+
+    // Window OVERLAP over the event's own start/end date — this is the OLD
+    // from/to semantics, renamed to startFrom/startTo now that from/to
+    // means createdAt everywhere (see BookingListQueryDto). A multi-day
+    // booking that started before startFrom still matches if it hasn't
+    // ended yet — BREAKING CHANGE for existing callers of the old from/to.
+    if (startFrom) qb.andWhere('b.endDate >= :startFrom', { startFrom });
+    if (startTo) qb.andWhere('b.startDate <= :startTo', { startTo });
+
     if (search) {
       qb.andWhere(
-        '(b.reference ILIKE :search OR b.customerName ILIKE :search OR b.phone ILIKE :search)',
+        '(b.reference ILIKE :search OR b.customerName ILIKE :search OR b.phone ILIKE :search OR b.email ILIKE :search)',
         { search: `%${search}%` },
       );
     }
@@ -79,13 +146,14 @@ export class EventBookingsService {
   async findAllAdmin(
     query: QueryEventBookingsDto,
   ): Promise<PaginatedResult<EventBooking>> {
-    const { page, limit } = query;
+    const { page, limit, sortBy, sortOrder } = query;
 
     const total = await this.buildFilteredQb(query).getCount();
 
+    const direction = sortOrder === SortOrder.ASC ? 'ASC' : 'DESC';
     const idRows = await this.buildFilteredQb(query)
       .select('b.id', 'id')
-      .orderBy('b.createdAt', 'DESC')
+      .orderBy(EVENT_SORT_COLUMNS[sortBy], direction)
       .addOrderBy('b.id', 'DESC')
       .skip((page - 1) * limit)
       .take(limit)
@@ -112,66 +180,33 @@ export class EventBookingsService {
   }
 
   /**
-   * Creates a `pending` booking. Deliberately does NOT reserve stock — per
-   * the same product decision as Smart Storage, only a confirmed booking
-   * counts against availability, so two admins can both record a request
-   * against the last unit here. The guard against overselling lives
-   * entirely in confirm() below. Every line's `itemName`/`pricePerDay` is
-   * snapshotted at creation time so a later rename or price change never
-   * rewrites this booking's history.
+   * Shared tail of both create paths below: turns priced lines + header
+   * fields into a saved, reloaded EventBooking, with the same 5-attempt
+   * reference-collision retry loop Storage/Moving also use.
+   *
+   * Booking-level startDate/endDate/dropoffAt/pickupAt are always the
+   * min/max across `lineInputs` — NEVER copied from a cart-level dto field.
+   * A cart-level dropoffAt/pickupAt can disagree with a per-line override,
+   * so deriving from the lines themselves is the only value that is
+   * correct for every line in the booking.
    */
-  async create(dto: CreateEventBookingDto, admin: User): Promise<EventBooking> {
-    const items = await this.itemsService.findManyPublishedByIdsOrFail(
-      dto.items.map((l) => l.itemId),
-    );
-    const itemById = new Map(items.map((i) => [i.id, i]));
-    const policy = this.settingsService.toPricingPolicy(
-      await this.settingsService.get(),
-    );
-
-    const lines = dto.items.map((lineDto) => {
-      const item = itemById.get(lineDto.itemId)!;
-      const computed = computeLine(
-        {
-          pricePerDay: item.pricePerDay,
-          hourlyRate: item.hourlyRate,
-          supportsHourly: item.supportsHourly,
-          minimumHours: item.minimumHours,
-          quantity: lineDto.quantity,
-          dropoffAt: lineDto.dropoffAt,
-          pickupAt: lineDto.pickupAt,
-        },
-        policy,
-      );
+  private async saveBookingWithReference(
+    header: BookingHeaderInput,
+    lineInputs: BookingLineInput[],
+  ): Promise<EventBooking> {
+    const lines = lineInputs.map((l) => ({
+      ...l,
       // Calendar days held — still meaningful under hourly billing, kept
       // for anything (admin list filters, old reports) that reads `days`.
-      const days = Math.max(
+      days: Math.max(
         1,
         Math.round(
-          (Date.parse(`${computed.endDate}T00:00:00Z`) -
-            Date.parse(`${computed.startDate}T00:00:00Z`)) /
+          (Date.parse(`${l.endDate}T00:00:00Z`) -
+            Date.parse(`${l.startDate}T00:00:00Z`)) /
             86_400_000,
         ) + 1,
-      );
-      return {
-        itemId: item.id,
-        itemName: item.name,
-        quantity: computed.quantity,
-        startDate: computed.startDate,
-        days,
-        endDate: computed.endDate,
-        dropoffAt: computed.dropoffAt,
-        pickupAt: computed.pickupAt,
-        billingMode: computed.billingMode,
-        pricePerDay: item.pricePerDay,
-        unitPrice: computed.unitPrice,
-        unitLabel: computed.unitLabel,
-        billableUnits: computed.billableUnits,
-        extraHours: computed.extraHours,
-        extraHoursTotal: computed.extraHoursTotal,
-        lineTotal: computed.lineTotal,
-      };
-    });
+      ),
+    }));
 
     const quote = aggregateEventQuote(lines);
     const startDate = lines.reduce(
@@ -194,11 +229,12 @@ export class EventBookingsService {
     for (let attempt = 0; attempt < MAX_REFERENCE_ATTEMPTS; attempt++) {
       const booking = this.bookingRepo.create({
         reference: generateBookingReference('MDN-EVT'),
-        customerName: dto.customerName,
-        phone: dto.phone ?? null,
-        email: dto.email ?? null,
-        eventLocation: dto.eventLocation ?? null,
-        notes: dto.notes ?? null,
+        customerName: header.customerName,
+        phone: header.phone,
+        email: header.email,
+        eventLocation: header.eventLocation,
+        notes: header.notes,
+        source: header.source,
         startDate,
         endDate,
         dropoffAt,
@@ -206,7 +242,7 @@ export class EventBookingsService {
         subtotal: quote.subtotal,
         discountAmount: quote.discountAmount,
         total: quote.total,
-        createdById: admin.id,
+        createdById: header.createdById,
         items: lines.map((l) => this.bookingItemRepo.create(l)),
       });
 
@@ -226,6 +262,125 @@ export class EventBookingsService {
     }
     /* istanbul ignore next -- unreachable: the loop above always returns or throws */
     throw new Error('Failed to generate a unique booking reference');
+  }
+
+  /**
+   * Creates a `pending` booking recorded by an admin after a WhatsApp
+   * conversation. Deliberately does NOT reserve stock — per the same
+   * product decision as Smart Storage, only a confirmed booking counts
+   * against availability, so two admins can both record a request against
+   * the last unit here. The guard against overselling lives entirely in
+   * confirm() below. Every line's `itemName`/`pricePerDay` is snapshotted
+   * at creation time so a later rename or price change never rewrites this
+   * booking's history.
+   */
+  async create(dto: CreateEventBookingDto, admin: User): Promise<EventBooking> {
+    const items = await this.itemsService.findManyPublishedByIdsOrFail(
+      dto.items.map((l) => l.itemId),
+    );
+    const itemById = new Map(items.map((i) => [i.id, i]));
+    const policy = this.settingsService.toPricingPolicy(
+      await this.settingsService.get(),
+    );
+
+    const lineInputs: BookingLineInput[] = dto.items.map((lineDto) => {
+      const item = itemById.get(lineDto.itemId)!;
+      const computed = computeLine(
+        {
+          pricePerDay: item.pricePerDay,
+          hourlyRate: item.hourlyRate,
+          supportsHourly: item.supportsHourly,
+          minimumHours: item.minimumHours,
+          quantity: lineDto.quantity,
+          dropoffAt: lineDto.dropoffAt,
+          pickupAt: lineDto.pickupAt,
+        },
+        policy,
+      );
+      return {
+        itemId: item.id,
+        itemName: item.name,
+        quantity: computed.quantity,
+        startDate: computed.startDate,
+        endDate: computed.endDate,
+        dropoffAt: computed.dropoffAt,
+        pickupAt: computed.pickupAt,
+        billingMode: computed.billingMode,
+        pricePerDay: item.pricePerDay,
+        unitPrice: computed.unitPrice,
+        unitLabel: computed.unitLabel,
+        billableUnits: computed.billableUnits,
+        extraHours: computed.extraHours,
+        extraHoursTotal: computed.extraHoursTotal,
+        lineTotal: computed.lineTotal,
+      };
+    });
+
+    return this.saveBookingWithReference(
+      {
+        customerName: dto.customerName,
+        phone: dto.phone ?? null,
+        email: dto.email ?? null,
+        eventLocation: dto.eventLocation ?? null,
+        notes: dto.notes ?? null,
+        source: EventBookingSource.ADMIN,
+        createdById: admin.id,
+      },
+      lineInputs,
+    );
+  }
+
+  /**
+   * Creates a `pending` booking submitted directly by a customer — the
+   * public counterpart to Storage's `POST /storage/bookings` and Moving's
+   * `POST /moving/bookings`. Routes pricing through the exact same
+   * `EventItemsService.quote()` call `POST /event-support/quote` uses, so
+   * the persisted price can never drift from the quote the customer saw,
+   * and per-line availability comes back for free as part of that call.
+   * Reserves nothing — same rule as the admin path above.
+   */
+  async createPublic(dto: CreatePublicEventBookingDto): Promise<{
+    booking: EventBooking;
+    quote: EventQuoteComputation;
+    settings: EventSupportSettings;
+  }> {
+    const [quote, settings] = await Promise.all([
+      this.itemsService.quote(dto),
+      this.settingsService.get(),
+    ]);
+
+    const lineInputs: BookingLineInput[] = quote.lines.map((l) => ({
+      itemId: l.item.id,
+      itemName: l.item.name,
+      quantity: l.quantity,
+      startDate: l.startDate,
+      endDate: l.endDate,
+      dropoffAt: l.dropoffAt,
+      pickupAt: l.pickupAt,
+      billingMode: l.billingMode,
+      pricePerDay: l.item.pricePerDay,
+      unitPrice: l.unitPrice,
+      unitLabel: l.unitLabel,
+      billableUnits: l.billableUnits,
+      extraHours: l.extraHours,
+      extraHoursTotal: l.extraHoursTotal,
+      lineTotal: l.lineTotal,
+    }));
+
+    const booking = await this.saveBookingWithReference(
+      {
+        customerName: dto.customerName,
+        phone: dto.phone ?? null,
+        email: dto.email ?? null,
+        eventLocation: dto.eventLocation ?? null,
+        notes: dto.notes ?? null,
+        source: EventBookingSource.PUBLIC,
+        createdById: null,
+      },
+      lineInputs,
+    );
+
+    return { booking, quote, settings };
   }
 
   private assertStatus(

@@ -72,7 +72,7 @@ export class StorageBookingsAdminController {
   @Get()
   @ApiOperation({
     summary:
-      'List storage bookings (paginated, filterable by status/facility/unit type)',
+      'List storage bookings (paginated; filter by status, facility, unit type, capture-date range, rental-window range, and free-text search over reference/customer name/phone/email; sortable by createdAt/reference/total/startDate)',
   })
   @ApiOkResponse({ type: StorageBookingAdminListResponseDto })
   async findAll(@Query() query: QueryStorageBookingsDto) {

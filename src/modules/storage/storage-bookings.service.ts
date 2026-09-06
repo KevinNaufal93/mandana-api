@@ -29,6 +29,9 @@ import {
   MAX_REFERENCE_ATTEMPTS,
   POSTGRES_UNIQUE_VIOLATION,
 } from '../../common/utils/booking-reference';
+import { applyJakartaDayRange } from '../../common/utils/jakarta-day-range';
+import { SortOrder } from '../../common/enums/sort-order.enum';
+import { StorageBookingSort } from './enums/storage-booking-sort.enum';
 
 /** Shapes for the two raw SQL result sets in confirm() — `queryRunner.query()`
  * returns `any`, so these give the two destructures an explicit, honest type
@@ -39,6 +42,16 @@ interface ClaimedUnitRow {
 interface CountRow {
   count: number;
 }
+
+/** Allow-listed sortBy -> column map: TypeScript enforces every enum value
+ * has an entry (a missing one is a compile error), and user input is only
+ * ever used as a lookup key here — never interpolated into SQL. */
+const STORAGE_SORT_COLUMNS: Record<StorageBookingSort, string> = {
+  [StorageBookingSort.CREATED_AT]: 'b.createdAt',
+  [StorageBookingSort.REFERENCE]: 'b.reference',
+  [StorageBookingSort.TOTAL]: 'b.total',
+  [StorageBookingSort.START_DATE]: 'b.startDate',
+};
 
 @Injectable()
 export class StorageBookingsService {
@@ -62,10 +75,31 @@ export class StorageBookingsService {
     return booking;
   }
 
+  /**
+   * All three joins here (`facility`, `unitType`, `confirmedBy`) are
+   * many-to-one, so each parent row yields exactly one joined row — SQL row
+   * count equals entity count, which is what makes `getManyAndCount()` with
+   * `skip`/`take` exact here. This is NOT the same hazard Moving/Event's
+   * one-to-many children carry (see their buildFilteredQb() doc comments);
+   * do not "fix" this into their two-phase id-page pattern.
+   */
   async findAllAdmin(
     query: QueryStorageBookingsDto,
   ): Promise<PaginatedResult<StorageBooking>> {
-    const { page, limit, status, facilitySlug, unitTypeSlug } = query;
+    const {
+      page,
+      limit,
+      status,
+      facilitySlug,
+      unitTypeSlug,
+      search,
+      from,
+      to,
+      startFrom,
+      startTo,
+      sortBy,
+      sortOrder,
+    } = query;
 
     const qb = this.bookingRepo
       .createQueryBuilder('b')
@@ -81,9 +115,33 @@ export class StorageBookingsService {
       qb.andWhere('unitType.slug = :unitTypeSlug', { unitTypeSlug });
     }
 
-    qb.orderBy('b.createdAt', 'DESC')
-      .skip((page - 1) * limit)
-      .take(limit);
+    applyJakartaDayRange(qb, 'b.createdAt', from, to);
+
+    // Window OVERLAP, not a start-date-only filter — a booking that started
+    // before `startFrom` still matches if it hasn't ended yet. Same
+    // semantics as Event Support's startFrom/startTo on purpose.
+    if (startFrom) qb.andWhere('b.endDate >= :startFrom', { startFrom });
+    if (startTo) qb.andWhere('b.startDate <= :startTo', { startTo });
+
+    if (search) {
+      qb.andWhere(
+        '(b.reference ILIKE :search OR b.customerName ILIKE :search OR b.phone ILIKE :search OR b.email ILIKE :search)',
+        { search: `%${search}%` },
+      );
+    }
+
+    // Every sortable column stays on the `b` alias — this builder has joins
+    // AND skip/take, so TypeORM compiles pagination through a distinct-id
+    // subquery; ordering by a joined alias inside that is where it has
+    // historically produced broken SQL. `id` tiebreaker keeps paging stable
+    // when two rows share a sort value (e.g. the same createdAt or total).
+    const direction = sortOrder === SortOrder.ASC ? 'ASC' : 'DESC';
+    qb.orderBy(STORAGE_SORT_COLUMNS[sortBy], direction).addOrderBy(
+      'b.id',
+      'DESC',
+    );
+
+    qb.skip((page - 1) * limit).take(limit);
 
     const [data, total] = await qb.getManyAndCount();
     return {

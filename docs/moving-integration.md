@@ -307,13 +307,18 @@ fetched config as the 3rd argument to `movingQuote()` client-side instead —
 that removes the "remember to change both repos" hazard for every value
 except the math itself.
 
-### POST /moving/leads (public) — new
+### POST /moving/bookings (public)
 
 Persists the order a customer configured — truck, pickup, an ordered list of
 destinations, add-ons, and the priced result — the moment they click "Pesan
 via WhatsApp", before the real conversation/confirmation happens over
 WhatsApp with a human. This is the fix for the "No lead capture" gap
 previously flagged in §5.
+
+> **Renamed from `POST /moving/leads`.** The underlying record (and the
+> admin review screen) moved from free-form CRM triage to the same
+> `pending → confirmed/rejected → cancelled/completed` state machine Storage
+> and Event Support use — see `docs/moving-admin-integration.md` §5.
 
 Same request shape as `POST /moving/quote` (identical `truckSlug` / `legs` /
 `roundTrip` / `tollRoute` / `declaredValue` / `addons` fields and validation
@@ -351,7 +356,7 @@ same server-side path), plus `pickup` and `destinations`:
   "data": {
     "id": "uuid",
     "reference": "MDN-MOV-A7K92X",
-    "status": "new",
+    "status": "pending",
     "truckSlug": "cdd",
     "truckName": "CDD (Colt Diesel Double)",
     "pickupAddress": "Jl. Sudirman No. 1, Jakarta Selatan",
@@ -437,7 +442,7 @@ Field notes:
 Not this doc's concern — see
 [`docs/moving-admin-integration.md`](./moving-admin-integration.md) for the
 full admin contract (truck-class/add-on CRUD, the pricing-policy singleton,
-and lead triage), written for the admin panel. Keeping it in one place
+and reviewing bookings), written for the admin panel. Keeping it in one place
 instead of two so the endpoint list, the add-on cross-field rules, and the
 media-upload note don't drift out of sync.
 
@@ -477,4 +482,12 @@ media-upload note don't drift out of sync.
   per-leg priced breakdown snapshot, alongside the existing
   `moving_lead_stops`/`moving_lead_addons`) for the per-leg pricing change in
   §3 above — additive follow-up, run after the migration above. No seed data.
+- Migration `1788200000000-RenameMovingLeadsToBookings` drops the three
+  `moving_lead*` tables above and recreates them as `moving_bookings` /
+  `moving_booking_stops` / `moving_booking_addons` / `moving_booking_legs`,
+  with a new 5-value status enum (`pending`/`confirmed`/`rejected`/
+  `cancelled`/`completed`) and new `confirmed_at`/`confirmed_by_id` columns.
+  **Row data is not preserved** — every `moving_leads` row was disposable
+  test data at the time of this migration. Run after all four migrations
+  above.
 - No new env vars for this phase.

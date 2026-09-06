@@ -9,7 +9,7 @@ import {
 
 /** A single lat/lng point with an optional human-readable address — the
  * shared shape for `pickup` and each entry in `destinations` on
- * CreateMovingLeadDto. */
+ * CreateMovingBookingDto. */
 export class MovingPointDto {
   @ApiPropertyOptional({ example: 'Jl. Sudirman No. 1, Jakarta Selatan' })
   @IsOptional()

@@ -1,5 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { EventBookingStatus } from '../enums/event-booking-status.enum';
+import { EventBookingSource } from '../enums/event-booking-source.enum';
 import { EventItemKind } from '../enums/event-item-kind.enum';
 import { EventItemStatus } from '../enums/event-item-status.enum';
 import { EventBillingMode } from '../enums/event-billing-mode.enum';
@@ -310,6 +311,12 @@ export class EventBookingAdminDto {
   @ApiProperty() id!: string;
   @ApiProperty() reference!: string;
   @ApiProperty({ enum: EventBookingStatus }) status!: EventBookingStatus;
+  @ApiProperty({
+    enum: EventBookingSource,
+    description:
+      'Whether the customer submitted this directly or an admin recorded it after a WhatsApp conversation',
+  })
+  source!: EventBookingSource;
   @ApiProperty() customerName!: string;
   @ApiPropertyOptional({ nullable: true, type: String }) phone!: string | null;
   @ApiPropertyOptional({ nullable: true, type: String }) email!: string | null;
@@ -348,4 +355,52 @@ export class EventBookingAdminListResponseDto {
 export class EventBookingAdminResponseDto {
   @ApiProperty({ type: EventBookingAdminDto })
   data!: EventBookingAdminDto;
+}
+
+// ─── Bookings (public) ──────────────────────────────────────────────────────
+
+/**
+ * Response for POST /event-support/bookings. Reuses EventQuoteLineDto for
+ * `lines` (the identical computed shape POST /event-support/quote already
+ * returns) rather than EventBookingLineDto — the public flow is quote the
+ * cart, then book the same cart, so the two responses stay directly
+ * comparable. Deliberately asymmetric with EventBookingAdminDto.items:
+ * no adminNote/createdByName/confirmed* here, mirroring how
+ * StorageBookingDto trims StorageBookingAdminDto.
+ */
+export class EventBookingPublicDto {
+  @ApiProperty() id!: string;
+  @ApiProperty({ example: 'MDN-EVT-A7K92X' }) reference!: string;
+  @ApiProperty({ enum: EventBookingStatus }) status!: EventBookingStatus;
+  @ApiProperty() customerName!: string;
+  @ApiPropertyOptional({ nullable: true, type: String }) phone!: string | null;
+  @ApiPropertyOptional({ nullable: true, type: String }) email!: string | null;
+  @ApiPropertyOptional({ nullable: true, type: String }) eventLocation!:
+    string | null;
+  @ApiPropertyOptional({ nullable: true, type: String }) notes!: string | null;
+  @ApiProperty() dropoffAt!: string;
+  @ApiProperty() pickupAt!: string;
+  @ApiProperty({ description: 'Derived cart-wide calendar span' })
+  startDate!: string;
+  @ApiProperty() endDate!: string;
+  @ApiProperty({
+    description: 'true when the lines were priced under different billingModes',
+  })
+  isMixedBilling!: boolean;
+  @ApiProperty({ type: [EventQuoteLineDto] }) lines!: EventQuoteLineDto[];
+  @ApiProperty({ description: 'Rupiah, integer' }) subtotal!: number;
+  @ApiProperty({ description: 'Rupiah, integer' }) discountAmount!: number;
+  @ApiProperty({ description: 'Rupiah, integer' }) total!: number;
+  @ApiProperty({ example: 'IDR' }) currency!: string;
+  @ApiProperty() createdAt!: Date;
+  @ApiProperty({
+    description:
+      'Prefilled Indonesian WhatsApp message, including the booking reference; the FE appends its own number',
+  })
+  whatsappMessage!: string;
+}
+
+export class EventBookingPublicResponseDto {
+  @ApiProperty({ type: EventBookingPublicDto })
+  data!: EventBookingPublicDto;
 }

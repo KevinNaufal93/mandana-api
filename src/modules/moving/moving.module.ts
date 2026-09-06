@@ -3,22 +3,22 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { TruckClass } from './entities/truck-class.entity';
 import { MovingAddon } from './entities/moving-addon.entity';
 import { MovingSettings } from './entities/moving-settings.entity';
-import { MovingLead } from './entities/moving-lead.entity';
-import { MovingLeadStop } from './entities/moving-lead-stop.entity';
-import { MovingLeadAddon } from './entities/moving-lead-addon.entity';
-import { MovingLeadLeg } from './entities/moving-lead-leg.entity';
+import { MovingBooking } from './entities/moving-booking.entity';
+import { MovingBookingStop } from './entities/moving-booking-stop.entity';
+import { MovingBookingAddon } from './entities/moving-booking-addon.entity';
+import { MovingBookingLeg } from './entities/moving-booking-leg.entity';
 import { MovingService } from './moving.service';
 import { MovingAddonsService } from './moving-addons.service';
 import { MovingSettingsService } from './moving-settings.service';
-import { MovingLeadsService } from './moving-leads.service';
+import { MovingBookingsService } from './moving-bookings.service';
 import { MovingMapper } from './moving.mapper';
 import { MovingController, MovingAdminController } from './moving.controller';
 import { MovingAddonsAdminController } from './moving-addons.controller';
 import { MovingSettingsAdminController } from './moving-settings.controller';
 import {
-  MovingLeadsController,
-  MovingLeadsAdminController,
-} from './moving-leads.controller';
+  MovingBookingsController,
+  MovingBookingsAdminController,
+} from './moving-bookings.controller';
 import { MediaModule } from '../media/media.module';
 
 @Module({
@@ -27,10 +27,10 @@ import { MediaModule } from '../media/media.module';
       TruckClass,
       MovingAddon,
       MovingSettings,
-      MovingLead,
-      MovingLeadStop,
-      MovingLeadAddon,
-      MovingLeadLeg,
+      MovingBooking,
+      MovingBookingStop,
+      MovingBookingAddon,
+      MovingBookingLeg,
     ]),
     MediaModule,
   ],
@@ -38,7 +38,7 @@ import { MediaModule } from '../media/media.module';
     MovingService,
     MovingAddonsService,
     MovingSettingsService,
-    MovingLeadsService,
+    MovingBookingsService,
     MovingMapper,
   ],
   controllers: [
@@ -46,8 +46,8 @@ import { MediaModule } from '../media/media.module';
     MovingAdminController,
     MovingAddonsAdminController,
     MovingSettingsAdminController,
-    MovingLeadsController,
-    MovingLeadsAdminController,
+    MovingBookingsController,
+    MovingBookingsAdminController,
   ],
   exports: [MovingService, MovingAddonsService, MovingSettingsService],
 })

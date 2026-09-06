@@ -8,7 +8,7 @@ import { CreateContentBlockDto } from './dto/create-content-block.dto';
 import { ListingType } from '../properties/enums/listing-type.enum';
 
 /** Chainable stand-in for the SelectQueryBuilder findActivePropertyPromos()
- * builds — modeled on the same pattern used for MovingLeadsService's
+ * builds — modeled on the same pattern used for MovingBookingsService's
  * buildFilteredQb() mock. */
 interface QbMock {
   leftJoinAndSelect: jest.Mock;
@@ -93,7 +93,7 @@ describe('ContentBlocksService', () => {
       });
       expect(qb.andWhere).toHaveBeenCalledWith('cb.isActive = true');
       // `jest.Mock` (untyped) makes `.mock.calls` an `any[][]` — cast once
-      // here, same idiom as MovingLeadsService's spec.
+      // here, same idiom as MovingBookingsService's spec.
       const andWhereCalls = qb.andWhere.mock.calls as [
         string,
         Record<string, unknown>?,

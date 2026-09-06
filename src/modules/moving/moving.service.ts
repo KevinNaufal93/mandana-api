@@ -161,10 +161,10 @@ export class MovingService {
 
   /**
    * Validates the request and computes the priced result — shared by the
-   * public `quote()` action below and MovingLeadsService.create(), so a
-   * captured lead is always priced through the exact same validated path as
+   * public `quote()` action below and MovingBookingsService.create(), so a
+   * captured booking is always priced through the exact same validated path as
    * `POST /moving/quote` (never trust a client-sent total). Returns the
-   * resolved `truck` entity too — MovingLeadsService needs `truck.name` for
+   * resolved `truck` entity too — MovingBookingsService needs `truck.name` for
    * its snapshot columns.
    */
   async buildQuote(

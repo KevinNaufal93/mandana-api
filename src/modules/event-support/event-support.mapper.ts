@@ -8,6 +8,7 @@ import { MediaService } from '../media/media.service';
 import { richTextToPlain } from '../../common/rich-text';
 import {
   EventBookingAdminDto,
+  EventBookingPublicDto,
   EventCategoryDto,
   EventImageDto,
   EventItemAdminDto,
@@ -141,15 +142,29 @@ export class EventSupportMapper {
    * StorageMapper.buildWhatsAppMessage() / lib/moving/whatsapp.ts in the
    * frontend repo. Plain text, not URL-encoded — the FE combines it with
    * its own NEXT_PUBLIC_MANDANA_WHATSAPP number.
+   *
+   * `reference` is only passed for a booking that has already been
+   * persisted (toBookingPublicDto below) — its presence swaps the greeting
+   * to the past-tense "I just submitted a booking" and adds a
+   * "No. Referensi" line, mirroring StorageMapper.buildWhatsAppMessage().
+   * toQuoteDto never passes it, so the plain quote message stays
+   * byte-stable. The "Waktu sewa" line always shows the cart-level
+   * requested window (quote.dropoffAt/pickupAt) rather than the booking's
+   * persisted min/max-across-lines value — this is customer-facing prose
+   * describing what they asked for, not the stored record.
    */
   private buildWhatsAppMessage(
     quote: EventQuoteComputation,
     settings: EventSupportSettings,
+    reference?: string,
   ): string {
     const money = (n: number) => `Rp${n.toLocaleString('id-ID')}`;
     const lines = [
-      'Halo Mandana, saya ingin menyewa perlengkapan acara.',
+      reference
+        ? 'Halo Mandana, saya baru saja mengajukan pesanan perlengkapan acara.'
+        : 'Halo Mandana, saya ingin menyewa perlengkapan acara.',
       '',
+      ...(reference ? [`No. Referensi: ${reference}`] : []),
       ...quote.lines.map((l) => {
         const durationLabel =
           l.unitLabel === 'jam'
@@ -212,6 +227,7 @@ export class EventSupportMapper {
       id: booking.id,
       reference: booking.reference,
       status: booking.status,
+      source: booking.source,
       customerName: booking.customerName,
       phone: booking.phone,
       email: booking.email,
@@ -251,6 +267,66 @@ export class EventSupportMapper {
       confirmedByName: booking.confirmedBy?.name ?? null,
       createdAt: booking.createdAt,
       updatedAt: booking.updatedAt,
+    };
+  }
+
+  // ─── Bookings (public) ──────────────────────────────────────────────────
+
+  /**
+   * `lines` is `quote.lines` (the EventQuoteComputation that produced this
+   * booking), not `booking.items` — it's the identical shape
+   * POST /event-support/quote already returns, and every value on it is
+   * exactly what was persisted (createPublic() derives the booking's own
+   * dropoffAt/pickupAt/startDate/endDate from these same lines). Reusing
+   * toQuoteDto's line-mapping here would duplicate it for no benefit, so
+   * this maps the same computation directly.
+   */
+  toBookingPublicDto(
+    booking: EventBooking,
+    quote: EventQuoteComputation,
+    settings: EventSupportSettings,
+  ): EventBookingPublicDto {
+    return {
+      id: booking.id,
+      reference: booking.reference,
+      status: booking.status,
+      customerName: booking.customerName,
+      phone: booking.phone,
+      email: booking.email,
+      eventLocation: booking.eventLocation,
+      notes: booking.notes,
+      dropoffAt: booking.dropoffAt!,
+      pickupAt: booking.pickupAt!,
+      startDate: booking.startDate,
+      endDate: booking.endDate,
+      isMixedBilling: quote.isMixedBilling,
+      lines: quote.lines.map((l) => ({
+        slug: l.item.slug,
+        name: l.item.name,
+        quantity: l.quantity,
+        dropoffAt: l.dropoffAt,
+        pickupAt: l.pickupAt,
+        startDate: l.startDate,
+        endDate: l.endDate,
+        billingMode: l.billingMode,
+        unitPrice: l.unitPrice,
+        unitLabel: l.unitLabel,
+        billableUnits: toNumber(l.billableUnits) ?? l.billableUnits,
+        extraHours: toNumber(l.extraHours),
+        extraHoursTotal: toNumber(l.extraHoursTotal),
+        lineTotal: l.lineTotal,
+        availableQuantity: l.availableQuantity,
+      })),
+      subtotal: booking.subtotal,
+      discountAmount: booking.discountAmount,
+      total: booking.total,
+      currency: 'IDR',
+      createdAt: booking.createdAt,
+      whatsappMessage: this.buildWhatsAppMessage(
+        quote,
+        settings,
+        booking.reference,
+      ),
     };
   }
 }

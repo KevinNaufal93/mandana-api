@@ -17,6 +17,7 @@ import {
   ApiOperation,
   ApiTags,
 } from '@nestjs/swagger';
+import { Public } from '../../common/decorators/public.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { UserRole } from '../users/enums/user-role.enum';
@@ -24,18 +25,47 @@ import { User } from '../users/entities/user.entity';
 import { EventBookingsService } from './event-bookings.service';
 import { EventSupportMapper } from './event-support.mapper';
 import { CreateEventBookingDto } from './dto/create-event-booking.dto';
+import { CreatePublicEventBookingDto } from './dto/create-public-event-booking.dto';
 import { QueryEventBookingsDto } from './dto/query-event-bookings.dto';
 import { TransitionEventBookingDto } from './dto/transition-event-booking.dto';
 import {
   EventBookingAdminListResponseDto,
   EventBookingAdminResponseDto,
+  EventBookingPublicResponseDto,
 } from './dto/event-support-response.dto';
 
+// ─── Public controller ────────────────────────────────────────────────────────
+
+@ApiTags('event-support')
+@Public()
+@Controller('event-support/bookings')
+export class EventBookingsController {
+  constructor(
+    private readonly bookingsService: EventBookingsService,
+    private readonly mapper: EventSupportMapper,
+  ) {}
+
+  @Post()
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({
+    summary:
+      'Submit an Event Support booking request — status starts pending; an admin confirms it. Prices the same cart POST /event-support/quote would, and does not reserve stock until confirmed.',
+  })
+  @ApiCreatedResponse({ type: EventBookingPublicResponseDto })
+  async create(@Body() dto: CreatePublicEventBookingDto) {
+    const { booking, quote, settings } =
+      await this.bookingsService.createPublic(dto);
+    return this.mapper.toBookingPublicDto(booking, quote, settings);
+  }
+}
+
+// ─── Admin controller ─────────────────────────────────────────────────────────
+
 /**
- * Admin-only — there is no public booking endpoint. Every real booking
- * happens over WhatsApp (see POST /event-support/quote); this controller is
- * how the admin who took that conversation records it, which also attaches
- * the `createdBy` audit trail the product asked for.
+ * Two ways a booking reaches this table: a customer submits one directly
+ * (see EventBookingsController above, `source: 'public'`), or an admin
+ * records one after a WhatsApp conversation (`source: 'admin'`, attaching
+ * the `createdBy` audit trail the product asked for).
  */
 @ApiTags('admin / event-support')
 @ApiBearerAuth()
@@ -50,7 +80,7 @@ export class EventBookingsAdminController {
   @Get()
   @ApiOperation({
     summary:
-      'List event-support bookings (paginated, filterable by status/date range/search)',
+      'List event-support bookings (paginated; filter by status, capture-date range, event-window range, and free-text search over reference/customer name/phone/email; sortable by createdAt/reference/total/startDate). BREAKING CHANGE: from/to now filter by capture date (createdAt) — the old event-window filter is startFrom/startTo.',
   })
   @ApiOkResponse({ type: EventBookingAdminListResponseDto })
   async findAll(@Query() query: QueryEventBookingsDto) {

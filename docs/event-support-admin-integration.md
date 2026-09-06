@@ -124,19 +124,42 @@ or appear in the public quote.
 
 ## 4. Bookings
 
-`GET /bookings?status&from&to&search&page&limit` · `GET /bookings/:id` ·
-`POST /bookings` · `PATCH /bookings/:id/confirm` ·
+`GET /bookings?status&search&from&to&startFrom&startTo&sortBy&sortOrder&page&limit` ·
+`GET /bookings/:id` · `POST /bookings` · `PATCH /bookings/:id/confirm` ·
 `PATCH /bookings/:id/cancel` · `PATCH /bookings/:id/complete`
 
-`status` filters exactly; `from`/`to` filter by overlap with the booking's
-event window (`endDate >= from`, `startDate <= to`); `search` matches
-reference, customer name, or phone.
+See [`docs/booking-list-contract.md`](./booking-list-contract.md) for the
+full list-query contract shared with Storage and Moving.
 
-### Recording a booking
+> **BREAKING CHANGE.** `from`/`to` used to filter by overlap with the
+> booking's event window (`endDate >= from`, `startDate <= to`). They now
+> filter by **`createdAt`** (capture date), matching Storage and Moving. The
+> old window-overlap filter didn't go away — it moved to **`startFrom`/
+> `startTo`** with the identical predicate. Fix: rename `from` → `startFrom`
+> and `to` → `startTo` on this screen; no other change in behavior.
 
-Every real booking is agreed over WhatsApp first — this is where you write
-down what was agreed. `createdBy` is **not** a body field; it's taken from
-your Bearer token automatically.
+`status` filters exactly; `search` matches reference, customer name, phone,
+or email; `sortBy` accepts `createdAt` (default), `reference`, `total`, or
+`startDate`.
+
+Every list/detail row also now carries a `source: "public" | "admin"` field
+(see below) — a booking a customer submitted directly has
+`createdByName: null`, which used to only mean "the recording admin's
+account was deleted."
+
+### Two ways a booking gets here
+
+**Customers can now submit directly** — `POST /event-support/bookings`
+(public, no auth), documented in `docs/event-support-integration.md`. It
+takes the same cart shape as `POST /event-support/quote` (slug-keyed items,
+plus contact fields) and prices it through the identical code path, so the
+persisted total can never drift from the quote the customer saw. A
+publicly-submitted booking has `source: "public"`, `createdByName: null`.
+
+**Admins still record bookings agreed over WhatsApp** via the `POST
+/bookings` documented below — unchanged except for the new `source:
+"admin"` field on the response. `createdBy` is **not** a body field; it's
+taken from your Bearer token automatically.
 
 ```jsonc
 // POST /bookings →
@@ -162,7 +185,7 @@ against the pricing policy in effect at booking time.
 ```jsonc
 // ← 201
 { "data": {
-  "id": "uuid", "reference": "MDN-EVT-7K3PQ9", "status": "pending",
+  "id": "uuid", "reference": "MDN-EVT-7K3PQ9", "status": "pending", "source": "admin",
   "customerName": "Budi Santoso", "phone": "+628123456789", "email": "budi@example.com",
   "eventLocation": "Balai Sarbini, Jakarta Selatan", "notes": "...",
   "dropoffAt": "2026-03-01T09:00", "pickupAt": "2026-03-01T17:00",

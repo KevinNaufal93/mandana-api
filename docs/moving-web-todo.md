@@ -6,7 +6,7 @@ the "what to build" handoff for each. See `docs/moving-integration.md` for
 the complete endpoint reference; this file only covers what's new/actionable
 here.
 
-Both items below hang off the same endpoint: **`POST /moving/leads`**, fired
+Both items below hang off the same endpoint: **`POST /moving/bookings`**, fired
 when the customer clicks "Pesan via WhatsApp" (already wired — see
 `components/moving/moving-quote.tsx`'s `handleWhatsAppClick`). Nothing below
 requires a new endpoint or a backend change to consume; the contract is live
@@ -20,10 +20,10 @@ today.
 structured fields don't capture — fragile items, floor/access notes,
 special timing. Optional, max 2000 characters.
 
-**API contract** — `CreateMovingLeadDto.notes?: string`:
+**API contract** — `CreateMovingBookingDto.notes?: string`:
 
 ```jsonc
-// POST /moving/leads request — notes is the only new field here
+// POST /moving/bookings request — notes is the only new field here
 {
   "truckSlug": "cdd",
   "distanceMeters": 45000,
@@ -48,7 +48,7 @@ The response echoes it back as `data.notes` (`string | null`).
    `MovingMapLoaderProps` → `ManualWorkspace/MovingWorkspace` → `MovingExtras`,
    same as every other extras field already does.
 3. In `moving-quote.tsx`'s `handleWhatsAppClick` (the function that builds
-   the `POST /moving/leads` body), add `notes` as a new prop and include it
+   the `POST /moving/bookings` body), add `notes` as a new prop and include it
    in the request: `...(notes?.trim() ? { notes: notes.trim() } : {})`.
 4. Optional but recommended: also append it to the WhatsApp message text
    itself (`lib/moving/whatsapp.ts`'s `buildMovingWaMessage`) — right now
@@ -70,12 +70,12 @@ hard-coded to exactly one destination.
 
 ### API contract (already live)
 
-`CreateMovingLeadDto.destinations` is an **array**, 1–25 entries (the cap is
+`CreateMovingBookingDto.destinations` is an **array**, 1–25 entries (the cap is
 an abuse guard, not a product limit), each `{ address?, lat, lng }`, in
 route order:
 
 ```jsonc
-// POST /moving/leads — 3 destinations, in the order the customer added them
+// POST /moving/bookings — 3 destinations, in the order the customer added them
 {
   "truckSlug": "cdd",
   "distanceMeters": 45000,
@@ -137,7 +137,7 @@ array, everywhere). In dependency order:
      Google billing per quote, but zero backend proxy changes. Reasonable
      if the "preferred" option is too much for this pass.
    Either way, the thing that ultimately reaches `POST /moving/quote` and
-   `POST /moving/leads` is still one summed `distanceMeters` number.
+   `POST /moving/bookings` is still one summed `distanceMeters` number.
 
 3. **Map UI** — `components/moving/moving-map-panel.tsx`: currently places
    exactly two markers (origin, destination) and fits the map to that one
@@ -183,6 +183,6 @@ all-or-nothing PR.
 ### Reference
 
 Full request/response examples, error cases, and the admin-side endpoints
-for both fields above: `docs/moving-integration.md`, §3 (`POST /moving/leads`)
+for both fields above: `docs/moving-integration.md`, §3 (`POST /moving/bookings`)
 and §4 (admin). Swagger UI (`/docs` on the API) has the live, authoritative
 schema including this doc's exact field names/types.

@@ -1,21 +1,21 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { MovingLeadStatus } from '../enums/moving-lead-status.enum';
+import { MovingBookingStatus } from '../enums/moving-booking-status.enum';
 
 /**
- * Response-shape DTOs for the Moving Leads surface, declared purely so
- * Swagger/OpenAPI can describe the `{ data }` / `{ data, meta }` envelopes
- * the global `TransformInterceptor` wraps handler returns in — same
- * convention as truck-class-response.dto.ts. Handlers keep returning bare
- * objects; these classes exist only to drive `@ApiOkResponse`/
+ * Response-shape DTOs for the Moving Support bookings surface, declared
+ * purely so Swagger/OpenAPI can describe the `{ data }` / `{ data, meta }`
+ * envelopes the global `TransformInterceptor` wraps handler returns in —
+ * same convention as truck-class-response.dto.ts. Handlers keep returning
+ * bare objects; these classes exist only to drive `@ApiOkResponse`/
  * `@ApiCreatedResponse`.
  *
  * Kept in a dedicated file rather than folded into truck-class-response.dto.ts
- * — leads is a meaningfully larger DTO surface (2 nested shapes + 2
+ * — bookings is a meaningfully larger DTO surface (2 nested shapes + 2
  * top-level shapes + a pagination-meta shape) and this scopes imports
- * cleanly for the two lead-only controllers.
+ * cleanly for the two booking-only controllers.
  */
 
-export class MovingLeadStopDto {
+export class MovingBookingStopDto {
   @ApiProperty({ description: '0-based route order' })
   stopIndex!: number;
   @ApiPropertyOptional({ nullable: true, type: String })
@@ -26,7 +26,7 @@ export class MovingLeadStopDto {
   lng!: number;
 }
 
-export class MovingLeadAddonLineDto {
+export class MovingBookingAddonLineDto {
   @ApiProperty()
   slug!: string;
   @ApiProperty()
@@ -39,7 +39,7 @@ export class MovingLeadAddonLineDto {
   amount!: number;
 }
 
-export class MovingLeadLegDto {
+export class MovingBookingLegDto {
   @ApiProperty()
   distanceKm!: number;
   @ApiProperty()
@@ -55,19 +55,20 @@ export class MovingLeadLegDto {
 }
 
 /**
- * Public shape — returned by `POST /moving/leads`. No `adminNote`, mirroring
- * StorageBookingDto's omission of admin-only fields. No `whatsappMessage`
- * either, unlike StorageBookingDto/EventQuoteDto — for Moving Support the WA
- * message is still built entirely client-side (buildMovingWaMessage()) and
- * this call fires fire-and-forget alongside it, not before it.
+ * Public shape — returned by `POST /moving/bookings`. No `adminNote`,
+ * mirroring StorageBookingDto's omission of admin-only fields. No
+ * `whatsappMessage` either, unlike StorageBookingDto/EventQuoteDto — for
+ * Moving Support the WA message is still built entirely client-side
+ * (buildMovingWaMessage()) and this call fires fire-and-forget alongside
+ * it, not before it.
  */
-export class MovingLeadDto {
+export class MovingBookingDto {
   @ApiProperty()
   id!: string;
   @ApiProperty({ example: 'MDN-MOV-A7K92X' })
   reference!: string;
-  @ApiProperty({ enum: MovingLeadStatus })
-  status!: MovingLeadStatus;
+  @ApiProperty({ enum: MovingBookingStatus })
+  status!: MovingBookingStatus;
   @ApiProperty()
   truckSlug!: string;
   @ApiProperty()
@@ -78,8 +79,8 @@ export class MovingLeadDto {
   pickupLat!: number;
   @ApiProperty()
   pickupLng!: number;
-  @ApiProperty({ type: [MovingLeadStopDto] })
-  destinations!: MovingLeadStopDto[];
+  @ApiProperty({ type: [MovingBookingStopDto] })
+  destinations!: MovingBookingStopDto[];
   @ApiProperty()
   distanceKm!: number;
   @ApiProperty()
@@ -100,8 +101,8 @@ export class MovingLeadDto {
   travelSubtotal!: number;
   @ApiProperty({ description: 'Rupiah' })
   tollFare!: number;
-  @ApiProperty({ type: [MovingLeadAddonLineDto] })
-  addons!: MovingLeadAddonLineDto[];
+  @ApiProperty({ type: [MovingBookingAddonLineDto] })
+  addons!: MovingBookingAddonLineDto[];
   @ApiProperty({ description: 'Rupiah' })
   addonsTotal!: number;
   @ApiProperty({ description: 'Rupiah' })
@@ -114,8 +115,8 @@ export class MovingLeadDto {
   lowEstimate!: number;
   @ApiProperty({ description: 'Rupiah' })
   highEstimate!: number;
-  @ApiProperty({ type: [MovingLeadLegDto] })
-  legs!: MovingLeadLegDto[];
+  @ApiProperty({ type: [MovingBookingLegDto] })
+  legs!: MovingBookingLegDto[];
   @ApiProperty({ example: 'IDR' })
   currency!: string;
   @ApiPropertyOptional({ nullable: true, type: String })
@@ -134,30 +135,34 @@ export class MovingLeadDto {
   createdAt!: Date;
 }
 
-export class MovingLeadResponseDto {
-  @ApiProperty({ type: MovingLeadDto })
-  data!: MovingLeadDto;
+export class MovingBookingResponseDto {
+  @ApiProperty({ type: MovingBookingDto })
+  data!: MovingBookingDto;
 }
 
 // ─── Admin ─────────────────────────────────────────────────────────────────
 
-export class MovingLeadAdminDto extends MovingLeadDto {
+export class MovingBookingAdminDto extends MovingBookingDto {
   @ApiPropertyOptional({ nullable: true, type: String })
   adminNote!: string | null;
+  @ApiPropertyOptional({ nullable: true, type: String })
+  confirmedAt!: string | null;
+  @ApiPropertyOptional({ nullable: true, type: String })
+  confirmedByName!: string | null;
   @ApiProperty()
   updatedAt!: Date;
 }
 
-export class MovingLeadAdminResponseDto {
-  @ApiProperty({ type: MovingLeadAdminDto })
-  data!: MovingLeadAdminDto;
+export class MovingBookingAdminResponseDto {
+  @ApiProperty({ type: MovingBookingAdminDto })
+  data!: MovingBookingAdminDto;
 }
 
 // Not named `PaginationMetaDto` — that name is already owned by
 // storage-response.dto.ts; mirrors event-support-response.dto.ts's
 // EventPaginationMetaDto precedent to avoid an OpenAPI schema-name collision
 // (two distinct classes cannot share one component name).
-export class MovingLeadPaginationMetaDto {
+export class MovingBookingPaginationMetaDto {
   @ApiProperty()
   total!: number;
   @ApiProperty()
@@ -168,9 +173,9 @@ export class MovingLeadPaginationMetaDto {
   totalPages!: number;
 }
 
-export class MovingLeadAdminListResponseDto {
-  @ApiProperty({ type: [MovingLeadAdminDto] })
-  data!: MovingLeadAdminDto[];
-  @ApiProperty({ type: MovingLeadPaginationMetaDto })
-  meta!: MovingLeadPaginationMetaDto;
+export class MovingBookingAdminListResponseDto {
+  @ApiProperty({ type: [MovingBookingAdminDto] })
+  data!: MovingBookingAdminDto[];
+  @ApiProperty({ type: MovingBookingPaginationMetaDto })
+  meta!: MovingBookingPaginationMetaDto;
 }

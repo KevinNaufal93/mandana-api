@@ -129,7 +129,7 @@ offering it, rather than just setting `isActive: false`.
 `POST /units` · `PATCH /units/:id` · `POST /units/bulk` ·
 `DELETE /units/bulk` · `DELETE /units/:id`
 
-Paginated (default `page=1&limit=20`). Every count shown anywhere in this
+Paginated (default `page=1&limit=12`). Every count shown anywhere in this
 module — public availability, `total`/`available` — is derived by counting
 these rows live; there's no separate stored counter to drift out of sync.
 No pricing fields live here — a unit's rate comes from its unit type +
@@ -160,14 +160,22 @@ transition endpoints in §6, which manage both automatically.
 
 ## 6. Bookings
 
-`GET /bookings?status&facilitySlug&unitTypeSlug&page&limit` ·
+`GET /bookings?status&facilitySlug&unitTypeSlug&search&from&to&startFrom&startTo&sortBy&sortOrder&page&limit` ·
 `GET /bookings/:id` · `PATCH /bookings/:id/confirm` ·
 `PATCH /bookings/:id/reject` · `PATCH /bookings/:id/cancel` ·
 `PATCH /bookings/:id/complete`
 
-Paginated, default `page=1&limit=20`. **No `POST /bookings` here** —
+Paginated, default `page=1&limit=12`. **No `POST /bookings` here** —
 customers create bookings publicly (`POST /storage/bookings`); this panel
 only reviews and transitions what they submitted.
+
+See [`docs/booking-list-contract.md`](./booking-list-contract.md) for the
+full meaning of `search`/`from`/`to`/`startFrom`/`startTo`/`sortBy`/
+`sortOrder` — shared with Moving and Event Support. Two things specific to
+Storage: `sortBy` additionally accepts `startDate` (Moving has no window to
+sort by, so it lacks this option), and `startFrom`/`startTo` here overlap
+against `startDate`/`endDate` — a booking that started last month still
+matches a `startFrom` in the current month if it hasn't ended yet.
 
 ```jsonc
 // GET /bookings/:id →

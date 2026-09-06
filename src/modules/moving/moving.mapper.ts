@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { TruckClass } from './entities/truck-class.entity';
 import { MovingAddon } from './entities/moving-addon.entity';
 import { MovingSettings } from './entities/moving-settings.entity';
-import { MovingLead } from './entities/moving-lead.entity';
+import { MovingBooking } from './entities/moving-booking.entity';
 import { MediaService } from '../media/media.service';
 import { MediaAsset } from '../media/entities/media-asset.entity';
 import { richTextToPlain } from '../../common/rich-text';
@@ -14,9 +14,9 @@ import {
   TruckImageDto,
 } from './dto/truck-class-response.dto';
 import {
-  MovingLeadAdminDto,
-  MovingLeadDto,
-} from './dto/moving-lead-response.dto';
+  MovingBookingAdminDto,
+  MovingBookingDto,
+} from './dto/moving-booking-response.dto';
 
 /** Numeric/decimal Postgres columns come back from `pg` as strings — normalize them. */
 function toNumber(value: unknown): number | null {
@@ -94,24 +94,24 @@ export class MovingMapper {
     };
   }
 
-  // ─── Moving leads ────────────────────────────────────────────────────────
+  // ─── Moving bookings ────────────────────────────────────────────────────
   // Request/response field is `destinations` (matches the product's own
   // language); the DB relation is `stops` (matches EventBookingItem-style
   // internal naming) — this is where that naming bridges. Every lat/lng/km
   // column is `numeric`, so each one routes through toNumber() to undo the
   // pg-returns-strings-for-numeric quirk (same as TruckClass.volumeM3 above).
 
-  toLeadDto(lead: MovingLead): MovingLeadDto {
+  toBookingDto(booking: MovingBooking): MovingBookingDto {
     return {
-      id: lead.id,
-      reference: lead.reference,
-      status: lead.status,
-      truckSlug: lead.truckSlug,
-      truckName: lead.truckName,
-      pickupAddress: lead.pickupAddress,
-      pickupLat: toNumber(lead.pickupLat) ?? lead.pickupLat,
-      pickupLng: toNumber(lead.pickupLng) ?? lead.pickupLng,
-      destinations: [...lead.stops]
+      id: booking.id,
+      reference: booking.reference,
+      status: booking.status,
+      truckSlug: booking.truckSlug,
+      truckName: booking.truckName,
+      pickupAddress: booking.pickupAddress,
+      pickupLat: toNumber(booking.pickupLat) ?? booking.pickupLat,
+      pickupLng: toNumber(booking.pickupLng) ?? booking.pickupLng,
+      destinations: [...booking.stops]
         .sort((a, b) => a.stopIndex - b.stopIndex)
         .map((s) => ({
           stopIndex: s.stopIndex,
@@ -119,30 +119,30 @@ export class MovingMapper {
           lat: toNumber(s.lat) ?? s.lat,
           lng: toNumber(s.lng) ?? s.lng,
         })),
-      distanceKm: toNumber(lead.distanceKm) ?? lead.distanceKm,
-      includedKm: lead.includedKm,
-      chargeableKm: toNumber(lead.chargeableKm) ?? lead.chargeableKm,
-      roundTrip: lead.roundTrip,
-      tollRoute: lead.tollRoute,
-      declaredValue: lead.declaredValue,
-      baseFare: lead.baseFare,
-      distanceFare: lead.distanceFare,
-      travelSubtotal: lead.travelSubtotal,
-      tollFare: lead.tollFare,
-      addons: lead.addons.map((a) => ({
+      distanceKm: toNumber(booking.distanceKm) ?? booking.distanceKm,
+      includedKm: booking.includedKm,
+      chargeableKm: toNumber(booking.chargeableKm) ?? booking.chargeableKm,
+      roundTrip: booking.roundTrip,
+      tollRoute: booking.tollRoute,
+      declaredValue: booking.declaredValue,
+      baseFare: booking.baseFare,
+      distanceFare: booking.distanceFare,
+      travelSubtotal: booking.travelSubtotal,
+      tollFare: booking.tollFare,
+      addons: booking.addons.map((a) => ({
         slug: a.addonSlug,
         name: a.addonName,
         quantity: a.quantity,
         unitPrice: a.unitPrice,
         amount: a.amount,
       })),
-      addonsTotal: lead.addonsTotal,
-      subtotal: lead.subtotal,
-      total: lead.total,
-      minFareApplied: lead.minFareApplied,
-      lowEstimate: lead.lowEstimate,
-      highEstimate: lead.highEstimate,
-      legs: [...lead.legs]
+      addonsTotal: booking.addonsTotal,
+      subtotal: booking.subtotal,
+      total: booking.total,
+      minFareApplied: booking.minFareApplied,
+      lowEstimate: booking.lowEstimate,
+      highEstimate: booking.highEstimate,
+      legs: [...booking.legs]
         .sort((a, b) => a.legIndex - b.legIndex)
         .map((l) => ({
           distanceKm: toNumber(l.distanceKm) ?? l.distanceKm,
@@ -153,19 +153,23 @@ export class MovingMapper {
           subtotal: l.subtotal,
         })),
       currency: 'IDR',
-      customerName: lead.customerName,
-      phone: lead.phone,
-      email: lead.email,
-      notes: lead.notes,
-      createdAt: lead.createdAt,
+      customerName: booking.customerName,
+      phone: booking.phone,
+      email: booking.email,
+      notes: booking.notes,
+      createdAt: booking.createdAt,
     };
   }
 
-  toLeadAdminDto(lead: MovingLead): MovingLeadAdminDto {
+  toBookingAdminDto(booking: MovingBooking): MovingBookingAdminDto {
     return {
-      ...this.toLeadDto(lead),
-      adminNote: lead.adminNote,
-      updatedAt: lead.updatedAt,
+      ...this.toBookingDto(booking),
+      adminNote: booking.adminNote,
+      confirmedAt: booking.confirmedAt
+        ? booking.confirmedAt.toISOString()
+        : null,
+      confirmedByName: booking.confirmedBy?.name ?? null,
+      updatedAt: booking.updatedAt,
     };
   }
 }

@@ -160,6 +160,47 @@ text, not URL-encoded, so `encodeURIComponent()` it into the `wa.me/<number>?tex
 > with removing `lib/event/datetime.ts`'s `toLegacyQuoteWindow` adapter and
 > the "Sewa di bawah 24 jam saat ini dihitung sebagai 1 hari" copy.
 
+### `POST /event-support/bookings`
+
+Persists the cart as a `pending` booking the moment the customer commits to
+it — the Event Support counterpart to `POST /moving/bookings` and
+`POST /storage/bookings`. Same body as `POST /event-support/quote` above
+(same fields, same validators, same per-line window-override rule) plus
+contact fields:
+
+```jsonc
+// →
+{ "dropoffAt": "2026-03-01T09:00", "pickupAt": "2026-03-01T17:00",
+  "eventLocation": "Balai Sarbini, Jakarta Selatan",
+  "customerName": "Budi Santoso", "phone": "+628123456789", "email": "budi@example.com",
+  "notes": "Perlu akses loading dock jam 08:00",
+  "items": [ { "slug": "sound-system-medium", "quantity": 1 },
+             { "slug": "stage-backdrop", "quantity": 1 } ] }
+
+// ← 201
+{ "data": {
+  "id": "uuid", "reference": "MDN-EVT-A7K92X", "status": "pending",
+  "customerName": "Budi Santoso", "phone": "+628123456789", "email": "budi@example.com",
+  "eventLocation": "Balai Sarbini, Jakarta Selatan", "notes": "...",
+  "dropoffAt": "2026-03-01T09:00", "pickupAt": "2026-03-01T17:00",
+  "startDate": "2026-03-01", "endDate": "2026-03-01", "isMixedBilling": true,
+  "lines": [ /* identical shape to the quote response's `lines[]` above */ ],
+  "subtotal": 1100000, "discountAmount": 0, "total": 1100000, "currency": "IDR",
+  "createdAt": "...",
+  "whatsappMessage": "Halo Mandana, saya baru saja mengajukan pesanan perlengkapan acara.\n\nNo. Referensi: MDN-EVT-A7K92X\n..." } }
+```
+
+Pricing is never trusted from the client — this endpoint calls the exact
+same pricing path `POST /event-support/quote` uses internally, so the
+persisted `total` is guaranteed to match whatever quote the customer saw
+immediately before submitting. **Reserves nothing** — same product rule as
+Storage/Moving: only a `confirmed` booking counts against availability, so
+this can 201 even if a line's `availableQuantity` is already 0; an admin
+resolves that at confirm time (`docs/event-support-admin-integration.md`
+§4/§5). The response's `whatsappMessage` differs from the quote's only in
+its opening line and the added `No. Referensi` — append the FE's own
+`NEXT_PUBLIC_MANDANA_WHATSAPP` number the same way.
+
 ## 4. Availability model
 
 Stock is a **date-aware pool**, not a plain counter or a decrementing

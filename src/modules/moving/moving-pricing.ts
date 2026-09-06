@@ -306,7 +306,7 @@ export function movingQuote(
   // summing — adding several already-rounded x.1 values can leave
   // IEEE-754 dust (e.g. 239.2 + 472.5 + ... -> 2025.3999999999999) that
   // would otherwise leak into the JSON response verbatim. Unlike a
-  // persisted MovingLead (numeric(7,1) cleans this on write), a bare
+  // persisted MovingBooking (numeric(7,1) cleans this on write), a bare
   // /moving/quote response is never round-tripped through Postgres, so
   // nothing else fixes this up.
   const distanceKm = Math.round(sumLegs((l) => l.distanceKm) * 10) / 10;

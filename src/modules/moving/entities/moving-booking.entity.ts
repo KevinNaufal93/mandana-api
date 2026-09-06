@@ -1,40 +1,42 @@
-import { Column, Entity, OneToMany } from 'typeorm';
+import { Column, Entity, JoinColumn, ManyToOne, OneToMany } from 'typeorm';
 import { BaseEntity } from '../../../common/entities/base.entity';
-import { MovingLeadStatus } from '../enums/moving-lead-status.enum';
-import { MovingLeadStop } from './moving-lead-stop.entity';
-import { MovingLeadAddon } from './moving-lead-addon.entity';
-import { MovingLeadLeg } from './moving-lead-leg.entity';
+import { MovingBookingStatus } from '../enums/moving-booking-status.enum';
+import { MovingBookingStop } from './moving-booking-stop.entity';
+import { MovingBookingAddon } from './moving-booking-addon.entity';
+import { MovingBookingLeg } from './moving-booking-leg.entity';
+import { User } from '../../users/entities/user.entity';
 
 /**
- * A captured Moving Support lead — persisted the moment a customer clicks
+ * A captured Moving Support booking — persisted the moment a customer clicks
  * "Pesan via WhatsApp", before the real conversation/confirmation happens
  * over WhatsApp with a human (see docs/moving-integration.md). Every price
  * field is a snapshot recomputed server-side via `MovingService.buildQuote()`
  * at submission time (never trust a client-sent total), same rationale as
  * EventBookingItem's snapshotted `itemName`/`pricePerDay`: a later catalog
- * rate change must never rewrite a past lead's numbers.
+ * rate change must never rewrite a past booking's numbers.
  *
  * No FK to TruckClass/MovingAddon: unlike EventItem, both have real
  * hard-delete admin endpoints (MovingService.remove(),
  * MovingAddonsService.remove()), so a RESTRICT FK here would block catalog
- * cleanup forever — `truckSlug`/`truckName` and each `MovingLeadAddon` row
+ * cleanup forever — `truckSlug`/`truckName` and each `MovingBookingAddon` row
  * are self-contained snapshots instead.
  *
- * `status` is pure CRM triage — no side-effecting state machine, since
- * nothing here is reserved (unlike StorageBooking/EventBooking's
- * confirm/cancel flow, which gate real inventory).
+ * `status` mirrors StorageBookingStatus (pending/confirmed/rejected/
+ * cancelled/completed) even though nothing here is reserved — see
+ * MovingBookingsService for why `confirm`/`reject`/`cancel`/`complete` are
+ * pure status writes with no locking or availability re-check.
  */
-@Entity('moving_leads')
-export class MovingLead extends BaseEntity {
+@Entity('moving_bookings')
+export class MovingBooking extends BaseEntity {
   @Column({ unique: true, length: 20 })
   reference!: string;
 
   @Column({
     type: 'enum',
-    enum: MovingLeadStatus,
-    default: MovingLeadStatus.NEW,
+    enum: MovingBookingStatus,
+    default: MovingBookingStatus.PENDING,
   })
-  status!: MovingLeadStatus;
+  status!: MovingBookingStatus;
 
   @Column({ name: 'truck_slug', length: 100 })
   truckSlug!: string;
@@ -129,12 +131,26 @@ export class MovingLead extends BaseEntity {
   @Column({ name: 'admin_note', type: 'text', nullable: true })
   adminNote!: string | null;
 
-  @OneToMany(() => MovingLeadStop, (stop) => stop.lead, { cascade: true })
-  stops!: MovingLeadStop[];
+  @Column({ name: 'confirmed_at', type: 'timestamp', nullable: true })
+  confirmedAt!: Date | null;
 
-  @OneToMany(() => MovingLeadAddon, (addon) => addon.lead, { cascade: true })
-  addons!: MovingLeadAddon[];
+  @ManyToOne(() => User, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'confirmed_by_id' })
+  confirmedBy!: User | null;
 
-  @OneToMany(() => MovingLeadLeg, (leg) => leg.lead, { cascade: true })
-  legs!: MovingLeadLeg[];
+  @Column({ name: 'confirmed_by_id', nullable: true, type: 'uuid' })
+  confirmedById!: string | null;
+
+  @OneToMany(() => MovingBookingStop, (stop) => stop.booking, {
+    cascade: true,
+  })
+  stops!: MovingBookingStop[];
+
+  @OneToMany(() => MovingBookingAddon, (addon) => addon.booking, {
+    cascade: true,
+  })
+  addons!: MovingBookingAddon[];
+
+  @OneToMany(() => MovingBookingLeg, (leg) => leg.booking, { cascade: true })
+  legs!: MovingBookingLeg[];
 }

@@ -15,7 +15,10 @@ import {
   EventSupportController,
   EventSupportAdminController,
 } from './event-support.controller';
-import { EventBookingsAdminController } from './event-bookings.controller';
+import {
+  EventBookingsController,
+  EventBookingsAdminController,
+} from './event-bookings.controller';
 import { EventSupportSettingsAdminController } from './event-support-settings.controller';
 import { MediaModule } from '../media/media.module';
 
@@ -41,6 +44,7 @@ import { MediaModule } from '../media/media.module';
   controllers: [
     EventSupportController,
     EventSupportAdminController,
+    EventBookingsController,
     EventBookingsAdminController,
     EventSupportSettingsAdminController,
   ],
