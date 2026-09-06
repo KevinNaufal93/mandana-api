@@ -32,6 +32,9 @@ import {
   MAX_REFERENCE_ATTEMPTS,
   POSTGRES_UNIQUE_VIOLATION,
 } from '../../common/utils/booking-reference';
+import { NotificationsService } from '../notifications/notifications.service';
+import { NotificationSourceModule } from '../notifications/enums/notification-source-module.enum';
+import { NotificationOrigin } from '../notifications/enums/notification-origin.enum';
 
 /** Row shape for the item-lock query in confirm() — `queryRunner.query()`
  * returns `any`, this gives the destructure an explicit, honest type. */
@@ -97,6 +100,7 @@ export class EventBookingsService {
     private readonly itemsService: EventItemsService,
     private readonly availability: EventAvailabilityService,
     private readonly settingsService: EventSupportSettingsService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   async findOneOrFail(id: string): Promise<EventBooking> {
@@ -248,7 +252,19 @@ export class EventBookingsService {
 
       try {
         const saved = await this.bookingRepo.save(booking);
-        return this.findOneOrFail(saved.id);
+        const full = await this.findOneOrFail(saved.id);
+        await this.notifications.emitCreated({
+          sourceModule: NotificationSourceModule.EVENT_SUPPORT,
+          sourceId: full.id,
+          reference: full.reference,
+          customerName: full.customerName,
+          total: full.total,
+          origin:
+            header.source === EventBookingSource.PUBLIC
+              ? NotificationOrigin.CUSTOMER
+              : NotificationOrigin.ADMIN,
+        });
+        return full;
       } catch (err) {
         const isReferenceCollision =
           err instanceof QueryFailedError &&
@@ -467,7 +483,13 @@ export class EventBookingsService {
     if (dto.adminNote !== undefined) booking.adminNote = dto.adminNote;
     await this.bookingRepo.save(booking);
 
-    return this.findOneOrFail(id);
+    const updated = await this.findOneOrFail(id);
+    await this.notifications.resolveForBooking(
+      NotificationSourceModule.EVENT_SUPPORT,
+      updated.id,
+      updated.status,
+    );
+    return updated;
   }
 
   /** From pending or confirmed. Releases whatever stock a confirmed booking
@@ -489,7 +511,13 @@ export class EventBookingsService {
     if (dto.adminNote !== undefined) booking.adminNote = dto.adminNote;
     await this.bookingRepo.save(booking);
 
-    return this.findOneOrFail(id);
+    const updated = await this.findOneOrFail(id);
+    await this.notifications.resolveForBooking(
+      NotificationSourceModule.EVENT_SUPPORT,
+      updated.id,
+      updated.status,
+    );
+    return updated;
   }
 
   /** Marks a confirmed booking as completed (event over, equipment
@@ -505,6 +533,12 @@ export class EventBookingsService {
     if (dto.adminNote !== undefined) booking.adminNote = dto.adminNote;
     await this.bookingRepo.save(booking);
 
-    return this.findOneOrFail(id);
+    const updated = await this.findOneOrFail(id);
+    await this.notifications.resolveForBooking(
+      NotificationSourceModule.EVENT_SUPPORT,
+      updated.id,
+      updated.status,
+    );
+    return updated;
   }
 }

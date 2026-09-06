@@ -22,6 +22,7 @@ import { AmenitiesModule } from './modules/amenities/amenities.module';
 import { MovingModule } from './modules/moving/moving.module';
 import { StorageModule } from './modules/storage/storage.module';
 import { EventSupportModule } from './modules/event-support/event-support.module';
+import { NotificationsModule } from './modules/notifications/notifications.module';
 
 @Module({
   imports: [
@@ -66,6 +67,7 @@ import { EventSupportModule } from './modules/event-support/event-support.module
     MovingModule,
     StorageModule,
     EventSupportModule,
+    NotificationsModule,
   ],
   providers: [
     // Global JWT guard: all routes protected by default; @Public() opts out

@@ -25,6 +25,9 @@ import {
   MAX_REFERENCE_ATTEMPTS,
   POSTGRES_UNIQUE_VIOLATION,
 } from '../../common/utils/booking-reference';
+import { NotificationsService } from '../notifications/notifications.service';
+import { NotificationSourceModule } from '../notifications/enums/notification-source-module.enum';
+import { NotificationOrigin } from '../notifications/enums/notification-origin.enum';
 
 /** Allow-listed sortBy -> column map: TypeScript enforces every enum value
  * has an entry (a missing one is a compile error), and user input is only
@@ -47,6 +50,7 @@ export class MovingBookingsService {
     @InjectRepository(MovingBookingLeg)
     private readonly legRepo: Repository<MovingBookingLeg>,
     private readonly movingService: MovingService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   async findOneOrFail(id: string): Promise<MovingBooking> {
@@ -232,7 +236,16 @@ export class MovingBookingsService {
 
       try {
         const saved = await this.bookingRepo.save(booking); // cascades stops + addons + legs
-        return this.findOneOrFail(saved.id);
+        const full = await this.findOneOrFail(saved.id);
+        await this.notifications.emitCreated({
+          sourceModule: NotificationSourceModule.MOVING,
+          sourceId: full.id,
+          reference: full.reference,
+          customerName: full.customerName,
+          total: full.total,
+          origin: NotificationOrigin.CUSTOMER,
+        });
+        return full;
       } catch (err) {
         const isReferenceCollision =
           err instanceof QueryFailedError &&
@@ -296,7 +309,13 @@ export class MovingBookingsService {
     if (dto.adminNote !== undefined) booking.adminNote = dto.adminNote;
     await this.bookingRepo.save(booking);
 
-    return this.findOneOrFail(id);
+    const updated = await this.findOneOrFail(id);
+    await this.notifications.resolveForBooking(
+      NotificationSourceModule.MOVING,
+      updated.id,
+      updated.status,
+    );
+    return updated;
   }
 
   async reject(
@@ -310,7 +329,13 @@ export class MovingBookingsService {
     if (dto.adminNote !== undefined) booking.adminNote = dto.adminNote;
     await this.bookingRepo.save(booking);
 
-    return this.findOneOrFail(id);
+    const updated = await this.findOneOrFail(id);
+    await this.notifications.resolveForBooking(
+      NotificationSourceModule.MOVING,
+      updated.id,
+      updated.status,
+    );
+    return updated;
   }
 
   async cancel(
@@ -324,7 +349,13 @@ export class MovingBookingsService {
     if (dto.adminNote !== undefined) booking.adminNote = dto.adminNote;
     await this.bookingRepo.save(booking);
 
-    return this.findOneOrFail(id);
+    const updated = await this.findOneOrFail(id);
+    await this.notifications.resolveForBooking(
+      NotificationSourceModule.MOVING,
+      updated.id,
+      updated.status,
+    );
+    return updated;
   }
 
   async complete(
@@ -338,6 +369,12 @@ export class MovingBookingsService {
     if (dto.adminNote !== undefined) booking.adminNote = dto.adminNote;
     await this.bookingRepo.save(booking);
 
-    return this.findOneOrFail(id);
+    const updated = await this.findOneOrFail(id);
+    await this.notifications.resolveForBooking(
+      NotificationSourceModule.MOVING,
+      updated.id,
+      updated.status,
+    );
+    return updated;
   }
 }

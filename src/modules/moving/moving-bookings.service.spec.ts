@@ -16,6 +16,7 @@ import { QueryMovingBookingsDto } from './dto/query-moving-bookings.dto';
 import { MovingQuoteResult } from './moving-pricing';
 import { POSTGRES_UNIQUE_VIOLATION } from '../../common/utils/booking-reference';
 import { User } from '../users/entities/user.entity';
+import { NotificationsService } from '../notifications/notifications.service';
 
 /** Chainable stand-in for the SelectQueryBuilder findAllAdmin() builds via
  * buildFilteredQb(). That builder is created twice per findAllAdmin() call
@@ -223,6 +224,10 @@ describe('MovingBookingsService', () => {
         },
         { provide: getRepositoryToken(MovingBookingLeg), useValue: legRepo },
         { provide: MovingService, useValue: movingService },
+        {
+          provide: NotificationsService,
+          useValue: { emitCreated: jest.fn(), resolveForBooking: jest.fn() },
+        },
       ],
     }).compile();
 

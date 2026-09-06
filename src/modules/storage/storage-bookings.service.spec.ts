@@ -17,6 +17,7 @@ import { QueryStorageBookingsDto } from './dto/query-storage-bookings.dto';
 import { StorageService } from './storage.service';
 import { StorageAvailabilityService } from './storage-availability.service';
 import { StorageMapper } from './storage.mapper';
+import { NotificationsService } from '../notifications/notifications.service';
 
 /** Chainable stand-in for the single QueryBuilder findAllAdmin() builds —
  * unlike Moving/Event, Storage's joins are all many-to-one, so there is only
@@ -73,6 +74,10 @@ describe('StorageBookingsService.findAllAdmin', () => {
         { provide: StorageService, useValue: {} },
         { provide: StorageAvailabilityService, useValue: {} },
         { provide: StorageMapper, useValue: {} },
+        {
+          provide: NotificationsService,
+          useValue: { emitCreated: jest.fn(), resolveForBooking: jest.fn() },
+        },
       ],
     }).compile();
 

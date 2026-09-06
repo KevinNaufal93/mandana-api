@@ -7,7 +7,7 @@ import { ExtractJwt, Strategy } from 'passport-jwt';
 import { UsersService } from '../../users/users.service';
 import { UserRole } from '../../users/enums/user-role.enum';
 import {
-  STORAGE_STREAM_TICKET_PURPOSE,
+  ADMIN_STREAM_TICKET_PURPOSE,
   StreamTicketPayload,
 } from '../interfaces/jwt-payload.interface';
 
@@ -37,7 +37,7 @@ export class JwtStreamStrategy extends PassportStrategy(
   }
 
   async validate(payload: StreamTicketPayload) {
-    if (payload.purpose !== STORAGE_STREAM_TICKET_PURPOSE) {
+    if (payload.purpose !== ADMIN_STREAM_TICKET_PURPOSE) {
       throw new UnauthorizedException();
     }
     // Belt-and-suspenders: issueStreamTicket() only ever signs ADMIN roles

@@ -32,6 +32,9 @@ import {
 import { applyJakartaDayRange } from '../../common/utils/jakarta-day-range';
 import { SortOrder } from '../../common/enums/sort-order.enum';
 import { StorageBookingSort } from './enums/storage-booking-sort.enum';
+import { NotificationsService } from '../notifications/notifications.service';
+import { NotificationSourceModule } from '../notifications/enums/notification-source-module.enum';
+import { NotificationOrigin } from '../notifications/enums/notification-origin.enum';
 
 /** Shapes for the two raw SQL result sets in confirm() — `queryRunner.query()`
  * returns `any`, so these give the two destructures an explicit, honest type
@@ -63,6 +66,7 @@ export class StorageBookingsService {
     private readonly storageService: StorageService,
     private readonly availability: StorageAvailabilityService,
     private readonly mapper: StorageMapper,
+    private readonly notifications: NotificationsService,
   ) {}
 
   async findOneOrFail(id: string): Promise<StorageBooking> {
@@ -231,6 +235,14 @@ export class StorageBookingsService {
         this.availability.publishBookingCreated(
           this.mapper.toBookingCreatedEvent(full),
         );
+        await this.notifications.emitCreated({
+          sourceModule: NotificationSourceModule.STORAGE,
+          sourceId: full.id,
+          reference: full.reference,
+          customerName: full.customerName,
+          total: full.total,
+          origin: NotificationOrigin.CUSTOMER,
+        });
         return full;
       } catch (err) {
         const isReferenceCollision =
@@ -351,6 +363,11 @@ export class StorageBookingsService {
     this.availability.publishBookingUpdated(
       this.mapper.toBookingUpdatedEvent(updated),
     );
+    await this.notifications.resolveForBooking(
+      NotificationSourceModule.STORAGE,
+      updated.id,
+      updated.status,
+    );
     return updated;
   }
 
@@ -368,6 +385,11 @@ export class StorageBookingsService {
     const updated = await this.findOneOrFail(id);
     this.availability.publishBookingUpdated(
       this.mapper.toBookingUpdatedEvent(updated),
+    );
+    await this.notifications.resolveForBooking(
+      NotificationSourceModule.STORAGE,
+      updated.id,
+      updated.status,
     );
     return updated;
   }
@@ -389,6 +411,11 @@ export class StorageBookingsService {
     this.availability.publishBookingUpdated(
       this.mapper.toBookingUpdatedEvent(updated),
     );
+    await this.notifications.resolveForBooking(
+      NotificationSourceModule.STORAGE,
+      updated.id,
+      updated.status,
+    );
     return updated;
   }
 
@@ -408,6 +435,11 @@ export class StorageBookingsService {
     await this.availability.publish();
     this.availability.publishBookingUpdated(
       this.mapper.toBookingUpdatedEvent(updated),
+    );
+    await this.notifications.resolveForBooking(
+      NotificationSourceModule.STORAGE,
+      updated.id,
+      updated.status,
     );
     return updated;
   }

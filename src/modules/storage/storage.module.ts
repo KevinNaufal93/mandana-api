@@ -23,6 +23,7 @@ import {
 } from './storage-bookings.controller';
 import { MediaModule } from '../media/media.module';
 import { AuthModule } from '../auth/auth.module';
+import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
   imports: [
@@ -36,6 +37,7 @@ import { AuthModule } from '../auth/auth.module';
     MediaModule,
     // For AuthService.issueStreamTicket() — see POST /admin/storage/stream-ticket.
     AuthModule,
+    NotificationsModule,
   ],
   providers: [
     StorageService,

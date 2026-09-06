@@ -13,6 +13,7 @@ import { CreatePublicEventBookingDto } from './dto/create-public-event-booking.d
 import { EventItemsService } from './event-items.service';
 import { EventAvailabilityService } from './event-availability.service';
 import { EventSupportSettingsService } from './event-support-settings.service';
+import { NotificationsService } from '../notifications/notifications.service';
 
 /** Chainable stand-in for the SelectQueryBuilder findAllAdmin() builds via
  * buildFilteredQb() — created twice per call (count phase, id-page phase),
@@ -129,6 +130,10 @@ describe('EventBookingsService', () => {
         { provide: EventItemsService, useValue: itemsService },
         { provide: EventAvailabilityService, useValue: {} },
         { provide: EventSupportSettingsService, useValue: settingsService },
+        {
+          provide: NotificationsService,
+          useValue: { emitCreated: jest.fn(), resolveForBooking: jest.fn() },
+        },
       ],
     }).compile();
 

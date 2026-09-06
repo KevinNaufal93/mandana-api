@@ -21,6 +21,7 @@ import {
 } from './event-bookings.controller';
 import { EventSupportSettingsAdminController } from './event-support-settings.controller';
 import { MediaModule } from '../media/media.module';
+import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
   imports: [
@@ -32,6 +33,7 @@ import { MediaModule } from '../media/media.module';
       EventSupportSettings,
     ]),
     MediaModule,
+    NotificationsModule,
   ],
   providers: [
     EventCategoriesService,

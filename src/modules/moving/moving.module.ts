@@ -20,6 +20,7 @@ import {
   MovingBookingsAdminController,
 } from './moving-bookings.controller';
 import { MediaModule } from '../media/media.module';
+import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
   imports: [
@@ -33,6 +34,7 @@ import { MediaModule } from '../media/media.module';
       MovingBookingLeg,
     ]),
     MediaModule,
+    NotificationsModule,
   ],
   providers: [
     MovingService,

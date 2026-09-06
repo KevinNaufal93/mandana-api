@@ -8,7 +8,7 @@ import { UsersService } from '../users/users.service';
 import { UsersMapper } from '../users/users.mapper';
 import {
   JwtPayload,
-  STORAGE_STREAM_TICKET_PURPOSE,
+  ADMIN_STREAM_TICKET_PURPOSE,
   StreamTicketPayload,
 } from './interfaces/jwt-payload.interface';
 import { User } from '../users/entities/user.entity';
@@ -74,7 +74,7 @@ export class AuthService {
       sub: user.id,
       email: user.email,
       role: user.role,
-      purpose: STORAGE_STREAM_TICKET_PURPOSE,
+      purpose: ADMIN_STREAM_TICKET_PURPOSE,
     };
 
     const accessSecret =
