@@ -51,7 +51,8 @@ export class TruckClassDto {
   @ApiPropertyOptional({ nullable: true, type: Number }) helperCount!:
     number | null;
   @ApiProperty({ description: 'Rupiah, integer' }) baseFare!: number;
-  @ApiProperty({ description: 'Rupiah per km, integer' }) perKmFare!: number;
+  @ApiProperty({ description: 'Rupiah per 500 m step, integer' })
+  per500mFare!: number;
   @ApiPropertyOptional({ nullable: true, type: Number }) includedKm!:
     number | null;
   @ApiPropertyOptional({ nullable: true, type: Number }) minFare!:
@@ -165,6 +166,11 @@ export class MovingQuoteLegDto {
   @ApiProperty() distanceKm!: number;
   @ApiProperty() includedKm!: number;
   @ApiProperty() chargeableKm!: number;
+  @ApiProperty({
+    description:
+      'Whole 500 m steps billed on this leg — the multiplicand behind distanceFare. Counted from raw metres and rounded up, so this can be > 0 while chargeableKm displays 0.0.',
+  })
+  chargeableSteps!: number;
   @ApiProperty({ description: 'Rupiah' }) baseFare!: number;
   @ApiProperty({ description: 'Rupiah' }) distanceFare!: number;
   @ApiProperty({
@@ -178,6 +184,10 @@ export class MovingQuoteDto {
   @ApiProperty() distanceKm!: number;
   @ApiProperty() includedKm!: number;
   @ApiProperty() chargeableKm!: number;
+  @ApiProperty({
+    description: 'Sum of every leg\'s chargeableSteps. See MovingQuoteLegDto.',
+  })
+  chargeableSteps!: number;
   @ApiProperty() roundTrip!: boolean;
   @ApiProperty({ description: '1 one-way, 2 round trip' })
   tripMultiplier!: number;

@@ -54,6 +54,7 @@ const baseResult: MovingQuoteResult = {
   distanceKm: 20,
   includedKm: 5,
   chargeableKm: 15,
+  chargeableSteps: 30,
   roundTrip: false,
   tripMultiplier: 1,
   baseFare: 850_000,
@@ -73,6 +74,7 @@ const baseResult: MovingQuoteResult = {
       distanceKm: 20,
       includedKm: 5,
       chargeableKm: 15,
+      chargeableSteps: 30,
       baseFare: 850_000,
       distanceFare: 120_000,
       subtotal: 970_000,
@@ -129,6 +131,7 @@ interface CreatedBookingInput {
     distanceKm: number;
     includedKm: number;
     chargeableKm: number;
+    chargeableSteps: number;
     baseFare: number;
     distanceFare: number;
     subtotal: number;
@@ -155,6 +158,7 @@ interface LegInput {
   distanceKm: number;
   includedKm: number;
   chargeableKm: number;
+  chargeableSteps: number;
   baseFare: number;
   distanceFare: number;
   subtotal: number;

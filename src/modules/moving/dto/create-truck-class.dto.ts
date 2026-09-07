@@ -89,18 +89,23 @@ export class CreateTruckClassDto {
   baseFare!: number;
 
   @ApiProperty({
-    example: 4500,
+    example: 2250,
     minimum: 0,
-    description: 'Rupiah per km, integer',
+    description:
+      'Rupiah per whole 500 m step charged beyond includedKm, per leg. ' +
+      'Distance is billed in fixed 500 m steps rounded UP — against a 5 km ' +
+      'allowance, 5.001 km bills 1 step, 5.500 km still bills 1, 5.501 km ' +
+      'bills 2. The 500 m step size is fixed in the pricing engine and is ' +
+      'not configurable.',
   })
   @IsInt()
   @Min(0)
-  perKmFare!: number;
+  per500mFare!: number;
 
   @ApiPropertyOptional({
     example: 5,
     minimum: 0,
-    description: 'Km included in baseFare before perKmFare applies',
+    description: 'Km included in baseFare before per500mFare applies',
   })
   @IsOptional()
   @IsInt()

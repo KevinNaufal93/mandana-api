@@ -1,24 +1,20 @@
 /**
- * Pure fare math for the Moving Support quote. No Nest decorators, no I/O —
- * mirrors `lib/moving/pricing.ts` in the frontend byte-for-byte so the
- * client-side preview (rendered instantly from the truck list) and the
- * server-authoritative `POST /moving/quote` response never disagree.
+ * Pure fare math for the Moving Support quote. No Nest decorators, no I/O.
  *
- * IMPORTANT: this file's *function bodies* are mirrored in the frontend
- * repo — changing the math here without changing it there silently
- * desyncs the preview price from the quoted price. That now includes the
- * per-leg banding below (`movingQuote()` takes an ordered `legs[]` array,
- * not one summed `distanceMeters`) — porting the equivalent rewrite to
- * `lib/moving/pricing.ts` is explicitly OUT OF SCOPE for this backend
- * change; until it happens, the frontend's instant preview will disagree
- * with the server-authoritative response for any multi-leg quote. See
- * docs/moving-integration.md.
+ * There is no frontend mirror of this file anymore. `mandana-web` deleted
+ * its client-side copy (`lib/moving/pricing.ts`) on 2026-08-12 after it
+ * verifiably drifted from this endpoint's rounding rule — see
+ * `lib/api/queries.ts` in that repo. `POST /moving/quote` is the sole
+ * source of truth; the public site fetches it rather than estimating
+ * locally. Distance is priced per leg (`movingQuote()` takes an ordered
+ * `legs[]` array, not one summed `distanceMeters`) in whole 500 m steps —
+ * see `MOVING_DISTANCE_STEP_METERS` below.
  *
- * `MOVING_DEFAULTS` itself is NOT part of the mirror contract: it is only
- * the last-resort fallback used when no MovingSettings row exists yet. The
- * numbers that actually apply (roundToIdr, bandPct, defaultIncludedKm)
- * come from `GET /moving/pricing-config` at runtime — the frontend fetches
- * them rather than hardcoding its own copy.
+ * `MOVING_DEFAULTS` is only the last-resort fallback used when no
+ * MovingSettings row exists yet. The numbers that actually apply
+ * (roundToIdr, bandPct, defaultIncludedKm) come from
+ * `GET /moving/pricing-config` at runtime — callers fetch them rather than
+ * hardcoding their own copy.
  */
 
 export interface MovingPricingPolicy {
@@ -33,10 +29,21 @@ export const MOVING_DEFAULTS: MovingPricingPolicy = {
   bandPct: 10,
 };
 
+/**
+ * Distance beyond a leg's included allowance is billed in whole 500 m
+ * steps, rounded up — never pro-rated per metre. Deliberately a constant
+ * here rather than a `truck_classes` column or a MovingSettings field: it
+ * is the *shape* of the tariff, not a number ops tunes (they tune each
+ * truck class's `per500mFare` instead). Against a 5 km allowance: 5.000 km
+ * is 0 steps, 5.001 km is 1, 5.500 km is still 1, 5.501 km is 2.
+ */
+export const MOVING_DISTANCE_STEP_METERS = 500;
+
 /** The rate fields a truck class contributes to a quote. */
 export interface TruckRate {
   baseFare: number;
-  perKmFare: number;
+  /** Rupiah per whole 500 m step beyond `includedKm`, charged per leg. */
+  per500mFare: number;
   includedKm?: number | null;
   minFare?: number | null;
 }
@@ -99,6 +106,13 @@ export interface MovingQuoteLegResult {
   distanceKm: number;
   includedKm: number;
   chargeableKm: number;
+  /** Whole 500 m steps billed on this leg — `ceil(chargeableMeters / 500)`,
+   * counted from RAW metres. This, not `chargeableKm`, is the multiplicand
+   * behind `distanceFare`. Not doubled by `tripMultiplier` — it describes
+   * the measured leg; the doubling lives in the fare, same as
+   * `chargeableKm`. Can be > 0 while `chargeableKm` displays `0.0` (e.g.
+   * 40 m of excess rounds to 0.0 km but is still a whole step). */
+  chargeableSteps: number;
   baseFare: number;
   distanceFare: number;
   subtotal: number;
@@ -108,6 +122,8 @@ export interface MovingQuoteResult {
   distanceKm: number;
   includedKm: number;
   chargeableKm: number;
+  /** Sum of every leg's `chargeableSteps`. See that field's doc comment. */
+  chargeableSteps: number;
   roundTrip: boolean;
   tripMultiplier: number;
   baseFare: number;
@@ -208,6 +224,17 @@ function computeAddonAmount(
  * and the per-leg subtotals are summed for the trip total; `minFare` floors
  * that sum once, not per leg (see `MovingQuoteLegResult`'s doc comment).
  *
+ * Distance beyond `includedKm` is billed in whole `MOVING_DISTANCE_STEP_METERS`
+ * (500 m) steps, rounded UP, per leg — never pro-rated per metre and never
+ * pooled across legs before rounding. Step counting reads each leg's RAW
+ * `distanceMeters`, not the 0.1-km-rounded `distanceKm` — rounding to km
+ * first and then stepping would misplace the boundary (5,501 m would snap
+ * to 5.5 km, read as exactly 500 m of excess, and bill one step instead of
+ * the correct two). `distanceKm`/`chargeableKm` remain accurate
+ * display/persistence values; `chargeableSteps` is what actually drives
+ * `distanceFare`, and the two can legitimately disagree (5,040 m against a
+ * 5 km allowance displays `chargeableKm: 0` but still bills one step).
+ *
  * Round trip only auto-doubles distance for a single-leg request
  * (`legs.length === 1`, `tripMultiplier` becomes 2 on that one leg's
  * `distanceFare`) — this preserves today's exact single-destination
@@ -254,6 +281,7 @@ export function movingQuote(
       distanceKm: 0,
       includedKm: includedKmFallback,
       chargeableKm: 0,
+      chargeableSteps: 0,
       roundTrip,
       tripMultiplier,
       baseFare: 0,
@@ -272,7 +300,7 @@ export function movingQuote(
   }
 
   const baseFareRate = nonNegative(rate.baseFare);
-  const perKmFare = nonNegative(rate.perKmFare);
+  const per500mFare = nonNegative(rate.per500mFare);
   const minFare = nonNegative(rate.minFare ?? 0);
 
   const legResults: MovingQuoteLegResult[] = legs.map((leg) => {
@@ -281,18 +309,32 @@ export function movingQuote(
         distanceKm: 0,
         includedKm: includedKmFallback,
         chargeableKm: 0,
+        chargeableSteps: 0,
         baseFare: 0,
         distanceFare: 0,
         subtotal: 0,
       };
     }
+    // Step counting reads RAW metres and never the 0.1-km-rounded
+    // distanceKm below: 5,501 m snaps to 5.5 km, which would show 500 m of
+    // excess and bill ONE step instead of the correct two. distanceKm and
+    // chargeableKm are display/persistence values from here on — they no
+    // longer drive a single Rupiah.
+    const includedMeters = includedKmFallback * 1000;
+    const chargeableMeters = Math.max(0, leg.distanceMeters - includedMeters);
+    const chargeableSteps = Math.ceil(
+      chargeableMeters / MOVING_DISTANCE_STEP_METERS,
+    );
+
     const distanceKm = Math.round((leg.distanceMeters / 1000) * 10) / 10;
-    const chargeableKm = Math.max(0, distanceKm - includedKmFallback);
-    const distanceFare = Math.round(chargeableKm * perKmFare) * tripMultiplier;
+    const chargeableKm = Math.round((chargeableMeters / 1000) * 10) / 10;
+    const distanceFare =
+      Math.round(chargeableSteps * per500mFare) * tripMultiplier;
     return {
       distanceKm,
       includedKm: includedKmFallback,
       chargeableKm,
+      chargeableSteps,
       baseFare: baseFareRate,
       distanceFare,
       subtotal: baseFareRate + distanceFare,
@@ -311,6 +353,8 @@ export function movingQuote(
   // nothing else fixes this up.
   const distanceKm = Math.round(sumLegs((l) => l.distanceKm) * 10) / 10;
   const chargeableKm = Math.round(sumLegs((l) => l.chargeableKm) * 10) / 10;
+  // Integer sum — no 1-dp re-snapping needed, unlike the two above.
+  const chargeableSteps = sumLegs((l) => l.chargeableSteps);
   const includedKm = sumLegs((l) => l.includedKm);
   const baseFare = sumLegs((l) => l.baseFare);
   const distanceFare = sumLegs((l) => l.distanceFare);
@@ -374,6 +418,7 @@ export function movingQuote(
     distanceKm,
     includedKm,
     chargeableKm,
+    chargeableSteps,
     roundTrip,
     tripMultiplier,
     baseFare,

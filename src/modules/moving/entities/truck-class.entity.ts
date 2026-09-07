@@ -45,8 +45,8 @@ export class TruckClass extends BaseEntity {
   @Column({ name: 'base_fare', type: 'int' })
   baseFare!: number;
 
-  @Column({ name: 'per_km_fare', type: 'int' })
-  perKmFare!: number;
+  @Column({ name: 'per_500m_fare', type: 'int' })
+  per500mFare!: number;
 
   @Column({ name: 'included_km', type: 'int', nullable: true })
   includedKm!: number | null;

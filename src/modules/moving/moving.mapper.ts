@@ -52,7 +52,7 @@ export class MovingMapper {
       dimensions: this.buildDimensions(t),
       helperCount: t.helperCount,
       baseFare: t.baseFare,
-      perKmFare: t.perKmFare,
+      per500mFare: t.per500mFare,
       includedKm: t.includedKm,
       minFare: t.minFare,
       mediaAssetId: t.mediaAssetId,
@@ -122,6 +122,9 @@ export class MovingMapper {
       distanceKm: toNumber(booking.distanceKm) ?? booking.distanceKm,
       includedKm: booking.includedKm,
       chargeableKm: toNumber(booking.chargeableKm) ?? booking.chargeableKm,
+      // Plain int column, unlike the numeric columns above — no toNumber()
+      // needed. null on a booking captured before 500 m step pricing.
+      chargeableSteps: booking.chargeableSteps,
       roundTrip: booking.roundTrip,
       tollRoute: booking.tollRoute,
       declaredValue: booking.declaredValue,
@@ -148,6 +151,7 @@ export class MovingMapper {
           distanceKm: toNumber(l.distanceKm) ?? l.distanceKm,
           includedKm: l.includedKm,
           chargeableKm: toNumber(l.chargeableKm) ?? l.chargeableKm,
+          chargeableSteps: l.chargeableSteps,
           baseFare: l.baseFare,
           distanceFare: l.distanceFare,
           subtotal: l.subtotal,

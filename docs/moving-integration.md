@@ -45,7 +45,7 @@ ignores it and never returns retired classes). Sorted `sortOrder ASC, name ASC`.
       "dimensions": { "lengthCm": 210, "widthCm": 140, "heightCm": 120 },
       "helperCount": 1,
       "baseFare": 250000,
-      "perKmFare": 4500,
+      "per500mFare": 2250,
       "includedKm": 5,
       "minFare": 250000,
       "mediaAssetId": null,
@@ -59,7 +59,7 @@ ignores it and never returns retired classes). Sorted `sortOrder ASC, name ASC`.
 
 Notes vs. the FE's original contract sketch:
 
-- **Money is a JSON integer**, not a decimal string. `baseFare`, `perKmFare`,
+- **Money is a JSON integer**, not a decimal string. `baseFare`, `per500mFare`,
   and `minFare` are Postgres `integer` columns specifically to avoid the
   `numeric` → string leak that `GET /properties` has today (its `price` field
   comes back `"45000000.00"`). No `Number()` coercion needed on these three.
@@ -163,10 +163,14 @@ The pricing policy previously hardcoded as `MOVING_DEFAULTS` in both repos.
 
 ### `POST /moving/quote` (public)
 
-The FE's `lib/moving/pricing.ts` renders an instant preview from the truck
-list + addon list + this pricing config (keep it — it's the right UX for step
-2). This endpoint makes the **final** number the customer and WhatsApp see
-authoritative, so a rate change takes effect without a frontend deploy.
+There is no client-side pricing preview — `mandana-web` deleted its local
+copy (`lib/moving/pricing.ts`) on 2026-08-12 after it verifiably drifted from
+this endpoint's rounding rule. This endpoint is the **sole** source of truth
+for price; the frontend calls it and renders whatever comes back, so a rate
+change takes effect without a frontend deploy.
+
+Distance is billed in whole **500 m steps, rounded up**, per leg, beyond the
+truck's `includedKm` — see `chargeableSteps` below.
 
 ```jsonc
 // Request — truckSlug/legs are all that's required; everything else is
@@ -193,6 +197,7 @@ authoritative, so a rate change takes effect without a frontend deploy.
     "distanceKm": 20,
     "includedKm": 5,
     "chargeableKm": 15,
+    "chargeableSteps": 30,
     "roundTrip": false,
     "tripMultiplier": 1,
     "baseFare": 850000,
@@ -212,7 +217,7 @@ authoritative, so a rate change takes effect without a frontend deploy.
     "lowEstimate": 1500000,
     "highEstimate": 1840000,
     "legs": [
-      { "distanceKm": 20, "includedKm": 5, "chargeableKm": 15, "baseFare": 850000, "distanceFare": 120000, "subtotal": 970000 }
+      { "distanceKm": 20, "includedKm": 5, "chargeableKm": 15, "chargeableSteps": 30, "baseFare": 850000, "distanceFare": 120000, "subtotal": 970000 }
     ],
     "currency": "IDR"
   }
@@ -224,13 +229,20 @@ Field notes:
 - **`legs`** — each leg is priced independently against the truck's rate
   card (a leg under `includedKm` still pays that leg's full flat `baseFare`,
   no proration) and the leg subtotals are summed; `distanceKm` /
-  `includedKm` / `chargeableKm` / `baseFare` / `distanceFare` /
-  `travelSubtotal` at the top level are all **sums across `legs[]`** — for a
-  single-leg request, sum-of-one is numerically identical to the old
-  single-`distanceMeters` math, so a single-destination quote's price never
-  moves. The response's `legs[]` array is unrounded — only `total` /
-  `lowEstimate` / `highEstimate` are rounded — and deliberately has no
-  per-leg `minFareApplied` (see `minFareApplied` note below).
+  `includedKm` / `chargeableKm` / `chargeableSteps` / `baseFare` /
+  `distanceFare` / `travelSubtotal` at the top level are all **sums across
+  `legs[]`** — for a single-leg request, sum-of-one is numerically identical
+  to the old single-`distanceMeters` math, so a single-destination quote's
+  price never moves. The response's `legs[]` array is unrounded — only
+  `total` / `lowEstimate` / `highEstimate` are rounded — and deliberately has
+  no per-leg `minFareApplied` (see `minFareApplied` note below).
+- **`chargeableSteps`** — whole 500 m steps billed beyond `includedKm`,
+  rounded **up**, counted per leg from the *raw* metres (not from the
+  0.1-km-rounded `chargeableKm`). This is the multiplicand behind
+  `distanceFare`, not `chargeableKm` — the two can legitimately disagree:
+  40 m of excess displays `chargeableKm: 0` but still bills one step. Against
+  a 5 km allowance: 5.000 km is 0 steps, 5.001 km is 1, 5.500 km is still 1,
+  5.501 km is 2.
 - **`roundTrip`** — see "Round trip + multiple legs" right below; it's not a
   flat "doubles distance" rule once there's more than one leg.
 - **`tollRoute`** (default `true`) says whether the trip was computed via a
@@ -296,16 +308,12 @@ client-computed preview before building the WhatsApp message. Treat the
 client preview as instant feedback only, never as the number that ships in
 the WA text.
 
-**Constants — fetch, don't hardcode.** `moving-pricing.ts`'s exported
-*function bodies* are still mirrored byte-for-byte in `lib/moving/pricing.ts`
-— changing the math on one side without the other silently desyncs the
-preview from the quote. The **numbers** are a different story now: `GET
-/moving/pricing-config` and `GET /moving/addons` are the source of truth for
-`roundToIdr` / `bandPct` / `defaultIncludedKm` and every fee rate. Delete any
-locally hardcoded copy of `MOVING_DEFAULTS` in the frontend and pass the
-fetched config as the 3rd argument to `movingQuote()` client-side instead —
-that removes the "remember to change both repos" hazard for every value
-except the math itself.
+**Constants — fetch, don't hardcode.** There is no frontend copy of the
+pricing math to keep in sync (see above) — but `GET /moving/pricing-config`
+and `GET /moving/addons` remain the source of truth for `roundToIdr` /
+`bandPct` / `defaultIncludedKm` and every fee rate, for any UI (e.g. an admin
+preview) that wants to display them without hardcoding a copy that can drift
+when ops changes a rate.
 
 ### POST /moving/bookings (public)
 
@@ -370,6 +378,7 @@ same server-side path), plus `pickup` and `destinations`:
     "distanceKm": 45,
     "includedKm": 15,
     "chargeableKm": 30,
+    "chargeableSteps": 60,
     "roundTrip": false,
     "tollRoute": true,
     "declaredValue": null,
@@ -385,9 +394,9 @@ same server-side path), plus `pickup` and `destinations`:
     "lowEstimate": 2510000,
     "highEstimate": 3070000,
     "legs": [
-      { "distanceKm": 15, "includedKm": 5, "chargeableKm": 10, "baseFare": 850000, "distanceFare": 80000, "subtotal": 930000 },
-      { "distanceKm": 20, "includedKm": 5, "chargeableKm": 15, "baseFare": 850000, "distanceFare": 120000, "subtotal": 970000 },
-      { "distanceKm": 10, "includedKm": 5, "chargeableKm": 5, "baseFare": 850000, "distanceFare": 40000, "subtotal": 890000 }
+      { "distanceKm": 15, "includedKm": 5, "chargeableKm": 10, "chargeableSteps": 20, "baseFare": 850000, "distanceFare": 80000, "subtotal": 930000 },
+      { "distanceKm": 20, "includedKm": 5, "chargeableKm": 15, "chargeableSteps": 30, "baseFare": 850000, "distanceFare": 120000, "subtotal": 970000 },
+      { "distanceKm": 10, "includedKm": 5, "chargeableKm": 5, "chargeableSteps": 10, "baseFare": 850000, "distanceFare": 40000, "subtotal": 890000 }
     ],
     "currency": "IDR",
     "customerName": null,
@@ -415,6 +424,10 @@ Field notes:
   `destinations.length + 1` when `roundTrip: true` and you choose to include
   an explicit return leg (optional, not mandatory) — checked before any
   pricing happens; a mismatch is `400`.
+- **`chargeableSteps`** (trip-level and per-leg) is `null` on a booking
+  captured before 500 m step pricing shipped — those were priced per
+  kilometre, so a step count doesn't apply and isn't back-filled. Every
+  booking created after that release has a real integer here.
 - **`customerName`/`phone`/`email`** are optional and not currently sent by
   the Moving Support page (it collects no contact fields) — future-proofing,
   not a requirement.

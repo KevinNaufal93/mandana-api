@@ -67,6 +67,14 @@ export class MovingBooking extends BaseEntity {
   @Column({ name: 'chargeable_km', type: 'numeric', precision: 7, scale: 1 })
   chargeableKm!: number;
 
+  // Nullable: NULL means this booking was captured before 500 m step
+  // pricing shipped (priced per km) — a step count does not apply to it,
+  // and back-filling one from chargeable_km would fabricate history (see
+  // moving-pricing.ts). Every booking created after that release writes a
+  // real integer here.
+  @Column({ name: 'chargeable_steps', type: 'int', nullable: true })
+  chargeableSteps!: number | null;
+
   @Column({ name: 'round_trip', default: false })
   roundTrip!: boolean;
 

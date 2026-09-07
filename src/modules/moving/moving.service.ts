@@ -98,7 +98,7 @@ export class MovingService {
       heightCm: dto.heightCm ?? null,
       helperCount: dto.helperCount ?? null,
       baseFare: dto.baseFare,
-      perKmFare: dto.perKmFare,
+      per500mFare: dto.per500mFare,
       includedKm: dto.includedKm ?? null,
       minFare: dto.minFare ?? null,
       mediaAssetId: dto.mediaAssetId ?? null,
@@ -138,7 +138,7 @@ export class MovingService {
         helperCount: dto.helperCount ?? null,
       }),
       ...(dto.baseFare !== undefined && { baseFare: dto.baseFare }),
-      ...(dto.perKmFare !== undefined && { perKmFare: dto.perKmFare }),
+      ...(dto.per500mFare !== undefined && { per500mFare: dto.per500mFare }),
       ...(dto.includedKm !== undefined && {
         includedKm: dto.includedKm ?? null,
       }),
@@ -211,7 +211,7 @@ export class MovingService {
       dto.legs,
       {
         baseFare: truck.baseFare,
-        perKmFare: truck.perKmFare,
+        per500mFare: truck.per500mFare,
         includedKm: truck.includedKm,
         minFare: truck.minFare,
       },

@@ -46,6 +46,13 @@ export class MovingBookingLegDto {
   includedKm!: number;
   @ApiProperty()
   chargeableKm!: number;
+  @ApiPropertyOptional({
+    nullable: true,
+    type: Number,
+    description:
+      'Whole 500 m steps billed on this leg. null on a leg captured before 500 m step pricing shipped.',
+  })
+  chargeableSteps!: number | null;
   @ApiProperty({ description: 'Rupiah' })
   baseFare!: number;
   @ApiProperty({ description: 'Rupiah' })
@@ -87,6 +94,13 @@ export class MovingBookingDto {
   includedKm!: number;
   @ApiProperty()
   chargeableKm!: number;
+  @ApiPropertyOptional({
+    nullable: true,
+    type: Number,
+    description:
+      'Sum of every leg\'s chargeableSteps. null on a booking captured before 500 m step pricing shipped.',
+  })
+  chargeableSteps!: number | null;
   @ApiProperty()
   roundTrip!: boolean;
   @ApiProperty()

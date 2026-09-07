@@ -42,6 +42,11 @@ export class MovingBookingLeg extends BaseEntity {
   @Column({ name: 'chargeable_km', type: 'numeric', precision: 7, scale: 1 })
   chargeableKm!: number;
 
+  // Nullable: NULL on a leg priced before 500 m step pricing shipped — see
+  // the identical column on MovingBooking for the full rationale.
+  @Column({ name: 'chargeable_steps', type: 'int', nullable: true })
+  chargeableSteps!: number | null;
+
   @Column({ name: 'base_fare', type: 'int' })
   baseFare!: number;
 

@@ -40,10 +40,10 @@ Sorted `sortOrder ASC, name ASC` on every read.
   "description": "<p>Cocok untuk isi kamar kos atau barang &plusmn;3 m&sup3;</p>",
   "capacityKg": 1000, "volumeM3": 3.5,
   "lengthCm": 210, "widthCm": 140, "heightCm": 120, "helperCount": 1,
-  "baseFare": 250000, "perKmFare": 4500, "includedKm": 5, "minFare": 250000,
+  "baseFare": 250000, "per500mFare": 2250, "includedKm": 5, "minFare": 250000,
   "mediaAssetId": "uuid", "sortOrder": 10
 }
-// Only name/baseFare/perKmFare are required — everything else is optional.
+// Only name/baseFare/per500mFare are required — everything else is optional.
 // slug is auto-generated from name when omitted; if you supply your own
 // (lowercase, hyphenated) and it collides, it's silently suffixed "-2",
 // "-3", ... — there's no 409 on a duplicate slug. Read back `data.slug`
@@ -57,7 +57,7 @@ Sorted `sortOrder ASC, name ASC` on every read.
   "capacityKg": 1000, "volumeM3": 3.5,
   "dimensions": { "lengthCm": 210, "widthCm": 140, "heightCm": 120 },
   "helperCount": 1,
-  "baseFare": 250000, "perKmFare": 4500, "includedKm": 5, "minFare": 250000,
+  "baseFare": 250000, "per500mFare": 2250, "includedKm": 5, "minFare": 250000,
   "mediaAssetId": "uuid",
   "image": { "url": "...", "srcset": "...", "srcsetAvif": "", "placeholder": "data:image/webp;base64,...", "alt": null, "width": 800, "height": 600 },
   "isActive": true, "sortOrder": 10 } }
@@ -69,8 +69,8 @@ has the full math):
 | Field | Drives |
 |---|---|
 | `baseFare` | Flat Rupiah charged on **every leg** of a trip, covering up to `includedKm` — a 3-stop move pays this three times, once per leg. |
-| `perKmFare` | Rupiah per km charged beyond `includedKm`, per leg. |
-| `includedKm` | Km included in `baseFare` before `perKmFare` applies, per leg. Leave `null` to fall back to the settings singleton's `defaultIncludedKm` (§4). |
+| `per500mFare` | Rupiah per whole **500 m step** charged beyond `includedKm`, per leg, rounded **up** — 5.001 km against a 5 km allowance bills 1 step, 5.500 km still bills 1, 5.501 km bills 2. The 500 m step size is fixed in the pricing engine, not admin-tunable. |
+| `includedKm` | Km included in `baseFare` before `per500mFare` applies, per leg. Leave `null` to fall back to the settings singleton's `defaultIncludedKm` (§4). |
 | `minFare` | Floors the trip-wide `travelSubtotal` **once**, after summing every leg — never applied per leg. |
 
 Three things to get right before you build the edit screen:
@@ -270,6 +270,11 @@ catalog:
   singleton (§4) **never** rewrites a number on an already-captured booking.
   If a customer disputes a quoted price, the booking's own stored fields are
   the source of truth, not a live recalculation.
+- `chargeableSteps` (trip-level and per `legs[]` entry) is `null` on a
+  booking captured before 500 m step pricing shipped — those were priced
+  per kilometre, so a step count doesn't apply and was deliberately not
+  back-filled from `chargeableKm` (a rounded display value can't recover it
+  exactly). Treat `null` as "pre-migration," not as a data bug.
 
 ## 7. Money
 
@@ -285,8 +290,11 @@ before you build a rate-editing form:
 - `minFare` (§2) floors the trip-wide `travelSubtotal` **once**, after
   summing every leg — never per leg, and never absorbing toll or add-on
   charges (those are always added on top of the floored amount).
-- `perKmFare` is Rupiah per kilometre, applied per leg beyond that leg's own
-  `includedKm`.
+- `per500mFare` is Rupiah per whole **500 m step**, rounded up, applied per
+  leg beyond that leg's own `includedKm` — **not** a per-kilometre rate.
+  **Label the rate-card input "Tarif per 500 m", never "per km"** — a stale
+  "per km" label above this value is exactly how ops ends up doubling every
+  price on a truck class by mistake.
 
 ## Errors
 
