@@ -94,7 +94,7 @@ export class NotificationStreamTicketResponseDto {
 }
 
 // ─── Admin SSE stream events ─────────────────────────────────────────────────
-// (notification.created / notification.resolved / notification.read / ping)
+// (notification.snapshot / notification.created / notification.resolved / notification.read / ping)
 
 export class NotificationCreatedEventDto extends AdminNotificationDto {
   @ApiProperty() unresolvedCount!: number;
@@ -116,5 +116,16 @@ export class NotificationReadEventDto {
     description: 'ids that transitioned to read by this action',
   })
   ids!: string[];
+  @ApiProperty() unreadCount!: number;
+}
+
+export class NotificationSnapshotEventDto {
+  @ApiProperty({
+    type: [AdminNotificationDto],
+    description:
+      'Latest notifications (same page the bell seeds with) as of connect time',
+  })
+  items!: AdminNotificationDto[];
+  @ApiProperty() unresolvedCount!: number;
   @ApiProperty() unreadCount!: number;
 }

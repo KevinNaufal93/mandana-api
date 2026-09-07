@@ -52,7 +52,11 @@ function makeNotification(
 describe('NotificationsService', () => {
   let service: NotificationsService;
   let repo: RepoMock;
-  let mapper: { toDto: jest.Mock; toCreatedEvent: jest.Mock };
+  let mapper: {
+    toDto: jest.Mock;
+    toCreatedEvent: jest.Mock;
+    toSnapshotEvent: jest.Mock;
+  };
   let events: unknown[];
   let subscription: Subscription;
 
@@ -64,6 +68,13 @@ describe('NotificationsService', () => {
         id: n.id,
         ...(summary as object),
       })),
+      // Never actually reached in this file's tests: buildSnapshot()'s own
+      // findAllAdmin() call throws synchronously on the unconfigured
+      // createQueryBuilder mock, every time stream() is subscribed in
+      // beforeEach below -- caught internally by snapshot$()'s own
+      // catchError, so it never reaches toSnapshotEvent or the events
+      // array. Present purely to satisfy NotificationsMapper's shape.
+      toSnapshotEvent: jest.fn(),
     };
     service = new NotificationsService(
       repo as unknown as ConstructorParameters<typeof NotificationsService>[0],
@@ -76,6 +87,16 @@ describe('NotificationsService', () => {
     // file advances real time -- stream()'s heartbeat interval(15_000) never
     // gets the chance to fire on its own.
     subscription = service.stream().subscribe((e) => events.push(e));
+
+    // stream() now also fires a notification.snapshot on every subscribe,
+    // which synchronously calls repo.createQueryBuilder/repo.count via
+    // buildSnapshot()'s own findAllAdmin()/getSummary() (it then rejects,
+    // caught internally by snapshot$()'s own catchError, since this fresh
+    // repo mock has neither configured yet). Clear call history -- but not
+    // the mockResolvedValue/mockImplementation config from makeRepo() above
+    // -- so each test's own assertions about what IT called start from
+    // zero, same as before stream() had a snapshot.
+    jest.clearAllMocks();
   });
 
   afterEach(() => {

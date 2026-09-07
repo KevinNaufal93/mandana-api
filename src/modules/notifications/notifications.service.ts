@@ -6,14 +6,17 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { IsNull, QueryFailedError, Repository } from 'typeorm';
-import { Observable, Subject, interval, merge } from 'rxjs';
+import { EMPTY, Observable, Subject, from, interval, merge } from 'rxjs';
 import { catchError, map } from 'rxjs/operators';
 import { AdminNotification } from './entities/admin-notification.entity';
 import { NotificationSourceModule } from './enums/notification-source-module.enum';
 import { NotificationOrigin } from './enums/notification-origin.enum';
 import { NotificationFilter } from './enums/notification-filter.enum';
 import { QueryAdminNotificationsDto } from './dto/query-admin-notifications.dto';
-import { NotificationSummaryDto } from './dto/notification-response.dto';
+import {
+  NotificationSnapshotEventDto,
+  NotificationSummaryDto,
+} from './dto/notification-response.dto';
 import { NotificationsMapper } from './notifications.mapper';
 import { PaginatedResult } from '../../common/interfaces/paginated-result.interface';
 import { POSTGRES_UNIQUE_VIOLATION } from '../../common/utils/booking-reference';
@@ -22,6 +25,11 @@ import { POSTGRES_UNIQUE_VIOLATION } from '../../common/utils/booking-reference'
  * idle timeout kills a quiet SSE response, so a heartbeat comfortably under
  * that keeps the connection alive. */
 const HEARTBEAT_MS = 15_000;
+
+/** Matches DROPDOWN_ITEM_LIMIT in the web admin's notification-bell.tsx --
+ * the snapshot fed to every stream connect should never carry more than
+ * what the bell itself renders. */
+const SNAPSHOT_ITEM_LIMIT = 20;
 
 /** What each module's booking-create path passes to emitCreated(). */
 export interface EmitNotificationInput {
@@ -37,6 +45,7 @@ export interface EmitNotificationInput {
 // MessageEvent (`data: string | object`), since stream() below merges this
 // with the ping heartbeat's Observable<MessageEvent>.
 type NotificationEvent =
+  | { type: 'notification.snapshot'; data: object }
   | { type: 'notification.created'; data: object }
   | { type: 'notification.resolved'; data: object }
   | { type: 'notification.read'; data: object };
@@ -222,15 +231,49 @@ export class NotificationsService {
     );
   }
 
-  /** Admin stream: notification lifecycle events + heartbeat. No initial
-   * snapshot replay on connect (unlike Storage's availability stream) --
-   * the server-rendered bell already seeds the list and summary counts on
-   * page load, so a fresh connection only needs what happens from here on. */
+  private async buildSnapshot(): Promise<NotificationSnapshotEventDto> {
+    const [{ data: items }, summary] = await Promise.all([
+      this.findAllAdmin({
+        page: 1,
+        limit: SNAPSHOT_ITEM_LIMIT,
+        filter: NotificationFilter.ALL,
+      }),
+      this.getSummary(),
+    ]);
+    return this.mapper.toSnapshotEvent(items, summary);
+  }
+
+  /** Fires once, immediately, on every connect -- see stream()'s own doc
+   * comment for why this replaced the earlier no-replay design. Errors are
+   * caught HERE, not left to stream()'s own catchError: that one replaces
+   * the entire merged observable (snapshot + live events + heartbeat) with
+   * heartbeat-only for the rest of the connection, so letting a transient
+   * snapshot failure reach it would silently kill live delivery too. A
+   * failed snapshot should cost the client one missing snapshot, not the
+   * whole connection. */
+  private snapshot$(): Observable<MessageEvent> {
+    return from(this.buildSnapshot()).pipe(
+      map((data) => ({ type: 'notification.snapshot', data })),
+      catchError((err) => {
+        this.logger.error('Failed to build notification stream snapshot', err);
+        return EMPTY;
+      }),
+    );
+  }
+
+  /** Admin stream: an immediate notification.snapshot (latest
+   * SNAPSHOT_ITEM_LIMIT notifications plus both counts), then live
+   * lifecycle events, then heartbeat. `events$` is a plain Subject with no
+   * replay buffer, so anything that fires while no stream is open -- before
+   * first connect, during a tab-hidden gap, across an error/ticket-refresh
+   * reconnect -- would otherwise be lost forever, silently. The snapshot on
+   * every connect makes that unnecessary: same pattern as
+   * StorageAvailabilityService.availabilityMessages$(). */
   stream(): Observable<MessageEvent> {
     const notifications$ = this.events$.pipe(
       map(({ type, data }) => ({ type, data })),
     );
-    return merge(notifications$, this.heartbeat$()).pipe(
+    return merge(this.snapshot$(), notifications$, this.heartbeat$()).pipe(
       catchError((err) => {
         this.logger.error('Admin notifications stream error', err);
         return this.heartbeat$();

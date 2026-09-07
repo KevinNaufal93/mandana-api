@@ -123,7 +123,7 @@ export class NotificationsAdminStreamController {
   @Sse('stream')
   @ApiOperation({
     summary:
-      'SSE stream of notification.created / notification.resolved / notification.read events for the admin panel. Auth via short-lived ?ticket= (see POST /admin/notifications/stream-ticket) -- EventSource cannot send an Authorization header.',
+      'SSE stream of notification.snapshot (fired immediately on every connect) / notification.created / notification.resolved / notification.read events for the admin panel. Auth via short-lived ?ticket= (see POST /admin/notifications/stream-ticket) -- EventSource cannot send an Authorization header.',
   })
   stream(): Observable<MessageEvent> {
     return this.notificationsService.stream();

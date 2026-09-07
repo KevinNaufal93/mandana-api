@@ -3,6 +3,7 @@ import { AdminNotification } from './entities/admin-notification.entity';
 import {
   AdminNotificationDto,
   NotificationCreatedEventDto,
+  NotificationSnapshotEventDto,
   NotificationSummaryDto,
 } from './dto/notification-response.dto';
 
@@ -29,5 +30,17 @@ export class NotificationsMapper {
     summary: NotificationSummaryDto,
   ): NotificationCreatedEventDto {
     return { ...this.toDto(notification), ...summary };
+  }
+
+  /** Fed to the admin stream once per connect (see
+   *  NotificationsService.stream()) so a fresh EventSource -- first load,
+   *  tab-visibility reconnect, or error retry -- never has to rely on a
+   *  server-rendered seed that may be stale by the time the connection
+   *  actually opens. */
+  toSnapshotEvent(
+    notifications: AdminNotification[],
+    summary: NotificationSummaryDto,
+  ): NotificationSnapshotEventDto {
+    return { items: notifications.map((n) => this.toDto(n)), ...summary };
   }
 }
