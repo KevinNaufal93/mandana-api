@@ -21,7 +21,6 @@ import { QuoteEventSupportDto } from './dto/quote-event-support.dto';
 import { PaginatedResult } from '../../common/interfaces/paginated-result.interface';
 import { resolveUniqueSlug, slugify } from '../../common/utils/slugify';
 import { EventAvailabilityService } from './event-availability.service';
-import { EventSupportSettingsService } from './event-support-settings.service';
 import {
   aggregateEventQuote,
   computeLine,
@@ -38,10 +37,8 @@ export interface EventQuoteLineComputation {
   endDate: string;
   billingMode: EventBillingMode;
   unitPrice: number;
-  unitLabel: 'jam' | 'hari';
+  unitLabel: '8 jam' | 'hari';
   billableUnits: number;
-  extraHours: number | null;
-  extraHoursTotal: number | null;
   lineTotal: number;
   availableQuantity: number;
 }
@@ -85,7 +82,6 @@ export class EventItemsService {
     @InjectRepository(EventBookingItem)
     private readonly bookingItemRepo: Repository<EventBookingItem>,
     private readonly availability: EventAvailabilityService,
-    private readonly settingsService: EventSupportSettingsService,
   ) {}
 
   // ── Public ────────────────────────────────────────────────────────────
@@ -145,35 +141,34 @@ export class EventItemsService {
    * catalog endpoints' `activeRate` — see resolveActiveRate() in
    * event-pricing.ts. Returns an empty map (no `activeRate`) when no
    * window was given, so the controller/mapper can distinguish "no window"
-   * from "day-only item". */
-  async resolveActiveRates(
+   * from "day-only item". Synchronous now that there's no settings row to
+   * load (call sites still `await` it, which is a no-op on a non-Promise
+   * value, so neither call site needed to change). */
+  resolveActiveRates(
     items: EventItem[],
     dropoffAt?: string,
     pickupAt?: string,
-  ): Promise<
-    Map<string, { amount: number; unit: 'hour' | 'day'; label: 'jam' | 'hari' }>
+  ): Map<
+    string,
+    { amount: number; unit: 'eight_hour' | 'day'; label: '8 jam' | 'hari' }
   > {
     const result = new Map<
       string,
-      { amount: number; unit: 'hour' | 'day'; label: 'jam' | 'hari' }
+      { amount: number; unit: 'eight_hour' | 'day'; label: '8 jam' | 'hari' }
     >();
     if (!dropoffAt || !pickupAt) return result;
 
-    const policy = this.settingsService.toPricingPolicy(
-      await this.settingsService.get(),
-    );
     for (const item of items) {
       result.set(
         item.id,
         resolveActiveRate(
           {
             pricePerDay: item.pricePerDay,
-            hourlyRate: item.hourlyRate,
-            supportsHourly: item.supportsHourly,
+            eightHourRate: item.eightHourRate,
+            supportsEightHour: item.supportsEightHour,
           },
           dropoffAt,
           pickupAt,
-          policy,
         ),
       );
     }
@@ -198,26 +193,18 @@ export class EventItemsService {
       );
     }
 
-    const policy = this.settingsService.toPricingPolicy(
-      await this.settingsService.get(),
-    );
-
     const priced = dto.items.map((lineDto) => {
       const item = itemBySlug.get(lineDto.slug)!;
       const dropoffAt = lineDto.dropoffAt ?? dto.dropoffAt;
       const pickupAt = lineDto.pickupAt ?? dto.pickupAt;
-      const computed = computeLine(
-        {
-          pricePerDay: item.pricePerDay,
-          hourlyRate: item.hourlyRate,
-          supportsHourly: item.supportsHourly,
-          minimumHours: item.minimumHours,
-          quantity: lineDto.quantity,
-          dropoffAt,
-          pickupAt,
-        },
-        policy,
-      );
+      const computed = computeLine({
+        pricePerDay: item.pricePerDay,
+        eightHourRate: item.eightHourRate,
+        supportsEightHour: item.supportsEightHour,
+        quantity: lineDto.quantity,
+        dropoffAt,
+        pickupAt,
+      });
       return { item, computed };
     });
 
@@ -257,8 +244,6 @@ export class EventItemsService {
           unitPrice: computed.unitPrice,
           unitLabel: computed.unitLabel,
           billableUnits: computed.billableUnits,
-          extraHours: computed.extraHours,
-          extraHoursTotal: computed.extraHoursTotal,
           lineTotal: computed.lineTotal,
           availableQuantity: Math.max(0, item.stockQuantity - peak),
         };
@@ -357,19 +342,31 @@ export class EventItemsService {
     }
   }
 
-  /** §9 invariant: an item with `supportsHourly: true` must always carry a
-   * positive `hourlyRate` — otherwise a later `computeLine()` call would
-   * silently fall back to daily pricing and the admin's "hourly" toggle
-   * would lie. Checked against the resolved (post-merge) values, so a
-   * PATCH that sets `supportsHourly: true` without ever sending
-   * `hourlyRate` on an item that has none is caught too. */
-  private assertHourlyRateInvariant(
-    supportsHourly: boolean,
-    hourlyRate: number | null,
+  /** Invariant: an item with `supportsEightHour: true` must always carry a
+   * positive `eightHourRate` — otherwise a later `computeLine()` call
+   * would silently fall back to daily pricing and the admin's toggle
+   * would lie. Also rejects an `eightHourRate` above `pricePerDay` — an
+   * 8-hour block priced higher than the whole day makes no sense and
+   * previously had to be prevented at quote time (the old
+   * capHourlyAtDailyRate policy setting); catching it here at the source
+   * is simpler now there's only one rate to check. Checked against the
+   * resolved (post-merge) values, so a PATCH that sets
+   * `supportsEightHour: true` without ever sending `eightHourRate` on an
+   * item that has none — or that lowers `pricePerDay` below an existing
+   * `eightHourRate` — is caught too. */
+  private assertEightHourRateInvariant(
+    supportsEightHour: boolean,
+    eightHourRate: number | null,
+    pricePerDay: number,
   ): void {
-    if (supportsHourly && !(hourlyRate !== null && hourlyRate > 0)) {
+    if (supportsEightHour && !(eightHourRate !== null && eightHourRate > 0)) {
       throw new BadRequestException(
-        'supportsHourly requires a positive hourlyRate',
+        'supportsEightHour requires a positive eightHourRate',
+      );
+    }
+    if (eightHourRate !== null && eightHourRate > pricePerDay) {
+      throw new BadRequestException(
+        'eightHourRate must not exceed pricePerDay',
       );
     }
   }
@@ -379,9 +376,13 @@ export class EventItemsService {
     await this.assertCategoryExists(dto.categoryId);
     const slug = await resolveUniqueSlug(this.itemRepo, dto.slug ?? dto.name);
 
-    const hourlyRate = dto.hourlyRate ?? null;
-    const supportsHourly = dto.supportsHourly ?? false;
-    this.assertHourlyRateInvariant(supportsHourly, hourlyRate);
+    const eightHourRate = dto.eightHourRate ?? null;
+    const supportsEightHour = dto.supportsEightHour ?? false;
+    this.assertEightHourRateInvariant(
+      supportsEightHour,
+      eightHourRate,
+      dto.pricePerDay,
+    );
 
     const item = this.itemRepo.create({
       categoryId: dto.categoryId,
@@ -391,9 +392,8 @@ export class EventItemsService {
       description: dto.description ?? null,
       pricePerDay: dto.pricePerDay,
       stockQuantity: dto.stockQuantity,
-      hourlyRate,
-      supportsHourly,
-      minimumHours: dto.minimumHours ?? null,
+      eightHourRate,
+      supportsEightHour,
       mediaAssetId: dto.mediaAssetId ?? null,
       sortOrder: dto.sortOrder ?? 0,
     });
@@ -420,13 +420,19 @@ export class EventItemsService {
         ? await resolveUniqueSlug(this.itemRepo, dto.slug, id)
         : undefined;
 
-    const resolvedHourlyRate =
-      dto.hourlyRate !== undefined ? dto.hourlyRate : item.hourlyRate;
-    const resolvedSupportsHourly =
-      dto.supportsHourly !== undefined
-        ? dto.supportsHourly
-        : item.supportsHourly;
-    this.assertHourlyRateInvariant(resolvedSupportsHourly, resolvedHourlyRate);
+    const resolvedEightHourRate =
+      dto.eightHourRate !== undefined ? dto.eightHourRate : item.eightHourRate;
+    const resolvedSupportsEightHour =
+      dto.supportsEightHour !== undefined
+        ? dto.supportsEightHour
+        : item.supportsEightHour;
+    const resolvedPricePerDay =
+      dto.pricePerDay !== undefined ? dto.pricePerDay : item.pricePerDay;
+    this.assertEightHourRateInvariant(
+      resolvedSupportsEightHour,
+      resolvedEightHourRate,
+      resolvedPricePerDay,
+    );
 
     Object.assign(item, {
       ...(dto.categoryId !== undefined && { categoryId: dto.categoryId }),
@@ -440,14 +446,11 @@ export class EventItemsService {
       ...(dto.stockQuantity !== undefined && {
         stockQuantity: dto.stockQuantity,
       }),
-      ...(dto.hourlyRate !== undefined && {
-        hourlyRate: dto.hourlyRate ?? null,
+      ...(dto.eightHourRate !== undefined && {
+        eightHourRate: dto.eightHourRate ?? null,
       }),
-      ...(dto.supportsHourly !== undefined && {
-        supportsHourly: dto.supportsHourly,
-      }),
-      ...(dto.minimumHours !== undefined && {
-        minimumHours: dto.minimumHours ?? null,
+      ...(dto.supportsEightHour !== undefined && {
+        supportsEightHour: dto.supportsEightHour,
       }),
       ...(dto.mediaAssetId !== undefined && {
         mediaAssetId: dto.mediaAssetId ?? null,

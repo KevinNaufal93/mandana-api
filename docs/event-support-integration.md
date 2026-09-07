@@ -42,15 +42,16 @@ header needed.
 
 ### `GET /event-support/pricing-config`
 
-The hourly-pricing policy — fetch these instead of hardcoding them
-client-side, same pattern as `GET /moving/pricing-config`. If ops revisits
-a value in the admin panel, this endpoint picks it up with no FE redeploy.
+The delivery-area disclosure settings — fetch these instead of hardcoding
+them client-side, same pattern as `GET /moving/pricing-config`. If ops
+revisits a value in the admin panel, this endpoint picks it up with no FE
+redeploy. This used to also carry the flexible-hourly-pricing policy
+(threshold, rounding step, minimum hours, over-threshold mode) — removed
+now that pricing is a fixed 8-hour block with nothing left to configure;
+see the breaking-change note under `POST /event-support/quote` below.
 
 ```jsonc
 { "data": {
-  "hourlyThresholdHours": 24, "hourlyThresholdInclusive": true,
-  "defaultMinimumHours": 2, "roundingUnitMinutes": 30,
-  "capHourlyAtDailyRate": true, "overThresholdMode": "whole_days",
   "priceIncludesJabodetabekDelivery": true, "outsideJabodetabekNote": null } }
 ```
 
@@ -66,14 +67,14 @@ already resolved server-side (§4). Paginated, `page`/`limit` default `1`/`12`.
   { "id": "uuid", "slug": "medium-venue-package", "name": "Medium Venue Package",
     "kind": "package", "pricePerDay": 3500000,
     "image": { "url": "...", "srcset": "...", "alt": null, "width": 800, "height": 600 },
-    "activeRate": { "amount": 75000, "unit": "hour", "label": "jam" } } ],
+    "activeRate": { "amount": 75000, "unit": "eight_hour", "label": "8 jam" } } ],
   "meta": { "total": 6, "page": 1, "limit": 12, "totalPages": 1 } }
 ```
 
 `activeRate` is omitted entirely when no window was given. When a window is
-given but the item doesn't price hourly for it, it falls back to
-`{ "amount": pricePerDay, "unit": "day", "label": "hari" }` — never a
-hallucinated hourly figure. **Never compute which rate applies yourself —
+given but the item doesn't support the 8-hour block for it, it falls back
+to `{ "amount": pricePerDay, "unit": "day", "label": "hari" }` — never a
+hallucinated block figure. **Never compute which rate applies yourself —
 always render whatever `activeRate` says.**
 
 ### `GET /event-support/items/:slug?dropoffAt&pickupAt`
@@ -87,7 +88,7 @@ rule as the list above); otherwise `availableQuantity` is `null` and only
 { "data": {
   "id": "uuid", "slug": "medium-venue-package", "name": "Medium Venue Package",
   "kind": "package", "pricePerDay": 3500000, "image": { "...": "..." },
-  "activeRate": { "amount": 75000, "unit": "hour", "label": "jam" },
+  "activeRate": { "amount": 75000, "unit": "eight_hour", "label": "8 jam" },
   "description": "<p>Termasuk 2 speaker aktif...</p>", "descriptionText": "Termasuk 2 speaker aktif...",
   "categorySlug": "sound-system", "categoryName": "Sound System",
   "stockQuantity": 3, "availableQuantity": 2 } }
@@ -104,11 +105,12 @@ All lines share the cart-level window; a line may override it with its own
 `dropoffAt`/`pickupAt` pair (both or neither — e.g. the DJ set picked up
 earlier than the rest of the order).
 
-A window of `hourlyThresholdHours` (24 by default, see `pricing-config`
-above) or less prices **hourly** for any item with `supportsHourly: true`;
-everything else prices by the day. The mode is decided **per line, not per
-cart** — a cart can mix an hourly item with a day-only one in the same
-window, and each line reports which mode it actually got.
+A window of `EIGHT_HOUR_BLOCK_MINUTES` (480 minutes = 8 hours, fixed — not
+configurable) or less prices as **one 8-hour block** for any item with
+`supportsEightHour: true`; everything else prices by the day. The mode is
+decided **per line, not per cart** — a cart can mix an 8-hour-block item
+with a day-only one in the same window, and each line reports which mode
+it actually got.
 
 ```jsonc
 // →
@@ -123,14 +125,12 @@ window, and each line reports which mode it actually got.
     { "slug": "sound-system-medium", "name": "Sound System Medium", "quantity": 1,
       "dropoffAt": "2026-03-01T09:00", "pickupAt": "2026-03-01T17:00",
       "startDate": "2026-03-01", "endDate": "2026-03-01",
-      "billingMode": "hourly", "unitPrice": 75000, "unitLabel": "jam", "billableUnits": 8,
-      "extraHours": null, "extraHoursTotal": null,
+      "billingMode": "eight_hour", "unitPrice": 75000, "unitLabel": "8 jam", "billableUnits": 1,
       "lineTotal": 600000, "availableQuantity": 2 },
     { "slug": "stage-backdrop", "name": "Stage Backdrop", "quantity": 1,
       "dropoffAt": "2026-03-01T09:00", "pickupAt": "2026-03-01T17:00",
       "startDate": "2026-03-01", "endDate": "2026-03-01",
       "billingMode": "daily", "unitPrice": 500000, "unitLabel": "hari", "billableUnits": 1,
-      "extraHours": null, "extraHoursTotal": null,
       "lineTotal": 500000, "availableQuantity": 1 } ],
   "dropoffAt": "2026-03-01T09:00", "pickupAt": "2026-03-01T17:00",
   "startDate": "2026-03-01", "endDate": "2026-03-01", "isMixedBilling": true,
@@ -142,10 +142,10 @@ window, and each line reports which mode it actually got.
 (`true` when they don't all share one `billingMode`) — never an input to
 pricing them, and never something to recompute client-side.
 `unitLabel`/`billableUnits` replace the old `pricePerDay`/`days` fields —
-render `"Rp75.000 / jam"` or `"Rp500.000 / hari"` from `unitPrice`/`unitLabel`
-directly. `extraHours`/`extraHoursTotal` are only non-null under the
-`day_plus_hourly` `overThresholdMode` (see `pricing-config`); ignore them
-otherwise.
+render `"Rp75.000 / 8 jam"` or `"Rp500.000 / hari"` from
+`unitPrice`/`unitLabel` directly. `billableUnits` is always `1` under
+`billingMode: "eight_hour"` (one block) or the whole-day count under
+`"daily"` — there is no fractional-hour figure any more.
 
 A line's `availableQuantity` may be less than its `quantity` — the response
 still returns 200 so the FE can warn ("only 1 left") without blocking the
@@ -159,6 +159,16 @@ text, not URL-encoded, so `encodeURIComponent()` it into the `wa.me/<number>?tex
 > sending `days` gets a **400**, not a silent drop. Coordinate this deploy
 > with removing `lib/event/datetime.ts`'s `toLegacyQuoteWindow` adapter and
 > the "Sewa di bawah 24 jam saat ini dihitung sebagai 1 hari" copy.
+>
+> **Second breaking change: hourly pricing is gone.** The short-lived
+> flexible-hourly model (`hourlyThresholdHours`, per-hour rounding, a
+> `minimumHours` floor, `day_plus_hourly`) never shipped to any customer —
+> no catalog item ever opted in — and has been replaced by a single fixed
+> 8-hour block per item (`supportsEightHour`/`eightHourRate`, admin-set,
+> capped at `pricePerDay`). `dropoffAt`/`pickupAt` are unchanged; only the
+> `billingMode` vocabulary (`"eight_hour"` replaces `"hourly"`) and the
+> settings shape moved. See migration
+> `1788600000000-ReplaceEventHourlyWithEightHourPricing`.
 
 ### `POST /event-support/bookings`
 

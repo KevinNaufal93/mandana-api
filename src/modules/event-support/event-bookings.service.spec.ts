@@ -98,7 +98,7 @@ describe('EventBookingsService', () => {
     findOne: jest.Mock;
   };
   let itemsService: { quote: jest.Mock };
-  let settingsService: { get: jest.Mock; toPricingPolicy: jest.Mock };
+  let settingsService: { get: jest.Mock };
 
   beforeEach(async () => {
     qbs = [];
@@ -116,7 +116,7 @@ describe('EventBookingsService', () => {
       findOne: jest.fn(),
     };
     itemsService = { quote: jest.fn() };
-    settingsService = { get: jest.fn(), toPricingPolicy: jest.fn() };
+    settingsService = { get: jest.fn() };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -239,12 +239,10 @@ describe('EventBookingsService', () => {
             pickupAt: '2026-03-01T17:00',
             startDate: '2026-03-01',
             endDate: '2026-03-01',
-            billingMode: EventBillingMode.HOURLY,
+            billingMode: EventBillingMode.EIGHT_HOUR,
             unitPrice: 50_000,
-            unitLabel: 'jam' as const,
-            billableUnits: 8,
-            extraHours: null,
-            extraHoursTotal: null,
+            unitLabel: '8 jam' as const,
+            billableUnits: 1,
             lineTotal: 400_000,
             availableQuantity: 3,
           },
@@ -262,8 +260,6 @@ describe('EventBookingsService', () => {
             unitPrice: 500_000,
             unitLabel: 'hari' as const,
             billableUnits: 2,
-            extraHours: null,
-            extraHoursTotal: null,
             lineTotal: 1_000_000,
             availableQuantity: 1,
           },

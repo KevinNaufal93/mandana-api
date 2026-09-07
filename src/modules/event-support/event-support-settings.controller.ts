@@ -25,7 +25,7 @@ export class EventSupportSettingsAdminController {
   ) {}
 
   @Get()
-  @ApiOperation({ summary: 'Get the Event Support hourly-pricing policy' })
+  @ApiOperation({ summary: 'Get the Event Support commercial settings' })
   @ApiOkResponse({ type: EventSupportSettingsResponseDto })
   async get() {
     const settings = await this.settingsService.get();
@@ -33,7 +33,7 @@ export class EventSupportSettingsAdminController {
   }
 
   @Patch()
-  @ApiOperation({ summary: 'Update the Event Support hourly-pricing policy' })
+  @ApiOperation({ summary: 'Update the Event Support commercial settings' })
   @ApiOkResponse({ type: EventSupportSettingsResponseDto })
   async update(@Body() dto: UpdateEventSupportSettingsDto) {
     const settings = await this.settingsService.update(dto);

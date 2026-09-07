@@ -74,7 +74,7 @@ export class EventSupportController {
   @Get('pricing-config')
   @ApiOperation({
     summary:
-      'Hourly-pricing policy (threshold, rounding step, minimum hours, ...) — fetch these instead of hardcoding them client-side',
+      'Delivery-area disclosure settings — fetch these instead of hardcoding them client-side',
   })
   @ApiOkResponse({ type: EventSupportSettingsResponseDto })
   async getPricingConfig() {
@@ -90,7 +90,7 @@ export class EventSupportController {
   @ApiOkResponse({ type: EventItemListResponseDto })
   async findAllItems(@Query() query: QueryEventItemsDto) {
     const { data, meta } = await this.itemsService.findAllPublic(query);
-    const activeRates = await this.itemsService.resolveActiveRates(
+    const activeRates = this.itemsService.resolveActiveRates(
       data,
       query.dropoffAt,
       query.pickupAt,
@@ -125,7 +125,7 @@ export class EventSupportController {
       );
     }
 
-    const activeRates = await this.itemsService.resolveActiveRates(
+    const activeRates = this.itemsService.resolveActiveRates(
       [item],
       query.dropoffAt,
       query.pickupAt,

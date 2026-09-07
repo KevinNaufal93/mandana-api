@@ -44,21 +44,18 @@ export class EventItem extends BaseEntity {
   @Column({ name: 'stock_quantity', type: 'int', default: 0 })
   stockQuantity!: number;
 
-  // Rupiah; independent of pricePerDay, never derived from it — a short
-  // hourly rental costs more per hour to deliver/collect than a day rental
-  // amortizes to. Null means this item is not sold hourly regardless of
-  // supportsHourly. See EventItemsService.create/update for the invariant
-  // that supportsHourly:true requires a positive hourlyRate.
-  @Column({ name: 'hourly_rate', type: 'int', nullable: true })
-  hourlyRate!: number | null;
+  // Rupiah; the price for one fixed 8-hour rental block — independent of
+  // pricePerDay, never derived from it (a short rental costs more per hour
+  // to deliver/collect than a day rental amortizes to). Null means this
+  // item is not sold by the block regardless of supportsEightHour. See
+  // EventItemsService.create/update for the invariant that
+  // supportsEightHour:true requires a positive eightHourRate no greater
+  // than pricePerDay.
+  @Column({ name: 'eight_hour_rate', type: 'int', nullable: true })
+  eightHourRate!: number | null;
 
-  @Column({ name: 'supports_hourly', type: 'boolean', default: false })
-  supportsHourly!: boolean;
-
-  // Smallest billable hourly block; null falls back to
-  // EventSupportSettings.defaultMinimumHours.
-  @Column({ name: 'minimum_hours', type: 'int', nullable: true })
-  minimumHours!: number | null;
+  @Column({ name: 'supports_eight_hour', type: 'boolean', default: false })
+  supportsEightHour!: boolean;
 
   @Column({
     type: 'enum',

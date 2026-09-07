@@ -4,7 +4,6 @@ import { EventBookingSource } from '../enums/event-booking-source.enum';
 import { EventItemKind } from '../enums/event-item-kind.enum';
 import { EventItemStatus } from '../enums/event-item-status.enum';
 import { EventBillingMode } from '../enums/event-billing-mode.enum';
-import { EventOverThresholdMode } from '../enums/event-over-threshold-mode.enum';
 
 /**
  * Response-shape DTOs, declared purely so Swagger/OpenAPI can describe the
@@ -46,8 +45,8 @@ export class EventImageDto {
  * (undefined) when no window was given. */
 export class EventActiveRateDto {
   @ApiProperty({ description: 'Rupiah, integer' }) amount!: number;
-  @ApiProperty({ enum: ['hour', 'day'] }) unit!: 'hour' | 'day';
-  @ApiProperty({ example: 'jam' }) label!: 'jam' | 'hari';
+  @ApiProperty({ enum: ['eight_hour', 'day'] }) unit!: 'eight_hour' | 'day';
+  @ApiProperty({ example: '8 jam' }) label!: '8 jam' | 'hari';
 }
 
 // ─── Categories ─────────────────────────────────────────────────────────────
@@ -145,12 +144,10 @@ export class EventItemAdminDto {
   @ApiPropertyOptional({
     nullable: true,
     type: Number,
-    description: 'Rupiah, integer',
+    description: 'Rupiah, integer — the price for one 8-hour rental block',
   })
-  hourlyRate!: number | null;
-  @ApiProperty() supportsHourly!: boolean;
-  @ApiPropertyOptional({ nullable: true, type: Number })
-  minimumHours!: number | null;
+  eightHourRate!: number | null;
+  @ApiProperty() supportsEightHour!: boolean;
   @ApiProperty() stockQuantity!: number;
   @ApiProperty({ enum: EventItemStatus }) status!: EventItemStatus;
   @ApiPropertyOptional({ nullable: true, type: EventImageDto })
@@ -175,30 +172,9 @@ export class EventItemAdminResponseDto {
 // ─── Settings (public pricing-config + admin) ──────────────────────────────
 
 export class EventSupportSettingsDto {
-  @ApiProperty({ description: 'The hourly/daily cutoff, in hours' })
-  hourlyThresholdHours!: number;
   @ApiProperty({
     description:
-      'Whether a window exactly at hourlyThresholdHours still bills hourly (<=) or falls to daily (<)',
-  })
-  hourlyThresholdInclusive!: boolean;
-  @ApiProperty({
-    description:
-      'Fallback minimum billable hours when an item sets no minimumHours of its own',
-  })
-  defaultMinimumHours!: number;
-  @ApiProperty({ description: 'Billable-hours rounding step, in minutes' })
-  roundingUnitMinutes!: number;
-  @ApiProperty({
-    description:
-      'When true, an hourly line total never exceeds pricePerDay * quantity',
-  })
-  capHourlyAtDailyRate!: boolean;
-  @ApiProperty({ enum: EventOverThresholdMode })
-  overThresholdMode!: EventOverThresholdMode;
-  @ApiProperty({
-    description:
-      'Whether pricePerDay/hourlyRate already include Jabodetabek delivery',
+      'Whether pricePerDay/eightHourRate already include Jabodetabek delivery',
   })
   priceIncludesJabodetabekDelivery!: boolean;
   @ApiPropertyOptional({ nullable: true, type: String })
@@ -224,24 +200,12 @@ export class EventQuoteLineDto {
   @ApiProperty({ enum: EventBillingMode }) billingMode!: EventBillingMode;
   @ApiProperty({ description: 'Rupiah, integer — the rate actually applied' })
   unitPrice!: number;
-  @ApiProperty({ enum: ['jam', 'hari'] }) unitLabel!: 'jam' | 'hari';
+  @ApiProperty({ enum: ['8 jam', 'hari'] }) unitLabel!: '8 jam' | 'hari';
   @ApiProperty({
     description:
-      'Hours (billingMode: hourly) or days (billingMode: daily). Fractional when the rounding step is under 60 minutes.',
+      'Always 1 under billingMode "eight_hour" (one block); the whole-day count under "daily".',
   })
   billableUnits!: number;
-  @ApiPropertyOptional({
-    nullable: true,
-    type: Number,
-    description: 'Only set under the day_plus_hourly over-threshold mode',
-  })
-  extraHours!: number | null;
-  @ApiPropertyOptional({
-    nullable: true,
-    type: Number,
-    description: 'Rupiah, integer',
-  })
-  extraHoursTotal!: number | null;
   @ApiProperty({ description: 'Rupiah, integer' }) lineTotal!: number;
   @ApiProperty({ description: "Units still free over this line's date range" })
   availableQuantity!: number;
@@ -294,16 +258,8 @@ export class EventBookingLineDto {
   @ApiProperty({ description: 'Rupiah, integer' }) pricePerDay!: number;
   @ApiProperty({ description: 'Rupiah, integer — the rate actually applied' })
   unitPrice!: number;
-  @ApiProperty({ enum: ['jam', 'hari'] }) unitLabel!: 'jam' | 'hari';
+  @ApiProperty({ enum: ['8 jam', 'hari'] }) unitLabel!: '8 jam' | 'hari';
   @ApiProperty() billableUnits!: number;
-  @ApiPropertyOptional({ nullable: true, type: Number }) extraHours!:
-    number | null;
-  @ApiPropertyOptional({
-    nullable: true,
-    type: Number,
-    description: 'Rupiah, integer',
-  })
-  extraHoursTotal!: number | null;
   @ApiProperty({ description: 'Rupiah, integer' }) lineTotal!: number;
 }
 

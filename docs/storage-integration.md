@@ -76,8 +76,8 @@ shape family as `GET /moving/truck-classes`.
 - `image` is the same `{ url, srcset, alt, width, height } | null` shape as
   everywhere else. No unit types carry an image in the seed data yet.
 - **`weeklyRate` is independent of `monthlyRate`, never derived from it** —
-  same reasoning as Event Support's `hourlyRate` vs `pricePerDay` (a short
-  stay costs more per unit of time to service than a month amortizes to).
+  same reasoning as Event Support's `eightHourRate` vs `pricePerDay` (a
+  short stay costs more per unit of time to service than a month amortizes to).
   `supportsWeekly` is the opt-in; every unit type ships with it `false` and
   `weeklyRate: null` until an admin turns it on
   (`PATCH /admin/storage/unit-types/:id`) — nothing changes for existing

@@ -60,37 +60,40 @@ Paginated, default `page=1&limit=12`. `search` matches item name
 { "categoryId": "uuid", "name": "Medium Venue Package", "kind": "package",
   "description": "<p>Termasuk 2 speaker aktif, 1 mixer, mic x4</p>",
   "pricePerDay": 3500000, "stockQuantity": 3,
-  "hourlyRate": 75000, "supportsHourly": true, "minimumHours": 4,
+  "eightHourRate": 2100000, "supportsEightHour": true,
   "mediaAssetId": "uuid", "sortOrder": 0 }
 // kind defaults to "package" if omitted. slug is optional, same rules as
 // categories. `status` is NOT accepted here — see the lifecycle below.
-// hourlyRate/supportsHourly/minimumHours are all optional and every
-// existing item defaults to supportsHourly:false, hourlyRate:null,
-// minimumHours:null (day-only, unchanged pricing) until you opt it in —
-// see "Hourly pricing" below. Setting supportsHourly:true without a
-// positive hourlyRate (here or already on the item) is a 400.
+// eightHourRate/supportsEightHour are both optional and every existing
+// item defaults to supportsEightHour:false, eightHourRate:null (day-only,
+// unchanged pricing) until you opt it in — see "8-hour pricing" below.
+// Setting supportsEightHour:true without a positive eightHourRate (here
+// or already on the item), or an eightHourRate above pricePerDay, is a 400.
 
 // ← 201 — every field from the request plus:
 { "data": {
   "id": "uuid", "categoryId": "uuid", "categorySlug": "sound-system", "categoryName": "Sound System",
   "name": "Medium Venue Package", "slug": "medium-venue-package", "kind": "package",
   "description": "<p>...</p>", "descriptionText": "...",
-  "pricePerDay": 3500000, "hourlyRate": 75000, "supportsHourly": true, "minimumHours": 4,
+  "pricePerDay": 3500000, "eightHourRate": 2100000, "supportsEightHour": true,
   "stockQuantity": 3, "status": "draft",
   "image": { "url": "...", "srcset": "...", "alt": null, "width": 800, "height": 600 },
   "sortOrder": 0, "createdAt": "...", "updatedAt": "..." } }
 ```
 
-### Hourly pricing
+### 8-hour pricing
 
-`hourlyRate` is **independent of `pricePerDay`** — it's never derived from
-it (a short hourly rental costs more per hour to deliver/collect than a day
-rental amortizes to), so set it explicitly for every item you opt in.
-`minimumHours` is the smallest billable block for that item specifically;
-leave it `null` to fall back to the pricing policy's `defaultMinimumHours`
-(see the Settings section below). None of this takes effect on the public
-quote/catalog until `supportsHourly: true` **and** the window is at or under
-the policy's `hourlyThresholdHours` — see `docs/event-support-integration.md`.
+`eightHourRate` is **independent of `pricePerDay`** — it's never derived
+from it (a short rental costs more per hour to deliver/collect than a day
+rental amortizes to), so set it explicitly for every item you opt in. It
+must not exceed `pricePerDay` — the API rejects that as a 400, since a
+half-day block priced above the full day makes no sense. None of this
+takes effect on the public quote/catalog until `supportsEightHour: true`
+**and** the requested window is at or under 8 hours — a fixed rule, not a
+policy setting; see `docs/event-support-integration.md`. This section used
+to describe a configurable hourly-pricing policy (threshold, rounding
+step, minimum-hours floor) — that policy is gone; see migration
+`1788600000000-ReplaceEventHourlyWithEightHourPricing`.
 
 ### Draft/published/archived lifecycle
 
@@ -176,11 +179,11 @@ taken from your Bearer token automatically.
 fails with 404 naming which id(s) weren't found/published. `dropoffAt`/
 `pickupAt` are naive local datetimes, same wire format as the public quote
 (no `Z`/offset — see `docs/event-support-integration.md`). Each line's
-`pricePerDay` (and, when it bills hourly, `hourlyRate` as `unitPrice`) is
-looked up and snapshotted at creation time — later editing the item's price
-never changes an existing booking. `billingMode`/`unitPrice`/`unitLabel`/
-`billableUnits` are computed the same way `POST /event-support/quote` does,
-against the pricing policy in effect at booking time.
+`pricePerDay` (and, when it bills as a block, `eightHourRate` as
+`unitPrice`) is looked up and snapshotted at creation time — later editing
+the item's price never changes an existing booking. `billingMode`/
+`unitPrice`/`unitLabel`/`billableUnits` are computed the same way
+`POST /event-support/quote` does.
 
 ```jsonc
 // ← 201
@@ -194,15 +197,15 @@ against the pricing policy in effect at booking time.
     { "id": "uuid", "itemId": "uuid", "itemName": "Sound System Medium", "quantity": 1,
       "dropoffAt": "2026-03-01T09:00", "pickupAt": "2026-03-01T17:00",
       "startDate": "2026-03-01", "days": 1, "endDate": "2026-03-01",
-      "billingMode": "hourly", "pricePerDay": 500000,
-      "unitPrice": 75000, "unitLabel": "jam", "billableUnits": 8,
-      "extraHours": null, "extraHoursTotal": null, "lineTotal": 600000 },
+      "billingMode": "eight_hour", "pricePerDay": 500000,
+      "unitPrice": 75000, "unitLabel": "8 jam", "billableUnits": 1,
+      "lineTotal": 600000 },
     { "id": "uuid", "itemId": "uuid", "itemName": "Stage Backdrop", "quantity": 1,
       "dropoffAt": "2026-03-01T09:00", "pickupAt": "2026-03-01T17:00",
       "startDate": "2026-03-01", "days": 1, "endDate": "2026-03-01",
       "billingMode": "daily", "pricePerDay": 500000,
       "unitPrice": 500000, "unitLabel": "hari", "billableUnits": 1,
-      "extraHours": null, "extraHoursTotal": null, "lineTotal": 500000 } ],
+      "lineTotal": 500000 } ],
   "subtotal": 1100000, "discountAmount": 0, "total": 1100000,
   "adminNote": null, "createdByName": "Kevin", "confirmedAt": null, "confirmedByName": null,
   "createdAt": "...", "updatedAt": "..." } }
@@ -210,8 +213,8 @@ against the pricing policy in effect at booking time.
 
 `days` on each line is now the **calendar days held**
 (`endDate - startDate + 1`), not an input — it stays meaningful for an
-hourly-billed line too (a same-day rental still reads `days: 1`).
-Availability itself is still day-granular: a 3-hour rental holds the item
+8-hour-block line too (a same-day rental still reads `days: 1`).
+Availability itself is still day-granular: an 8-hour rental holds the item
 for its whole calendar day, same as before — see §5.
 
 ### Status transitions
@@ -267,37 +270,27 @@ There's no manual "release stock" action — `cancel`/`complete` simply flip
 the booking out of `confirmed`, and since only `confirmed` bookings count
 toward the peak, the stock is freed as a side effect.
 
-## 6. Settings — the hourly-pricing policy
+## 6. Settings — delivery-area disclosure
 
 `GET /admin/event-support/settings` · `PATCH /admin/event-support/settings`
 
 A singleton — GET/PATCH only, no `POST`/`DELETE`/`:id` (same pattern as
-`GET/PATCH /admin/moving/settings`). This is every commercial rule the
-hourly-pricing rollout needed ops sign-off on, made editable here instead of
-hardcoded, so a policy change ships instantly with no deploy. The public
+`GET/PATCH /admin/moving/settings`). This used to also hold every
+commercial rule the flexible-hourly-pricing rollout needed ops sign-off
+on; that policy is gone now that pricing is a fixed 8-hour block, so this
+row is just the Jabodetabek delivery disclosure. The public
 `GET /event-support/pricing-config` (see `docs/event-support-integration.md`)
 serves the same row read-only.
 
 ```jsonc
 // GET → 200 / PATCH → 200 (body: any subset of these fields)
 { "data": {
-  "hourlyThresholdHours": 24,
-  "hourlyThresholdInclusive": true,
-  "defaultMinimumHours": 2,
-  "roundingUnitMinutes": 30,
-  "capHourlyAtDailyRate": true,
-  "overThresholdMode": "whole_days",
   "priceIncludesJabodetabekDelivery": true,
   "outsideJabodetabekNote": null } }
 ```
 
 | Field | Meaning |
 |---|---|
-| `hourlyThresholdHours` / `hourlyThresholdInclusive` | The hourly/daily cutoff, and whether a window landing exactly on it (`<=`) still counts as hourly or falls to daily (`<`). |
-| `defaultMinimumHours` | Fallback minimum billable hours for items that leave their own `minimumHours` unset. |
-| `roundingUnitMinutes` | Billable hours round *up* to this step (e.g. 5h20m rounds to 5.5h at a 30-minute step). |
-| `capHourlyAtDailyRate` | When on, an hourly line's total never exceeds `pricePerDay × quantity` — a long-but-still-hourly window can't price higher than just booking the day. |
-| `overThresholdMode` | `"whole_days"` (default — ceils to the next full day, matches the pre-hourly-pricing behaviour) or `"day_plus_hourly"` (full days at `pricePerDay`, the remainder billed hourly on items that support it — surfaced per line as `extraHours`/`extraHoursTotal`). |
 | `priceIncludesJabodetabekDelivery` | Drives the "Harga sudah termasuk ongkir Jabodetabek." line in `whatsappMessage`. |
 | `outsideJabodetabekNote` | Free-text note; not yet auto-triggered by `eventLocation` — set it when you want the copy ready for a future check. |
 
@@ -309,8 +302,8 @@ creation time.
 ## 7. Money
 
 All prices are **integer Rupiah**, no decimals. A line's `pricePerDay ×
-quantity × billableUnits` (daily) or `unitPrice × billableUnits × quantity`
-(hourly, capped per the settings above) computes `lineTotal`;
+quantity × billableUnits` (daily) or `eightHourRate × quantity` (one
+8-hour block, `billableUnits` always `1`) computes `lineTotal`;
 `subtotal`/`discountAmount`/`total` sum across lines server-side. There's
 currently no discount-tier support (`discountAmount` is always `0`) — it's
 a real field in the response shape so one can be added later without a

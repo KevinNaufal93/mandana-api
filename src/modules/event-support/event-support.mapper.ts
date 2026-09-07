@@ -18,14 +18,6 @@ import {
   EventSupportSettingsDto,
 } from './dto/event-support-response.dto';
 
-/** Numeric Postgres columns come back from `pg` as strings — normalize them
- * (same quirk as TruckClass.volumeM3, see moving.mapper.ts's toNumber). */
-function toNumber(value: unknown): number | null {
-  if (value === null || value === undefined) return null;
-  const n = Number(value);
-  return Number.isNaN(n) ? null : n;
-}
-
 @Injectable()
 export class EventSupportMapper {
   constructor(private readonly mediaService: MediaService) {}
@@ -58,8 +50,8 @@ export class EventSupportMapper {
     item: EventItem,
     activeRate?: {
       amount: number;
-      unit: 'hour' | 'day';
-      label: 'jam' | 'hari';
+      unit: 'eight_hour' | 'day';
+      label: '8 jam' | 'hari';
     },
   ): EventItemListDto {
     return {
@@ -78,8 +70,8 @@ export class EventSupportMapper {
     availableQuantity: number | null,
     activeRate?: {
       amount: number;
-      unit: 'hour' | 'day';
-      label: 'jam' | 'hari';
+      unit: 'eight_hour' | 'day';
+      label: '8 jam' | 'hari';
     },
   ): EventItemDetailDto {
     return {
@@ -107,9 +99,8 @@ export class EventSupportMapper {
       description: item.description,
       descriptionText: richTextToPlain(item.description),
       pricePerDay: item.pricePerDay,
-      hourlyRate: item.hourlyRate,
-      supportsHourly: item.supportsHourly,
-      minimumHours: item.minimumHours,
+      eightHourRate: item.eightHourRate,
+      supportsEightHour: item.supportsEightHour,
       stockQuantity: item.stockQuantity,
       status: item.status,
       image: this.buildImage(item.mediaAsset),
@@ -123,12 +114,6 @@ export class EventSupportMapper {
 
   toSettingsDto(settings: EventSupportSettings): EventSupportSettingsDto {
     return {
-      hourlyThresholdHours: settings.hourlyThresholdHours,
-      hourlyThresholdInclusive: settings.hourlyThresholdInclusive,
-      defaultMinimumHours: settings.defaultMinimumHours,
-      roundingUnitMinutes: settings.roundingUnitMinutes,
-      capHourlyAtDailyRate: settings.capHourlyAtDailyRate,
-      overThresholdMode: settings.overThresholdMode,
       priceIncludesJabodetabekDelivery:
         settings.priceIncludesJabodetabekDelivery,
       outsideJabodetabekNote: settings.outsideJabodetabekNote,
@@ -167,9 +152,7 @@ export class EventSupportMapper {
       ...(reference ? [`No. Referensi: ${reference}`] : []),
       ...quote.lines.map((l) => {
         const durationLabel =
-          l.unitLabel === 'jam'
-            ? `${l.billableUnits} jam`
-            : `${l.billableUnits} hari`;
+          l.unitLabel === '8 jam' ? '8 jam' : `${l.billableUnits} hari`;
         return `- ${l.item.name} x${l.quantity} (${durationLabel}, ${l.dropoffAt} s/d ${l.pickupAt}): ${money(l.lineTotal)}`;
       }),
       '',
@@ -201,9 +184,7 @@ export class EventSupportMapper {
         billingMode: l.billingMode,
         unitPrice: l.unitPrice,
         unitLabel: l.unitLabel,
-        billableUnits: toNumber(l.billableUnits) ?? l.billableUnits,
-        extraHours: toNumber(l.extraHours),
-        extraHoursTotal: toNumber(l.extraHoursTotal),
+        billableUnits: l.billableUnits,
         lineTotal: l.lineTotal,
         availableQuantity: l.availableQuantity,
       })),
@@ -251,9 +232,7 @@ export class EventSupportMapper {
         pricePerDay: line.pricePerDay,
         unitPrice: line.unitPrice,
         unitLabel: line.unitLabel,
-        billableUnits: toNumber(line.billableUnits) ?? line.billableUnits,
-        extraHours: toNumber(line.extraHours),
-        extraHoursTotal: line.extraHoursTotal,
+        billableUnits: line.billableUnits,
         lineTotal: line.lineTotal,
       })),
       subtotal: booking.subtotal,
@@ -311,9 +290,7 @@ export class EventSupportMapper {
         billingMode: l.billingMode,
         unitPrice: l.unitPrice,
         unitLabel: l.unitLabel,
-        billableUnits: toNumber(l.billableUnits) ?? l.billableUnits,
-        extraHours: toNumber(l.extraHours),
-        extraHoursTotal: toNumber(l.extraHoursTotal),
+        billableUnits: l.billableUnits,
         lineTotal: l.lineTotal,
         availableQuantity: l.availableQuantity,
       })),

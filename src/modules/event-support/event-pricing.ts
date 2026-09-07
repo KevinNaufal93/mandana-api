@@ -11,43 +11,28 @@
  * `addDaysToDateString` used. Differences between two such values are
  * correct because both endpoints share the same fiction; Indonesia has no
  * DST, so this never drifts.
+ *
+ * There is no pricing policy left to configure — a previous iteration of
+ * this file had a flexible-hourly model (threshold, rounding step, minimum
+ * hours, a day_plus_hourly remainder mode, all admin-tunable). The product
+ * decision was simpler than that: there is no hourly product, only "daily,
+ * or per eight hours." See migration
+ * 1788600000000-ReplaceEventHourlyWithEightHourPricing.
  */
 
 import { EventBillingMode } from './enums/event-billing-mode.enum';
-import { EventOverThresholdMode } from './enums/event-over-threshold-mode.enum';
 
-/** The pricing policy applied to a quote/booking — mirrors
- * EventSupportSettings minus id/timestamps. See event-support-settings.entity.ts. */
-export interface EventPricingPolicy {
-  hourlyThresholdHours: number;
-  hourlyThresholdInclusive: boolean;
-  defaultMinimumHours: number;
-  roundingUnitMinutes: number;
-  capHourlyAtDailyRate: boolean;
-  overThresholdMode: EventOverThresholdMode;
-}
-
-/** Last-resort fallback, used only when no EventSupportSettings row exists
- * yet (see EventSupportSettingsService.get()). Reproduces the pre-hourly
- * behaviour exactly: any window prices as `ceil(hours / 24)` whole days. */
-export const EVENT_PRICING_DEFAULTS: EventPricingPolicy = {
-  hourlyThresholdHours: 24,
-  hourlyThresholdInclusive: true,
-  defaultMinimumHours: 2,
-  roundingUnitMinutes: 30,
-  capHourlyAtDailyRate: true,
-  overThresholdMode: EventOverThresholdMode.WHOLE_DAYS,
-};
+/** The one sub-daily rental Event Support sells: a fixed 8-hour block at
+ * its own rate, no per-hour math. Deliberately a constant, not a setting —
+ * "either daily, or per eight hours" is a product rule, not a knob. */
+export const EIGHT_HOUR_BLOCK_MINUTES = 480;
 
 /** One priced line's input: an item's rates/eligibility, a quantity, and
  * its own rental window (a line may override the cart-level window). */
 export interface EventLineInput {
   pricePerDay: number;
-  hourlyRate: number | null;
-  supportsHourly: boolean;
-  /** Item's own minimum billable hours; null falls back to
-   * `policy.defaultMinimumHours`. */
-  minimumHours: number | null;
+  eightHourRate: number | null;
+  supportsEightHour: boolean;
   quantity: number;
   /** Naive local datetime, e.g. "2026-03-01T09:00". */
   dropoffAt: string;
@@ -63,14 +48,10 @@ export interface EventLineResult {
   endDate: string;
   billingMode: EventBillingMode;
   unitPrice: number;
-  unitLabel: 'jam' | 'hari';
-  /** Hours (billingMode: hourly) or days (billingMode: daily). Fractional
-   * when roundingUnitMinutes < 60. */
+  unitLabel: '8 jam' | 'hari';
+  /** Always 1 under EIGHT_HOUR billing (one block); the whole-day count
+   * under DAILY billing. */
   billableUnits: number;
-  /** Only set under EventOverThresholdMode.DAY_PLUS_HOURLY when the window
-   * has a non-zero remainder past its whole days; null otherwise. */
-  extraHours: number | null;
-  extraHoursTotal: number | null;
   lineTotal: number;
 }
 
@@ -86,14 +67,6 @@ function nonNegativeInt(value: number | null | undefined): number {
   if (value === null || value === undefined) return 0;
   if (!Number.isFinite(value)) return 0;
   return Math.max(0, Math.floor(value));
-}
-
-/** Same as nonNegativeInt but keeps fractional precision — used for
- * hour/day counts that may legitimately be fractional (rounding step < 60m). */
-function nonNegativeNumber(value: number | null | undefined): number {
-  if (value === null || value === undefined) return 0;
-  if (!Number.isFinite(value)) return 0;
-  return Math.max(0, value);
 }
 
 /** Parses a naive local datetime ("YYYY-MM-DDTHH:mm[:ss]") to epoch ms,
@@ -146,82 +119,58 @@ export function todayInJakarta(): string {
   return new Date(Date.now() + JAKARTA_OFFSET_MS).toISOString().slice(0, 10);
 }
 
-/** Shared by computeLine and resolveActiveRate: the billable-hours figure
- * after rounding up to the policy's step. */
-function roundedHoursOf(
-  rawMinutes: number,
-  policy: EventPricingPolicy,
-): number {
-  const roundingUnitMinutes = Math.max(
-    1,
-    nonNegativeInt(policy.roundingUnitMinutes) || 1,
-  );
-  const roundedMinutes =
-    Math.ceil(rawMinutes / roundingUnitMinutes) * roundingUnitMinutes;
-  return roundedMinutes / 60;
-}
-
-/** Shared by computeLine and resolveActiveRate: whether a rounded-hours
- * figure falls on the hourly side of the policy's threshold. */
-function isWithinHourlyThreshold(
-  roundedHours: number,
-  policy: EventPricingPolicy,
-): boolean {
-  const threshold = nonNegativeNumber(policy.hourlyThresholdHours);
-  return policy.hourlyThresholdInclusive
-    ? roundedHours <= threshold
-    : roundedHours < threshold;
-}
-
 /** The per-unit rate for the catalog endpoints (`activeRate`) — which rate
- * *would* apply to this item over this window, independent of quantity or
- * the §6.2 daily cap (that cap only bounds a line *total*, not a unit
- * price). The web renders this; it never decides which rate applies. */
+ * *would* apply to this item over this window, independent of quantity.
+ * The web renders this; it never decides which rate applies. This now
+ * agrees with computeLine() below in every case — there is no minimum-
+ * hours floor or daily cap left to make the two diverge, unlike the old
+ * flexible-hourly model. */
 export function resolveActiveRate(
   input: {
     pricePerDay: number;
-    hourlyRate: number | null;
-    supportsHourly: boolean;
+    eightHourRate: number | null;
+    supportsEightHour: boolean;
   },
   dropoffAt: string,
   pickupAt: string,
-  policy: EventPricingPolicy,
-): { amount: number; unit: 'hour' | 'day'; label: 'jam' | 'hari' } {
+): { amount: number; unit: 'eight_hour' | 'day'; label: '8 jam' | 'hari' } {
   const pricePerDay = nonNegativeInt(input.pricePerDay);
-  const hourlyRate =
-    input.hourlyRate !== null && input.hourlyRate !== undefined
-      ? nonNegativeInt(input.hourlyRate)
+  const eightHourRate =
+    input.eightHourRate !== null && input.eightHourRate !== undefined
+      ? nonNegativeInt(input.eightHourRate)
       : null;
 
   const rawMinutes = minutesBetween(dropoffAt, pickupAt);
-  const canBillHourly =
-    input.supportsHourly && hourlyRate !== null && hourlyRate > 0;
+  const canBillEightHour =
+    input.supportsEightHour && eightHourRate !== null && eightHourRate > 0;
 
-  if (rawMinutes > 0 && canBillHourly) {
-    const roundedHours = roundedHoursOf(rawMinutes, policy);
-    if (isWithinHourlyThreshold(roundedHours, policy)) {
-      return { amount: hourlyRate, unit: 'hour', label: 'jam' };
-    }
+  if (
+    rawMinutes > 0 &&
+    canBillEightHour &&
+    rawMinutes <= EIGHT_HOUR_BLOCK_MINUTES
+  ) {
+    return { amount: eightHourRate, unit: 'eight_hour', label: '8 jam' };
   }
 
   return { amount: pricePerDay, unit: 'day', label: 'hari' };
 }
 
 /**
- * Computes one line's total from its rental window and the item's rates,
- * per the resolved pricing policy. Defensively clamps non-finite/negative/
- * zero/inverted input to an all-zero result rather than emitting `NaN` —
- * "a broken number on screen is worse than a zero" (same convention as the
- * old computeLine).
+ * Computes one line's total from its rental window and the item's rates.
+ * A window at or under EIGHT_HOUR_BLOCK_MINUTES (480 = 8 hours) prices as
+ * one 8-hour block when the item opts in and carries a positive rate;
+ * anything longer — or any item that doesn't support the block — prices
+ * as `ceil(minutes / 1440)` whole days. There is no rate in between: this
+ * is the one sub-daily option, not a threshold into per-hour billing.
+ * Defensively clamps non-finite/negative/zero/inverted input to an
+ * all-zero result rather than emitting `NaN` — "a broken number on screen
+ * is worse than a zero" (same convention as the old computeLine).
  */
-export function computeLine(
-  input: EventLineInput,
-  policy: EventPricingPolicy,
-): EventLineResult {
+export function computeLine(input: EventLineInput): EventLineResult {
   const pricePerDay = nonNegativeInt(input.pricePerDay);
-  const hourlyRate =
-    input.hourlyRate !== null && input.hourlyRate !== undefined
-      ? nonNegativeInt(input.hourlyRate)
+  const eightHourRate =
+    input.eightHourRate !== null && input.eightHourRate !== undefined
+      ? nonNegativeInt(input.eightHourRate)
       : null;
   const quantity = nonNegativeInt(input.quantity);
   const startDate = windowStartDate(input.dropoffAt);
@@ -239,80 +188,34 @@ export function computeLine(
       unitPrice: pricePerDay,
       unitLabel: 'hari',
       billableUnits: 0,
-      extraHours: null,
-      extraHoursTotal: null,
       lineTotal: 0,
     };
   }
 
-  const roundedHours = roundedHoursOf(rawMinutes, policy);
-  const withinThreshold = isWithinHourlyThreshold(roundedHours, policy);
+  const canBillEightHour =
+    input.supportsEightHour && eightHourRate !== null && eightHourRate > 0;
 
-  const canBillHourly =
-    input.supportsHourly && hourlyRate !== null && hourlyRate > 0;
-  const effectiveMinHours = nonNegativeNumber(
-    input.minimumHours ?? policy.defaultMinimumHours,
-  );
-
-  if (canBillHourly && withinThreshold) {
-    const billableUnits = Math.max(roundedHours, effectiveMinHours);
-    const raw = Math.round(hourlyRate * billableUnits) * quantity;
-    const lineTotal = policy.capHourlyAtDailyRate
-      ? Math.min(raw, pricePerDay * quantity)
-      : raw;
-
+  if (canBillEightHour && rawMinutes <= EIGHT_HOUR_BLOCK_MINUTES) {
     return {
       quantity,
       dropoffAt: input.dropoffAt,
       pickupAt: input.pickupAt,
       startDate,
       endDate,
-      billingMode: EventBillingMode.HOURLY,
-      unitPrice: hourlyRate,
-      unitLabel: 'jam',
-      billableUnits,
-      extraHours: null,
-      extraHoursTotal: null,
-      lineTotal,
+      billingMode: EventBillingMode.EIGHT_HOUR,
+      unitPrice: eightHourRate,
+      unitLabel: '8 jam',
+      billableUnits: 1,
+      lineTotal: eightHourRate * quantity,
     };
   }
 
-  // Daily billing — either the item doesn't support hourly, its rate is
-  // unset, or the window is past the threshold.
-  const useDayPlusHourly =
-    canBillHourly &&
-    policy.overThresholdMode === EventOverThresholdMode.DAY_PLUS_HOURLY;
-
-  if (useDayPlusHourly) {
-    const wholeDays = Math.floor(roundedHours / 24);
-    const remainderHours = roundedHours - wholeDays * 24;
-
-    let extraHours: number | null = null;
-    let extraHoursTotal: number | null = null;
-    if (remainderHours > 0) {
-      extraHours = Math.max(remainderHours, effectiveMinHours);
-      extraHoursTotal = Math.round(hourlyRate * extraHours) * quantity;
-    }
-
-    return {
-      quantity,
-      dropoffAt: input.dropoffAt,
-      pickupAt: input.pickupAt,
-      startDate,
-      endDate,
-      billingMode: EventBillingMode.DAILY,
-      unitPrice: pricePerDay,
-      unitLabel: 'hari',
-      billableUnits: wholeDays,
-      extraHours,
-      extraHoursTotal,
-      lineTotal: pricePerDay * wholeDays * quantity + (extraHoursTotal ?? 0),
-    };
-  }
-
-  // whole_days — ceil up to the next full day, minimum 1. Byte-identical
-  // to the pre-hourly-pricing behaviour (and to the web's stopgap adapter).
-  const billableUnits = Math.max(1, Math.ceil(roundedHours / 24));
+  // Daily billing — either the item doesn't support the 8-hour block, its
+  // rate is unset, or the window runs longer than one block. Byte-identical
+  // to the pre-8-hour-pricing behaviour: `ceil(minutes / 1440)`, minimum 1
+  // (1440 minutes = 24 hours; equal to the old `ceil(hours / 24)` since 60
+  // divides 1440 exactly).
+  const billableUnits = Math.max(1, Math.ceil(rawMinutes / 1440));
   return {
     quantity,
     dropoffAt: input.dropoffAt,
@@ -323,16 +226,14 @@ export function computeLine(
     unitPrice: pricePerDay,
     unitLabel: 'hari',
     billableUnits,
-    extraHours: null,
-    extraHoursTotal: null,
     lineTotal: pricePerDay * billableUnits * quantity,
   };
 }
 
-/** Aggregates already-computed lines into a cart total. No duration/volume
- * discount tiers exist for Event Support today — `discountAmount` is a
- * fixed 0, kept as a field so an admin-applied discount can be wired in
- * later without a response-shape change. */
+/** Aggregates already-computed lines into a cart total. No discount tiers
+ * exist for Event Support today — `discountAmount` is a fixed 0, kept as a
+ * field so an admin-applied discount can be wired in later without a
+ * response-shape change. */
 export function aggregateEventQuote(
   lines: EventLineResult[],
 ): EventQuoteResult {

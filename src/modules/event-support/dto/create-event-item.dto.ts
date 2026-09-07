@@ -62,36 +62,24 @@ export class CreateEventItemDto {
   stockQuantity!: number;
 
   @ApiPropertyOptional({
-    example: 75000,
+    example: 900000,
     minimum: 0,
     description:
-      'Rupiah, integer. Independent of pricePerDay — never derived from it. Required (and must be > 0) when supportsHourly is true.',
+      'Rupiah, integer. The price for one 8-hour rental block — independent of pricePerDay, never derived from it. Required (and must be > 0, and must not exceed pricePerDay) when supportsEightHour is true.',
   })
   @IsOptional()
   @IsInt()
   @Min(0)
-  hourlyRate?: number;
+  eightHourRate?: number;
 
   @ApiPropertyOptional({
     default: false,
     description:
-      'Opts this item into hourly pricing for windows at/under the pricing-policy threshold. Requires a positive hourlyRate.',
+      'Opts this item into 8-hour block pricing for a rental window at or under 8 hours. Requires a positive eightHourRate no greater than pricePerDay.',
   })
   @IsOptional()
   @IsBoolean()
-  supportsHourly?: boolean;
-
-  @ApiPropertyOptional({
-    minimum: 0,
-    maximum: 24,
-    description:
-      'Smallest billable hourly block for this item. Omit to use the pricing-policy default (EventSupportSettings.defaultMinimumHours).',
-  })
-  @IsOptional()
-  @IsInt()
-  @Min(0)
-  @Max(24)
-  minimumHours?: number;
+  supportsEightHour?: boolean;
 
   @ApiPropertyOptional({
     description:

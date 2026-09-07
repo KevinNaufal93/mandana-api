@@ -61,10 +61,8 @@ interface BookingLineInput {
   billingMode: EventBillingMode;
   pricePerDay: number;
   unitPrice: number;
-  unitLabel: 'jam' | 'hari';
+  unitLabel: '8 jam' | 'hari';
   billableUnits: number;
-  extraHours: number | null;
-  extraHoursTotal: number | null;
   lineTotal: number;
 }
 
@@ -295,24 +293,17 @@ export class EventBookingsService {
       dto.items.map((l) => l.itemId),
     );
     const itemById = new Map(items.map((i) => [i.id, i]));
-    const policy = this.settingsService.toPricingPolicy(
-      await this.settingsService.get(),
-    );
 
     const lineInputs: BookingLineInput[] = dto.items.map((lineDto) => {
       const item = itemById.get(lineDto.itemId)!;
-      const computed = computeLine(
-        {
-          pricePerDay: item.pricePerDay,
-          hourlyRate: item.hourlyRate,
-          supportsHourly: item.supportsHourly,
-          minimumHours: item.minimumHours,
-          quantity: lineDto.quantity,
-          dropoffAt: lineDto.dropoffAt,
-          pickupAt: lineDto.pickupAt,
-        },
-        policy,
-      );
+      const computed = computeLine({
+        pricePerDay: item.pricePerDay,
+        eightHourRate: item.eightHourRate,
+        supportsEightHour: item.supportsEightHour,
+        quantity: lineDto.quantity,
+        dropoffAt: lineDto.dropoffAt,
+        pickupAt: lineDto.pickupAt,
+      });
       return {
         itemId: item.id,
         itemName: item.name,
@@ -326,8 +317,6 @@ export class EventBookingsService {
         unitPrice: computed.unitPrice,
         unitLabel: computed.unitLabel,
         billableUnits: computed.billableUnits,
-        extraHours: computed.extraHours,
-        extraHoursTotal: computed.extraHoursTotal,
         lineTotal: computed.lineTotal,
       };
     });
@@ -378,8 +367,6 @@ export class EventBookingsService {
       unitPrice: l.unitPrice,
       unitLabel: l.unitLabel,
       billableUnits: l.billableUnits,
-      extraHours: l.extraHours,
-      extraHoursTotal: l.extraHoursTotal,
       lineTotal: l.lineTotal,
     }));
 
