@@ -68,9 +68,9 @@ has the full math):
 
 | Field | Drives |
 |---|---|
-| `baseFare` | Flat Rupiah charged on **every leg** of a trip, covering up to `includedKm` — a 3-stop move pays this three times, once per leg. |
-| `per500mFare` | Rupiah per whole **500 m step** charged beyond `includedKm`, per leg, rounded **up** — 5.001 km against a 5 km allowance bills 1 step, 5.500 km still bills 1, 5.501 km bills 2. The 500 m step size is fixed in the pricing engine, not admin-tunable. |
-| `includedKm` | Km included in `baseFare` before `per500mFare` applies, per leg. Leave `null` to fall back to the settings singleton's `defaultIncludedKm` (§4). |
+| `baseFare` | Flat Rupiah charged **once per trip, on the first leg only** — covering up to `includedKm`. A 3-stop move does **not** pay this three times; every leg after the first gets no `baseFare` at all. |
+| `per500mFare` | Rupiah per whole **500 m step**, rounded **up**. On the first leg, applies to the excess beyond `includedKm` (5.001 km against a 5 km allowance bills 1 step, 5.500 km still bills 1, 5.501 km bills 2). On every leg *after* the first, applies to that leg's **entire** distance from the first metre — no allowance. The 500 m step size is fixed in the pricing engine, not admin-tunable. |
+| `includedKm` | Km included in `baseFare` on the **first leg only** — every later leg gets zero allowance. Leave `null` to fall back to the settings singleton's `defaultIncludedKm` (§4). |
 | `minFare` | Floors the trip-wide `travelSubtotal` **once**, after summing every leg — never applied per leg. |
 
 Three things to get right before you build the edit screen:
@@ -159,7 +159,7 @@ Same slug-regeneration and unguarded-hard-delete behavior as truck classes
 |---|---|
 | `roundToIdr` | The step every quote's `total`/`lowEstimate`/`highEstimate` rounds to. Per-leg figures inside a quote's `legs[]` are never rounded. |
 | `bandPct` | The ± percentage band shown around `total` as `lowEstimate`/`highEstimate`. `0` collapses both onto `total` exactly. |
-| `defaultIncludedKm` | Fallback included-km used per leg when a truck class leaves its own `includedKm` unset (§2). |
+| `defaultIncludedKm` | Fallback included-km, applied to the trip's first leg only, when a truck class leaves its own `includedKm` unset (§2). |
 
 This row **auto-seeds** the first time it's read if missing (from
 `roundToIdr: 10_000, bandPct: 10, defaultIncludedKm: 5`) — `GET /settings`
@@ -290,10 +290,12 @@ before you build a rate-editing form:
 - `minFare` (§2) floors the trip-wide `travelSubtotal` **once**, after
   summing every leg — never per leg, and never absorbing toll or add-on
   charges (those are always added on top of the floored amount).
-- `per500mFare` is Rupiah per whole **500 m step**, rounded up, applied per
-  leg beyond that leg's own `includedKm` — **not** a per-kilometre rate.
-  **Label the rate-card input "Tarif per 500 m", never "per km"** — a stale
-  "per km" label above this value is exactly how ops ends up doubling every
+- `per500mFare` is Rupiah per whole **500 m step**, rounded up — **not** a
+  per-kilometre rate. On the first leg, applies to the excess beyond
+  `includedKm`; on every later leg, applies to that leg's entire distance
+  (no allowance). **Label the rate-card input "Tarif per 500 m", never "per
+  km"** — a stale "per km" label above this value is exactly how ops ends
+  up doubling every
   price on a truck class by mistake.
 
 ## Errors

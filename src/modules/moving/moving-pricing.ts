@@ -39,10 +39,14 @@ export const MOVING_DEFAULTS: MovingPricingPolicy = {
  */
 export const MOVING_DISTANCE_STEP_METERS = 500;
 
-/** The rate fields a truck class contributes to a quote. */
+/** The rate fields a truck class contributes to a quote. `baseFare` and
+ * `includedKm` apply ONCE per trip, on the first leg only — see
+ * `movingQuote()`'s doc comment. */
 export interface TruckRate {
   baseFare: number;
-  /** Rupiah per whole 500 m step beyond `includedKm`, charged per leg. */
+  /** Rupiah per whole 500 m step. Applies to the excess beyond
+   * `includedKm` on the first leg, and to a later leg's ENTIRE distance
+   * (no allowance on those). */
   per500mFare: number;
   includedKm?: number | null;
   minFare?: number | null;
@@ -96,12 +100,15 @@ export interface MovingLegInput {
   distanceMeters: number;
 }
 
-/** One leg's own priced breakdown. Deliberately has no `minFareApplied` —
+/** One leg's own priced breakdown. `baseFare`/`includedKm` are nonzero only
+ * on the first leg (array index 0) — every later leg carries `0` for both,
+ * since its entire distance bills in 500 m steps with no allowance (see
+ * `movingQuote()`'s doc comment). Deliberately has no `minFareApplied` —
  * `minFare` is a trip-level floor applied once after summing every leg's
- * `subtotal` (see `movingQuote()`), never per leg, so a per-leg flag here
- * would be structurally meaningless. `subtotal` is this leg's own
- * `baseFare + distanceFare` — distinct from `MovingQuoteResult.travelSubtotal`,
- * which is the trip-wide sum after the minFare floor. */
+ * `subtotal`, never per leg, so a per-leg flag here would be structurally
+ * meaningless. `subtotal` is this leg's own `baseFare + distanceFare` —
+ * distinct from `MovingQuoteResult.travelSubtotal`, which is the trip-wide
+ * sum after the minFare floor. */
 export interface MovingQuoteLegResult {
   distanceKm: number;
   includedKm: number;
@@ -218,15 +225,24 @@ function computeAddonAmount(
 
 /**
  * Computes a price band for an ordered list of trip legs against a truck
- * rate card, plus optional round trip, toll, and add-on fees. Each leg is
- * banded independently against the same rate card — a leg under
- * `includedKm` still pays that leg's full flat `baseFare`, no proration —
- * and the per-leg subtotals are summed for the trip total; `minFare` floors
- * that sum once, not per leg (see `MovingQuoteLegResult`'s doc comment).
+ * rate card, plus optional round trip, toll, and add-on fees.
  *
- * Distance beyond `includedKm` is billed in whole `MOVING_DISTANCE_STEP_METERS`
- * (500 m) steps, rounded UP, per leg — never pro-rated per metre and never
- * pooled across legs before rounding. Step counting reads each leg's RAW
+ * `baseFare` and `includedKm` apply ONCE per trip, on the FIRST leg only
+ * (array index 0) — not per leg. That first leg is priced exactly like a
+ * single-destination trip: the flat `baseFare` covers up to `includedKm`,
+ * and only the excess beyond that bills in 500 m steps. Every leg AFTER
+ * the first gets no `baseFare` and no included-km allowance at all — its
+ * ENTIRE distance bills in 500 m steps from the first metre. This models a
+ * moving crew that charges a flat dispatch/first-stop fee once, then bills
+ * pure distance for every additional stop after that (see
+ * docs/moving-integration.md's "Multi-leg pricing" section). The per-leg
+ * subtotals are summed for the trip total; `minFare` floors that sum once,
+ * not per leg (see `MovingQuoteLegResult`'s doc comment).
+ *
+ * Distance beyond a leg's allowance (5 km on the first leg, 0 on every
+ * leg after it) is billed in whole `MOVING_DISTANCE_STEP_METERS` (500 m)
+ * steps, rounded UP — never pro-rated per metre and never pooled across
+ * legs before rounding. Step counting reads each leg's RAW
  * `distanceMeters`, not the 0.1-km-rounded `distanceKm` — rounding to km
  * first and then stepping would misplace the boundary (5,501 m would snap
  * to 5.5 km, read as exactly 500 m of excess, and bill one step instead of
@@ -234,6 +250,12 @@ function computeAddonAmount(
  * display/persistence values; `chargeableSteps` is what actually drives
  * `distanceFare`, and the two can legitimately disagree (5,040 m against a
  * 5 km allowance displays `chargeableKm: 0` but still bills one step).
+ *
+ * "First leg" means array index 0, full stop — not "the first leg that
+ * happens to be valid." If a caller sends a bogus leg 0 (0 m/NaN), it
+ * zero-bands as usual and no leg in that request gets a `baseFare` — this
+ * mirrors an invalid-leg request being a defensive edge case, never a real
+ * client flow (the frontend always sends a real measured distance first).
  *
  * Round trip only auto-doubles distance for a single-leg request
  * (`legs.length === 1`, `tripMultiplier` becomes 2 on that one leg's
@@ -303,11 +325,11 @@ export function movingQuote(
   const per500mFare = nonNegative(rate.per500mFare);
   const minFare = nonNegative(rate.minFare ?? 0);
 
-  const legResults: MovingQuoteLegResult[] = legs.map((leg) => {
+  const legResults: MovingQuoteLegResult[] = legs.map((leg, index) => {
     if (!isValidLeg(leg)) {
       return {
         distanceKm: 0,
-        includedKm: includedKmFallback,
+        includedKm: 0,
         chargeableKm: 0,
         chargeableSteps: 0,
         baseFare: 0,
@@ -315,12 +337,20 @@ export function movingQuote(
         subtotal: 0,
       };
     }
+    // baseFare and the included-km allowance apply ONCE per trip, on leg
+    // index 0 only — see movingQuote()'s doc comment. Every leg after the
+    // first gets neither: its entire distance bills in 500 m steps from
+    // the first metre (includedMeters: 0 below collapses to that).
+    const isFirstLeg = index === 0;
+    const legBaseFare = isFirstLeg ? baseFareRate : 0;
+    const legIncludedKm = isFirstLeg ? includedKmFallback : 0;
+
     // Step counting reads RAW metres and never the 0.1-km-rounded
     // distanceKm below: 5,501 m snaps to 5.5 km, which would show 500 m of
     // excess and bill ONE step instead of the correct two. distanceKm and
     // chargeableKm are display/persistence values from here on — they no
     // longer drive a single Rupiah.
-    const includedMeters = includedKmFallback * 1000;
+    const includedMeters = legIncludedKm * 1000;
     const chargeableMeters = Math.max(0, leg.distanceMeters - includedMeters);
     const chargeableSteps = Math.ceil(
       chargeableMeters / MOVING_DISTANCE_STEP_METERS,
@@ -332,12 +362,12 @@ export function movingQuote(
       Math.round(chargeableSteps * per500mFare) * tripMultiplier;
     return {
       distanceKm,
-      includedKm: includedKmFallback,
+      includedKm: legIncludedKm,
       chargeableKm,
       chargeableSteps,
-      baseFare: baseFareRate,
+      baseFare: legBaseFare,
       distanceFare,
-      subtotal: baseFareRate + distanceFare,
+      subtotal: legBaseFare + distanceFare,
     };
   });
 
@@ -361,11 +391,13 @@ export function movingQuote(
   const travelSubtotalPreMin = sumLegs((l) => l.subtotal);
 
   // min_fare floors the summed travel portion once, after every leg is
-  // added up — never per leg (a leg under includedKm already pays the
-  // full flat baseFare with no proration, which already acts as a de
-  // facto per-leg floor; flooring again per leg would double-count) — and
-  // still before toll and add-ons, so a helper fee or toll can't silently
-  // absorb the stated minimum on a short job (see moving-integration.md).
+  // added up — never per leg. The first leg already carries a de facto
+  // floor of its own (baseFare, paid flat regardless of distance); a
+  // per-leg floor on top of that would double-count, and every leg after
+  // the first has no baseFare to floor in the first place — it's pure
+  // metered distance. Applied still before toll and add-ons, so a helper
+  // fee or toll can't silently absorb the stated minimum on a short job
+  // (see moving-integration.md).
   const minFareApplied = minFare > travelSubtotalPreMin;
   const travelSubtotal = minFareApplied ? minFare : travelSubtotalPreMin;
 

@@ -56,7 +56,7 @@ export class QuoteMovingDto {
     minItems: 1,
     maxItems: 26,
     description:
-      "Ordered legs of the trip — one entry per hop (pickup→stop1, stop1→stop2, ...). Each leg is priced independently against the truck's rate card and the leg subtotals are summed; a leg under includedKm still pays that leg's full flat baseFare (no proration). Send one entry for a single destination — reproduces today's math exactly. IMPORTANT: roundTrip does NOT auto-double distance once legs.length > 1 — include the actual return leg as its own explicit entry here if you want it priced (see moving-integration.md).",
+      "Ordered legs of the trip — one entry per hop (pickup→stop1, stop1→stop2, ...). ONLY THE FIRST LEG gets baseFare + the includedKm allowance, priced like a single-destination trip; every leg after that has no baseFare and no allowance at all — its entire distance bills in 500m steps from the first metre. Send one entry for a single destination — reproduces today's math exactly. IMPORTANT: roundTrip does NOT auto-double distance once legs.length > 1 — include the actual return leg as its own explicit entry here if you want it priced (it prices like any other non-first leg — see moving-integration.md).",
   })
   @IsArray()
   @ArrayMinSize(1)

@@ -141,7 +141,10 @@ describe('movingQuote — regression (no extras)', () => {
     );
     expect(result.legs[1]).toEqual({
       distanceKm: 0,
-      includedKm: 5,
+      // includedKm 0, not 5 — this leg is index 1, not the first leg, so
+      // it carries no allowance regardless of validity (see
+      // movingQuote()'s doc comment on what "first leg" means).
+      includedKm: 0,
       chargeableKm: 0,
       chargeableSteps: 0,
       baseFare: 0,
@@ -407,7 +410,16 @@ describe('movingQuote — tollRoute echo', () => {
 });
 
 describe('movingQuote — multi-leg', () => {
-  it('prices each leg independently and sums — NOT the old whole-trip math for the same total distance', () => {
+  it('only the first leg gets baseFare + includedKm; later legs bill their entire distance in steps', () => {
+    // pickupBak: baseFare 250,000, per500mFare 2,250, includedKm 5.
+    //   leg 0 (first, 5,000 m): within the 5 km allowance -> 0 steps,
+    //     subtotal is the flat baseFare alone, same as a single-leg trip.
+    //   leg 1 (10,000 m, NOT first): no baseFare, no allowance — its FULL
+    //     10 km bills in steps: ceil(10,000/500) = 20 steps.
+    //   leg 2 (2,000 m, NOT first): same rule — its full 2 km bills in
+    //     steps: ceil(2,000/500) = 4 steps. Note this is MORE expensive
+    //     than being under a 5 km allowance would be — later legs have no
+    //     allowance to be under.
     const result = movingQuote(
       [
         { distanceMeters: 5_000 },
@@ -429,34 +441,34 @@ describe('movingQuote — multi-leg', () => {
       },
       {
         distanceKm: 10,
-        includedKm: 5,
-        chargeableKm: 5,
-        chargeableSteps: 10,
-        baseFare: 250_000,
-        distanceFare: 22_500,
-        subtotal: 272_500,
+        includedKm: 0,
+        chargeableKm: 10,
+        chargeableSteps: 20,
+        baseFare: 0,
+        distanceFare: 45_000,
+        subtotal: 45_000,
       },
       {
         distanceKm: 2,
-        includedKm: 5,
-        chargeableKm: 0,
-        chargeableSteps: 0,
-        baseFare: 250_000,
-        distanceFare: 0,
-        subtotal: 250_000,
+        includedKm: 0,
+        chargeableKm: 2,
+        chargeableSteps: 4,
+        baseFare: 0,
+        distanceFare: 9_000,
+        subtotal: 9_000,
       },
     ]);
     expect(result.distanceKm).toBe(17);
-    expect(result.includedKm).toBe(15);
-    expect(result.chargeableKm).toBe(5);
-    expect(result.chargeableSteps).toBe(10);
-    expect(result.baseFare).toBe(750_000); // 3 x 250,000 - NOT one flat baseFare
-    expect(result.distanceFare).toBe(22_500); // only leg 2's chargeable km
-    expect(result.travelSubtotal).toBe(772_500);
+    expect(result.includedKm).toBe(5); // sum across legs — only leg 0 contributes
+    expect(result.chargeableKm).toBe(12);
+    expect(result.chargeableSteps).toBe(24);
+    expect(result.baseFare).toBe(250_000); // ONE flat baseFare, not 3x
+    expect(result.distanceFare).toBe(54_000); // leg 1 (45,000) + leg 2 (9,000)
+    expect(result.travelSubtotal).toBe(304_000);
     expect(result.minFareApplied).toBe(false);
-    expect(result.total).toBe(770_000);
-    expect(result.lowEstimate).toBe(690_000);
-    expect(result.highEstimate).toBe(850_000);
+    expect(result.total).toBe(300_000);
+    expect(result.lowEstimate).toBe(270_000);
+    expect(result.highEstimate).toBe(330_000);
     expect(result.tripMultiplier).toBe(1);
   });
 
@@ -473,27 +485,54 @@ describe('movingQuote — multi-leg', () => {
     );
 
     expect(result.tripMultiplier).toBe(1); // NOT 2 - legs.length > 1
-    expect(result.chargeableSteps).toBe(10); // a measured fact, not doubled by roundTrip
-    expect(result.distanceFare).toBe(22_500); // unchanged from the non-roundTrip case above
-    expect(result.travelSubtotal).toBe(772_500); // unchanged
+    expect(result.chargeableSteps).toBe(24); // a measured fact, not doubled by roundTrip
+    expect(result.distanceFare).toBe(54_000); // unchanged from the non-roundTrip case above
+    expect(result.travelSubtotal).toBe(304_000); // unchanged
     expect(result.tollFare).toBe(44_200); // (1,300 * 17km = 22,100) x 2, doubled independent of leg count
-    expect(result.subtotal).toBe(816_700);
-    expect(result.total).toBe(820_000);
-    expect(result.lowEstimate).toBe(740_000);
-    expect(result.highEstimate).toBe(900_000);
+    expect(result.subtotal).toBe(348_200);
+    expect(result.total).toBe(350_000);
+    expect(result.lowEstimate).toBe(320_000);
+    expect(result.highEstimate).toBe(390_000);
   });
 
-  it('minFare floors the SUM once — two legs each below a hypothetical per-leg floor, but the sum is not', () => {
-    // cddWithHigherMinFare: baseFare 850,000, minFare 1,000,000 — each leg's
-    // own subtotal (850,000) is individually below minFare, but the summed
-    // total (1,700,000) already clears it, so nothing is floored. A buggy
-    // per-leg-floor implementation would instead produce 2,000,000.
+  it('real-world shape: a short first leg (flat) followed by a longer second leg (pure steps)', () => {
+    // 4.7 km then 3.2 km on pickupBak (250,000 base / 2,250 per 500 m).
+    // Leg 0 is within its 5 km allowance -> flat 250,000, same as a
+    // single-destination trip. Leg 1 has no allowance at all: its full
+    // 3.2 km bills in steps from the first metre — ceil(3,200/500) = 7
+    // steps x 2,250 = 15,750. NOT another flat 250,000.
     const result = movingQuote(
-      [{ distanceMeters: 1_000 }, { distanceMeters: 1_000 }],
+      [{ distanceMeters: 4_700 }, { distanceMeters: 3_200 }],
+      pickupBak,
+    );
+    expect(result.legs[0].subtotal).toBe(250_000);
+    expect(result.legs[1]).toEqual({
+      distanceKm: 3.2,
+      includedKm: 0,
+      chargeableKm: 3.2,
+      chargeableSteps: 7,
+      baseFare: 0,
+      distanceFare: 15_750,
+      subtotal: 15_750,
+    });
+    expect(result.travelSubtotal).toBe(265_750);
+    expect(result.total).toBe(270_000);
+  });
+
+  it('minFare floors the trip-wide sum once — a light first leg still combines with the rest of the trip to clear it', () => {
+    // cddWithHigherMinFare: baseFare 850,000, per500mFare 4,000, minFare
+    // 1,000,000. Leg 0 alone (850,000, within its 5 km allowance) is BELOW
+    // minFare on its own, but leg 1's full 20 km of pure stepped distance
+    // (ceil(20,000/500) = 40 steps x 4,000 = 160,000) brings the trip-wide
+    // sum to 1,010,000 — clearing the floor without needing a per-leg
+    // floor on leg 1 (which has no baseFare/floor of its own to begin
+    // with under the new model).
+    const result = movingQuote(
+      [{ distanceMeters: 1_000 }, { distanceMeters: 20_000 }],
       cddWithHigherMinFare,
     );
     expect(result.minFareApplied).toBe(false);
-    expect(result.travelSubtotal).toBe(1_700_000);
+    expect(result.travelSubtotal).toBe(1_010_000);
   });
 
   it('minFare floors the SUM once when the summed total is still below it — not doubled-floored', () => {
@@ -560,23 +599,26 @@ describe('movingQuote — 500 m distance stepping', () => {
     expect(result.distanceFare).toBe(10_000);
   });
 
-  it('rounds up each leg independently — NOT the summed excess', () => {
-    // Three legs of 5,001 m: 1 m of excess apiece.
-    //   per leg -> ceil(1/500) x 3 = 3 steps = 30,000   <- correct
-    //   summed  -> ceil(3/500)     = 1 step  = 10,000   <- must NOT happen
+  it('rounds up each non-first leg independently — NOT the summed distance', () => {
+    // Leg 0 (first, 501 m) is within its 5 km allowance -> 0 steps, flat
+    // baseFare only. Legs 1 and 2 (501 m each, NOT first) have no
+    // allowance at all, so each rounds its own FULL distance up
+    // independently: ceil(501/500) = 2 steps apiece.
+    //   per leg (correct) -> 2 + 2 = 4 steps = 40,000
+    //   pooled (must NOT happen) -> ceil((501+501)/500) = 3 steps = 30,000
     const result = movingQuote(
       [
-        { distanceMeters: 5_001 },
-        { distanceMeters: 5_001 },
-        { distanceMeters: 5_001 },
+        { distanceMeters: 501 },
+        { distanceMeters: 501 },
+        { distanceMeters: 501 },
       ],
       stepper,
     );
-    expect(result.legs.map((l) => l.chargeableSteps)).toEqual([1, 1, 1]);
-    expect(result.chargeableSteps).toBe(3);
-    expect(result.distanceFare).toBe(30_000);
-    expect(result.baseFare).toBe(300_000);
-    expect(result.travelSubtotal).toBe(330_000);
+    expect(result.legs.map((l) => l.chargeableSteps)).toEqual([0, 2, 2]);
+    expect(result.chargeableSteps).toBe(4);
+    expect(result.distanceFare).toBe(40_000);
+    expect(result.baseFare).toBe(100_000); // ONE flat baseFare, from leg 0 only
+    expect(result.travelSubtotal).toBe(140_000);
   });
 
   it('roundTrip doubles the stepped distance fare, not the step count or baseFare', () => {

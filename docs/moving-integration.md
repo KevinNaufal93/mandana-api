@@ -169,8 +169,10 @@ this endpoint's rounding rule. This endpoint is the **sole** source of truth
 for price; the frontend calls it and renders whatever comes back, so a rate
 change takes effect without a frontend deploy.
 
-Distance is billed in whole **500 m steps, rounded up**, per leg, beyond the
-truck's `includedKm` — see `chargeableSteps` below.
+`baseFare` and `includedKm` apply **once per trip, on the first leg only**
+(array index 0). Every leg after the first has no allowance at all — its
+entire distance bills in whole **500 m steps, rounded up**, from the first
+metre. See "Multi-leg pricing" below and `chargeableSteps`.
 
 ```jsonc
 // Request — truckSlug/legs are all that's required; everything else is
@@ -226,23 +228,28 @@ truck's `includedKm` — see `chargeableSteps` below.
 
 Field notes:
 
-- **`legs`** — each leg is priced independently against the truck's rate
-  card (a leg under `includedKm` still pays that leg's full flat `baseFare`,
-  no proration) and the leg subtotals are summed; `distanceKm` /
-  `includedKm` / `chargeableKm` / `chargeableSteps` / `baseFare` /
-  `distanceFare` / `travelSubtotal` at the top level are all **sums across
-  `legs[]`** — for a single-leg request, sum-of-one is numerically identical
-  to the old single-`distanceMeters` math, so a single-destination quote's
-  price never moves. The response's `legs[]` array is unrounded — only
-  `total` / `lowEstimate` / `highEstimate` are rounded — and deliberately has
-  no per-leg `minFareApplied` (see `minFareApplied` note below).
-- **`chargeableSteps`** — whole 500 m steps billed beyond `includedKm`,
-  rounded **up**, counted per leg from the *raw* metres (not from the
-  0.1-km-rounded `chargeableKm`). This is the multiplicand behind
+- **`legs`** — **only the first leg (array index 0) gets `baseFare` and the
+  `includedKm` allowance.** It's priced exactly like a single-destination
+  trip: the flat `baseFare` covers up to `includedKm`, and only the excess
+  bills in 500 m steps. **Every leg after the first has no `baseFare` and no
+  allowance at all** — its entire distance bills in 500 m steps from the
+  first metre, which is usually *more* expensive per km than the first leg,
+  not less. See "Multi-leg pricing" below for the worked example and the
+  reasoning. `distanceKm` / `includedKm` / `chargeableKm` / `chargeableSteps`
+  / `baseFare` / `distanceFare` / `travelSubtotal` at the top level are all
+  **sums across `legs[]`** — for a single-leg request, sum-of-one is
+  numerically identical to a plain single-destination quote, so that price
+  never moves. The response's `legs[]` array is unrounded — only `total` /
+  `lowEstimate` / `highEstimate` are rounded — and deliberately has no
+  per-leg `minFareApplied` (see `minFareApplied` note below).
+- **`chargeableSteps`** — whole 500 m steps billed on a leg, rounded **up**,
+  counted from that leg's *raw* metres (not from the 0.1-km-rounded
+  `chargeableKm`) — against the first leg's excess over `includedKm`, or
+  against a later leg's entire distance. This is the multiplicand behind
   `distanceFare`, not `chargeableKm` — the two can legitimately disagree:
-  40 m of excess displays `chargeableKm: 0` but still bills one step. Against
-  a 5 km allowance: 5.000 km is 0 steps, 5.001 km is 1, 5.500 km is still 1,
-  5.501 km is 2.
+  40 m of excess on the first leg displays `chargeableKm: 0` but still bills
+  one step. Against a 5 km allowance: 5.000 km is 0 steps, 5.001 km is 1,
+  5.500 km is still 1, 5.501 km is 2.
 - **`roundTrip`** — see "Round trip + multiple legs" right below; it's not a
   flat "doubles distance" rule once there's more than one leg.
 - **`tollRoute`** (default `true`) says whether the trip was computed via a
@@ -257,12 +264,14 @@ Field notes:
   while `insurance` is selected → `400`.
 - **`minFareApplied`** only ever reflects the summed `travelSubtotal`
   (`baseFare + distanceFare` across every leg) against the truck's
-  `minFare`, applied **once**, after summing — never per leg (a leg under
-  `includedKm` already pays the full flat `baseFare`, which already acts as
-  a de facto per-leg floor; flooring again per leg would double-count). This
-  is why there's no `minFareApplied` field inside each `legs[]` entry — it
-  would be structurally meaningless at that level. Add-ons and toll are
-  never absorbed into the minimum either way, they're always added on top.
+  `minFare`, applied **once**, after summing — never per leg. The first leg
+  already carries a de facto floor of its own (`baseFare`, paid flat
+  regardless of distance); a per-leg floor on top of that would
+  double-count, and every leg after the first has no `baseFare` to floor in
+  the first place — it's pure metered distance. This is why there's no
+  `minFareApplied` field inside each `legs[]` entry — it would be
+  structurally meaningless at that level. Add-ons and toll are never
+  absorbed into the minimum either way, they're always added on top.
 - A non-`toll` kind (including any future addon kind) is never rejected by
   kind in `addons[]` — only `toll` is (see below).
 - `addons[]` in the response is the priced breakdown for display — one line
@@ -279,10 +288,11 @@ Field notes:
 - **`legs.length > 1`** (multi-stop): `roundTrip: true` does **NOT** double
   any leg's distance fare — `tripMultiplier` echoes `1` regardless of the
   flag. Want the return trip priced? Add it as its own explicit entry at the
-  end of `legs[]` (e.g. last stop → pickup); it prices like any other leg
-  (full `baseFare` + its own chargeable km) — this is deliberate, not a gap:
-  doubling every leg would mean retracing every stop in reverse, which
-  overstates a real direct return trip.
+  end of `legs[]` (e.g. last stop → pickup); it prices like any other
+  non-first leg — no `baseFare`, no allowance, its full distance bills in
+  500 m steps — this is deliberate, not a gap: doubling every leg would mean
+  retracing every stop in reverse, which overstates a real direct return
+  trip.
 - **Toll and any add-on with `doublesOnRoundTrip: true`** are unaffected by
   leg count — they double whenever the bare `roundTrip` flag is `true`,
   exactly as always, independent of how many legs there are. So `roundTrip`
@@ -376,27 +386,27 @@ same server-side path), plus `pickup` and `destinations`:
       { "stopIndex": 2, "address": "Bogor Kota", "lat": -6.5971, "lng": 106.8060 }
     ],
     "distanceKm": 45,
-    "includedKm": 15,
-    "chargeableKm": 30,
-    "chargeableSteps": 60,
+    "includedKm": 5,
+    "chargeableKm": 40,
+    "chargeableSteps": 80,
     "roundTrip": false,
     "tollRoute": true,
     "declaredValue": null,
-    "baseFare": 2550000,
-    "distanceFare": 240000,
-    "travelSubtotal": 2790000,
+    "baseFare": 850000,
+    "distanceFare": 320000,
+    "travelSubtotal": 1170000,
     "tollFare": 0,
     "addons": [],
     "addonsTotal": 0,
-    "subtotal": 2790000,
-    "total": 2790000,
+    "subtotal": 1170000,
+    "total": 1170000,
     "minFareApplied": false,
-    "lowEstimate": 2510000,
-    "highEstimate": 3070000,
+    "lowEstimate": 1050000,
+    "highEstimate": 1290000,
     "legs": [
       { "distanceKm": 15, "includedKm": 5, "chargeableKm": 10, "chargeableSteps": 20, "baseFare": 850000, "distanceFare": 80000, "subtotal": 930000 },
-      { "distanceKm": 20, "includedKm": 5, "chargeableKm": 15, "chargeableSteps": 30, "baseFare": 850000, "distanceFare": 120000, "subtotal": 970000 },
-      { "distanceKm": 10, "includedKm": 5, "chargeableKm": 5, "chargeableSteps": 10, "baseFare": 850000, "distanceFare": 40000, "subtotal": 890000 }
+      { "distanceKm": 20, "includedKm": 0, "chargeableKm": 20, "chargeableSteps": 40, "baseFare": 0, "distanceFare": 160000, "subtotal": 160000 },
+      { "distanceKm": 10, "includedKm": 0, "chargeableKm": 10, "chargeableSteps": 20, "baseFare": 0, "distanceFare": 80000, "subtotal": 80000 }
     ],
     "currency": "IDR",
     "customerName": null,
@@ -408,10 +418,25 @@ same server-side path), plus `pickup` and `destinations`:
 }
 ```
 
-Notice `travelSubtotal` is **2,790,000** here — vs. `1,170,000` in this doc's
-previous single-`distanceMeters` example for the exact same 45km trip. That
-difference is the whole reason this feature exists: three stops each pay
-their own flat `baseFare`, not one flat fare for the whole route.
+#### Multi-leg pricing — one flat fee, then pure metered distance
+
+Only the **first** leg (`legs[0]`) gets `baseFare` and the `includedKm`
+allowance — priced exactly like a single-destination trip. Every leg after
+the first gets neither: its entire distance bills in 500 m steps from the
+first metre, no free km, no separate flat fee. This models a crew that
+charges one dispatch/first-stop fee for the job, then bills pure distance
+for every additional stop after that — it does **not** mean "three stops
+means three flat fees."
+
+In the example above, `travelSubtotal` (**1,170,000**) happens to land on
+exactly what a single continuous 45 km trip would cost (`baseFare 850,000` +
+`(45−5) km` of steps `= 320,000`) — splitting one route into legs doesn't
+change the price as long as the split points fall on clean 500 m
+boundaries. It generally can't come out *cheaper* than that continuous
+figure, though: each leg after the first rounds its own full distance up to
+the 500 m grid independently (never pooled with another leg — see
+`chargeableSteps`), so an awkward split can round up more than once where a
+single continuous distance would have rounded up only at the very end.
 
 Field notes:
 
