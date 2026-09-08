@@ -19,7 +19,7 @@ export class UpdateMovingSettingsDto {
     minimum: 0,
     maximum: 50,
     description:
-      'The ± percentage band shown to the customer around the total. 0 = exact price.',
+      'Upward headroom above the total, as a percentage. The customer-facing band runs from the total (floor) to total * (1 + bandPct/100) rounded up. 0 = exact price.',
   })
   @IsOptional()
   @IsInt()

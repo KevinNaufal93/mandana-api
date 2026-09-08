@@ -12,7 +12,8 @@
  *
  * `MOVING_DEFAULTS` is only the last-resort fallback used when no
  * MovingSettings row exists yet. The numbers that actually apply
- * (roundToIdr, bandPct, defaultIncludedKm) come from
+ * (roundToIdr, bandPct — upward-only headroom above `total`, see the band
+ * math near the end of `movingQuote()`, defaultIncludedKm) come from
  * `GET /moving/pricing-config` at runtime — callers fetch them rather than
  * hardcoding their own copy.
  */
@@ -20,6 +21,9 @@
 export interface MovingPricingPolicy {
   includedKm: number;
   roundToIdr: number;
+  /** Upward headroom above `total`, as a percentage. `highEstimate` is
+   * `total * (1 + bandPct/100)` rounded up to `roundToIdr`; `lowEstimate`
+   * is always `total`. Not a ± spread around `total`. */
   bandPct: number;
 }
 
@@ -143,10 +147,15 @@ export interface MovingQuoteResult {
   subtotal: number;
   total: number;
   minFareApplied: boolean;
+  /** Floor of the customer-facing band. Equals `total` — the itemized
+   * breakdown sums to exactly this. */
   lowEstimate: number;
+  /** Ceiling of the band: `total * (1 + bandPct)` rounded *up* to
+   * `roundToIdr` so it never dips below that headroom figure. */
   highEstimate: number;
   /** Per-leg breakdown, in request order — unrounded (only the top-level
-   * `total`/`lowEstimate`/`highEstimate` are rounded). Every other field
+   * `total`/`highEstimate` are rounded; `lowEstimate` just mirrors `total`).
+   * Every other field
    * above (`distanceKm`, `includedKm`, `chargeableKm`, `baseFare`,
    * `distanceFare`, `travelSubtotal`) is the sum across this array. */
   legs: MovingQuoteLegResult[];
@@ -162,6 +171,13 @@ function nonNegative(value: number | null | undefined): number {
 function roundTo(value: number, step: number): number {
   if (step <= 0) return Math.round(value);
   return Math.round(value / step) * step;
+}
+
+/** Rounds up to the next `step` multiple. Used for `highEstimate` so the
+ * upper bound never lands below `total * (1 + bandPct)`. */
+function roundUpTo(value: number, step: number): number {
+  if (step <= 0) return Math.ceil(value);
+  return Math.ceil(value / step) * step;
 }
 
 function clamp(value: number, min: number, max: number): number {
@@ -441,9 +457,15 @@ export function movingQuote(
   const subtotal = travelSubtotal + tollFare + addonsTotal;
   const total = roundTo(subtotal, defaults.roundToIdr);
 
+  // One-sided band anchored at `total`: the itemized breakdown the customer
+  // UI shows sums to exactly `total`, so `total` is the floor they'd pay and
+  // `bandPct` is headroom above it (not a ± spread around it).
   const bandFraction = defaults.bandPct / 100;
-  const lowEstimate = roundTo(total * (1 - bandFraction), defaults.roundToIdr);
-  const highEstimate = roundTo(total * (1 + bandFraction), defaults.roundToIdr);
+  const lowEstimate = total;
+  const highEstimate = roundUpTo(
+    total * (1 + bandFraction),
+    defaults.roundToIdr,
+  );
 
   return {
     legs: legResults,

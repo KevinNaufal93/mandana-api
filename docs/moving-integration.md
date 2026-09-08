@@ -150,6 +150,8 @@ anything client-side:
 
 The pricing policy previously hardcoded as `MOVING_DEFAULTS` in both repos.
 **Fetch this instead of hardcoding a local copy** — see "Constants" below.
+`bandPct` is upward headroom above the quote `total` (the band runs
+`total` → `total * (1 + bandPct/100)` rounded up), not a ± spread.
 
 ```jsonc
 {
@@ -216,7 +218,7 @@ metre. See "Multi-leg pricing" below and `chargeableSteps`.
     "subtotal": 1670000,
     "total": 1670000,
     "minFareApplied": false,
-    "lowEstimate": 1500000,
+    "lowEstimate": 1670000,
     "highEstimate": 1840000,
     "legs": [
       { "distanceKm": 20, "includedKm": 5, "chargeableKm": 15, "chargeableSteps": 30, "baseFare": 850000, "distanceFare": 120000, "subtotal": 970000 }
@@ -240,8 +242,15 @@ Field notes:
   **sums across `legs[]`** — for a single-leg request, sum-of-one is
   numerically identical to a plain single-destination quote, so that price
   never moves. The response's `legs[]` array is unrounded — only `total` /
-  `lowEstimate` / `highEstimate` are rounded — and deliberately has no
-  per-leg `minFareApplied` (see `minFareApplied` note below).
+  `highEstimate` are rounded (`lowEstimate` just mirrors `total`) — and
+  deliberately has no per-leg `minFareApplied` (see `minFareApplied` note
+  below).
+- **`lowEstimate` / `highEstimate`** — the customer-facing band. It is
+  **one-sided**: `lowEstimate` is always exactly `total` (so the itemized
+  breakdown you render below the header sums to the band's own floor), and
+  `highEstimate` is `total * (1 + bandPct/100)` **rounded up** to
+  `roundToIdr`. `bandPct` is upward headroom above `total`, not a ± spread
+  around it. `bandPct: 0` collapses both onto `total`.
 - **`chargeableSteps`** — whole 500 m steps billed on a leg, rounded **up**,
   counted from that leg's *raw* metres (not from the 0.1-km-rounded
   `chargeableKm`) — against the first leg's excess over `includedKm`, or
@@ -401,7 +410,7 @@ same server-side path), plus `pickup` and `destinations`:
     "subtotal": 1170000,
     "total": 1170000,
     "minFareApplied": false,
-    "lowEstimate": 1050000,
+    "lowEstimate": 1170000,
     "highEstimate": 1290000,
     "legs": [
       { "distanceKm": 15, "includedKm": 5, "chargeableKm": 10, "chargeableSteps": 20, "baseFare": 850000, "distanceFare": 80000, "subtotal": 930000 },

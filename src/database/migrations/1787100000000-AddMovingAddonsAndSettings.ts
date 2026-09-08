@@ -3,7 +3,7 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
 /**
  * Moving Support: configurable add-on fees (helper, packaging, waiting,
  * insurance, toll estimate) and the pricing-policy singleton (rounding
- * step, ± estimate band, fallback included-km) that used to be hardcoded
+ * step, upward estimate-band headroom, fallback included-km) that used to be hardcoded
  * as MOVING_DEFAULTS. See moving-pricing.ts and docs/moving-integration.md.
  */
 export class AddMovingAddonsAndSettings1787100000000 implements MigrationInterface {

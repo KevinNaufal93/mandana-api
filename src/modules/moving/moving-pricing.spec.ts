@@ -85,8 +85,8 @@ describe('movingQuote — regression (no extras)', () => {
     expect(result.subtotal).toBe(970_000);
     expect(result.total).toBe(970_000);
     expect(result.minFareApplied).toBe(false);
-    expect(result.lowEstimate).toBe(870_000);
-    expect(result.highEstimate).toBe(1_070_000);
+    expect(result.lowEstimate).toBe(970_000); // one-sided band: floor == total
+    expect(result.highEstimate).toBe(1_070_000); // 970k * 1.10 = 1,067k → round up to 1,070k
 
     // additive fields are all no-ops when no extras are passed
     expect(result.roundTrip).toBe(false);
@@ -156,18 +156,20 @@ describe('movingQuote — regression (no extras)', () => {
 });
 
 describe('movingQuote — opts override (settings row)', () => {
-  it('a custom bandPct changes the low/high band but not the total', () => {
+  it('a custom bandPct widens highEstimate but leaves total and lowEstimate put', () => {
     const base = movingQuote([{ distanceMeters: 20_000 }], cdd);
     const wide = movingQuote([{ distanceMeters: 20_000 }], cdd, {
       bandPct: 15,
     });
 
     expect(wide.total).toBe(base.total);
-    expect(wide.lowEstimate).not.toBe(base.lowEstimate);
-    expect(wide.highEstimate).not.toBe(base.highEstimate);
+    // band is one-sided: the floor is always the total, regardless of bandPct
+    expect(wide.lowEstimate).toBe(base.lowEstimate);
+    expect(wide.lowEstimate).toBe(wide.total);
+    expect(wide.highEstimate).toBeGreaterThan(base.highEstimate);
   });
 
-  it('bandPct: 0 collapses low/high onto total', () => {
+  it('bandPct: 0 collapses highEstimate onto total (lowEstimate already equals it)', () => {
     const result = movingQuote([{ distanceMeters: 20_000 }], cdd, {
       bandPct: 0,
     });
@@ -467,8 +469,8 @@ describe('movingQuote — multi-leg', () => {
     expect(result.travelSubtotal).toBe(304_000);
     expect(result.minFareApplied).toBe(false);
     expect(result.total).toBe(300_000);
-    expect(result.lowEstimate).toBe(270_000);
-    expect(result.highEstimate).toBe(330_000);
+    expect(result.lowEstimate).toBe(300_000); // floor == total
+    expect(result.highEstimate).toBe(330_000); // 300k * 1.10
     expect(result.tripMultiplier).toBe(1);
   });
 
@@ -491,8 +493,8 @@ describe('movingQuote — multi-leg', () => {
     expect(result.tollFare).toBe(44_200); // (1,300 * 17km = 22,100) x 2, doubled independent of leg count
     expect(result.subtotal).toBe(348_200);
     expect(result.total).toBe(350_000);
-    expect(result.lowEstimate).toBe(320_000);
-    expect(result.highEstimate).toBe(390_000);
+    expect(result.lowEstimate).toBe(350_000); // floor == total
+    expect(result.highEstimate).toBe(390_000); // 350k * 1.10 = 385k → round up to 390k
   });
 
   it('real-world shape: a short first leg (flat) followed by a longer second leg (pure steps)', () => {

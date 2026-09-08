@@ -3,7 +3,9 @@ import { BaseEntity } from '../../../common/entities/base.entity';
 
 /**
  * Singleton row holding the Moving Support pricing policy — the rounding
- * step, the ± price-band percentage shown to the customer, and the
+ * step, the upward price-band headroom percentage shown above the total to
+ * the customer (lowEstimate = total, highEstimate = total * (1 + bandPct/100)
+ * rounded up), and the
  * fallback included-km when a truck class doesn't set its own. Previously
  * hardcoded as MOVING_DEFAULTS in moving-pricing.ts and mirrored
  * byte-for-byte into the frontend; now served over GET /moving/pricing-config

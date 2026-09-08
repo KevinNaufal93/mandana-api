@@ -157,8 +157,8 @@ Same slug-regeneration and unguarded-hard-delete behavior as truck classes
 
 | Field | Meaning |
 |---|---|
-| `roundToIdr` | The step every quote's `total`/`lowEstimate`/`highEstimate` rounds to. Per-leg figures inside a quote's `legs[]` are never rounded. |
-| `bandPct` | The ± percentage band shown around `total` as `lowEstimate`/`highEstimate`. `0` collapses both onto `total` exactly. |
+| `roundToIdr` | The step a quote's `total` rounds to (and `highEstimate` rounds *up* to). `lowEstimate` equals `total`. Per-leg figures inside a quote's `legs[]` are never rounded. |
+| `bandPct` | Upward headroom above `total`, as a whole percent. The customer-facing band runs from `lowEstimate` (= `total`) to `highEstimate` (= `total * (1 + bandPct/100)`, rounded up to `roundToIdr`). Not a ± spread. `0` collapses both onto `total` exactly. |
 | `defaultIncludedKm` | Fallback included-km, applied to the trip's first leg only, when a truck class leaves its own `includedKm` unset (§2). |
 
 This row **auto-seeds** the first time it's read if missing (from
@@ -285,8 +285,9 @@ before you build a rate-editing form:
   add-on has `percentBps: 20` — that's **0.20%**, not 20%.
   `amount = round(declaredValue * percentBps / 10_000)`.
 - **`bandPct` (§4) is a whole percent, not basis points** — `10` means
-  ±10%. Same module, two different scales for what look like the same kind
-  of field; don't carry one's convention onto the other.
+  `highEstimate` sits 10% above `total` (upward headroom, not a ± spread).
+  Same module, two different scales for what look like the same kind of
+  field; don't carry one's convention onto the other.
 - `minFare` (§2) floors the trip-wide `travelSubtotal` **once**, after
   summing every leg — never per leg, and never absorbing toll or add-on
   charges (those are always added on top of the floored amount).

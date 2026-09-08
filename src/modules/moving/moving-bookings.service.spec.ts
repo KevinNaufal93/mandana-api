@@ -67,7 +67,7 @@ const baseResult: MovingQuoteResult = {
   subtotal: 970_000,
   total: 970_000,
   minFareApplied: false,
-  lowEstimate: 870_000,
+  lowEstimate: 970_000,
   highEstimate: 1_070_000,
   legs: [
     {

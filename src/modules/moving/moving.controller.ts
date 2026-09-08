@@ -73,7 +73,7 @@ export class MovingController {
   @Get('pricing-config')
   @ApiOperation({
     summary:
-      'Pricing policy (rounding step, ± estimate band, fallback included-km) — fetch these instead of hardcoding them client-side',
+      'Pricing policy (rounding step, upward estimate-band headroom, fallback included-km) — fetch these instead of hardcoding them client-side',
   })
   @ApiOkResponse({ type: MovingSettingsResponseDto })
   async getPricingConfig() {

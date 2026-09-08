@@ -132,7 +132,10 @@ export class MovingAddonResponseDto {
 export class MovingSettingsDto {
   @ApiProperty({ description: 'Rupiah rounding step applied to the total' })
   roundToIdr!: number;
-  @ApiProperty({ description: 'The ± percentage band shown to the customer' })
+  @ApiProperty({
+    description:
+      'Upward headroom above the total, as a percentage. highEstimate = total * (1 + bandPct/100) rounded up to roundToIdr; lowEstimate is always the total. Not a ± spread.',
+  })
   bandPct!: number;
   @ApiProperty({
     description: 'Fallback included-km when a truck class sets none',
@@ -185,7 +188,7 @@ export class MovingQuoteDto {
   @ApiProperty() includedKm!: number;
   @ApiProperty() chargeableKm!: number;
   @ApiProperty({
-    description: 'Sum of every leg\'s chargeableSteps. See MovingQuoteLegDto.',
+    description: "Sum of every leg's chargeableSteps. See MovingQuoteLegDto.",
   })
   chargeableSteps!: number;
   @ApiProperty() roundTrip!: boolean;
@@ -215,12 +218,20 @@ export class MovingQuoteDto {
   subtotal!: number;
   @ApiProperty({ description: 'Rupiah' }) total!: number;
   @ApiProperty() minFareApplied!: boolean;
-  @ApiProperty({ description: 'Rupiah' }) lowEstimate!: number;
-  @ApiProperty({ description: 'Rupiah' }) highEstimate!: number;
+  @ApiProperty({
+    description:
+      'Rupiah — band floor, equal to total (the itemized breakdown sums to exactly this)',
+  })
+  lowEstimate!: number;
+  @ApiProperty({
+    description:
+      'Rupiah — band ceiling: total * (1 + bandPct/100) rounded up to roundToIdr',
+  })
+  highEstimate!: number;
   @ApiProperty({
     type: [MovingQuoteLegDto],
     description:
-      'Per-leg breakdown, in request order. Unrounded — only the top-level total/lowEstimate/highEstimate are rounded. No per-leg minFareApplied by design (minFare floors the trip-wide sum once, not per leg).',
+      'Per-leg breakdown, in request order. Unrounded — only the top-level total/highEstimate are rounded (lowEstimate just mirrors total). No per-leg minFareApplied by design (minFare floors the trip-wide sum once, not per leg).',
   })
   legs!: MovingQuoteLegDto[];
   @ApiProperty({ example: 'IDR' }) currency!: string;
