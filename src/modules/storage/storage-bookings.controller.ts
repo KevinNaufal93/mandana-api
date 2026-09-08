@@ -18,9 +18,9 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { Public } from '../../common/decorators/public.decorator';
-import { Roles } from '../../common/decorators/roles.decorator';
+import { RequireModule } from '../../common/decorators/require-module.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
-import { UserRole } from '../users/enums/user-role.enum';
+import { AccessModule } from '../../common/enums/access-module.enum';
 import { User } from '../users/entities/user.entity';
 import { StorageBookingsService } from './storage-bookings.service';
 import { StorageMapper } from './storage.mapper';
@@ -61,7 +61,7 @@ export class StorageBookingsController {
 
 @ApiTags('admin / storage')
 @ApiBearerAuth()
-@Roles(UserRole.ADMIN)
+@RequireModule(AccessModule.STORAGE)
 @Controller('admin/storage/bookings')
 export class StorageBookingsAdminController {
   constructor(

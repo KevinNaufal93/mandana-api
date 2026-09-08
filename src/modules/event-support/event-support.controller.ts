@@ -19,8 +19,8 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { Public } from '../../common/decorators/public.decorator';
-import { Roles } from '../../common/decorators/roles.decorator';
-import { UserRole } from '../users/enums/user-role.enum';
+import { RequireModule } from '../../common/decorators/require-module.decorator';
+import { AccessModule } from '../../common/enums/access-module.enum';
 import { EventCategoriesService } from './event-categories.service';
 import { EventItemsService } from './event-items.service';
 import { EventAvailabilityService } from './event-availability.service';
@@ -158,7 +158,7 @@ export class EventSupportController {
 
 @ApiTags('admin / event-support')
 @ApiBearerAuth()
-@Roles(UserRole.ADMIN)
+@RequireModule(AccessModule.EVENT_SUPPORT)
 @Controller('admin/event-support')
 export class EventSupportAdminController {
   constructor(

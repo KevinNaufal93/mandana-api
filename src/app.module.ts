@@ -23,6 +23,7 @@ import { MovingModule } from './modules/moving/moving.module';
 import { StorageModule } from './modules/storage/storage.module';
 import { EventSupportModule } from './modules/event-support/event-support.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
+import { RbacModule } from './modules/rbac/rbac.module';
 
 @Module({
   imports: [
@@ -55,6 +56,9 @@ import { NotificationsModule } from './modules/notifications/notifications.modul
     }),
 
     // Feature modules
+    // RbacModule first: RolesGuard (registered as APP_GUARD below) depends
+    // on RbacService, and AuthModule's getProfile() (GET /auth/me) does too.
+    RbacModule,
     UsersModule,
     AuthModule,
     PropertiesModule,

@@ -12,8 +12,8 @@ import {
   Query,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
-import { Roles } from '../../common/decorators/roles.decorator';
-import { UserRole } from '../users/enums/user-role.enum';
+import { RequireModule } from '../../common/decorators/require-module.decorator';
+import { AccessModule } from '../../common/enums/access-module.enum';
 import { ContentBlocksService } from './content-blocks.service';
 import { ContentBlocksMapper } from './content-blocks.mapper';
 import { CreateContentBlockDto } from './dto/create-content-block.dto';
@@ -28,7 +28,7 @@ import { QueryContentBlocksDto } from './dto/query-content-blocks.dto';
 // through this controller directly.
 @ApiTags('admin / content-blocks')
 @ApiBearerAuth()
-@Roles(UserRole.ADMIN)
+@RequireModule(AccessModule.CONTENT_MEDIA)
 @Controller('admin/content-blocks')
 export class ContentBlocksController {
   constructor(

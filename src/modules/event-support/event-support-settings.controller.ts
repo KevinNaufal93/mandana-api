@@ -5,8 +5,8 @@ import {
   ApiOperation,
   ApiTags,
 } from '@nestjs/swagger';
-import { Roles } from '../../common/decorators/roles.decorator';
-import { UserRole } from '../users/enums/user-role.enum';
+import { RequireModule } from '../../common/decorators/require-module.decorator';
+import { AccessModule } from '../../common/enums/access-module.enum';
 import { EventSupportSettingsService } from './event-support-settings.service';
 import { EventSupportMapper } from './event-support.mapper';
 import { UpdateEventSupportSettingsDto } from './dto/update-event-support-settings.dto';
@@ -16,7 +16,7 @@ import { EventSupportSettingsResponseDto } from './dto/event-support-response.dt
  * as moving/moving-settings.controller.ts. */
 @ApiTags('admin / event-support')
 @ApiBearerAuth()
-@Roles(UserRole.ADMIN)
+@RequireModule(AccessModule.EVENT_SUPPORT)
 @Controller('admin/event-support/settings')
 export class EventSupportSettingsAdminController {
   constructor(

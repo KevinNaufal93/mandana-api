@@ -12,8 +12,8 @@ import {
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Public } from '../../common/decorators/public.decorator';
-import { Roles } from '../../common/decorators/roles.decorator';
-import { UserRole } from '../users/enums/user-role.enum';
+import { RequireModule } from '../../common/decorators/require-module.decorator';
+import { AccessModule } from '../../common/enums/access-module.enum';
 import { AmenitiesService } from './amenities.service';
 import { CreateAmenityDto } from './dto/create-amenity.dto';
 import { UpdateAmenityDto } from './dto/update-amenity.dto';
@@ -37,7 +37,7 @@ export class AmenitiesController {
 
 @ApiTags('admin / amenities')
 @ApiBearerAuth()
-@Roles(UserRole.ADMIN)
+@RequireModule(AccessModule.PROPERTIES)
 @Controller('admin/amenities')
 export class AmenitiesAdminController {
   constructor(private readonly amenitiesService: AmenitiesService) {}

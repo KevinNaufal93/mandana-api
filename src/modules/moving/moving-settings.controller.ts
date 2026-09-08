@@ -5,8 +5,8 @@ import {
   ApiOperation,
   ApiTags,
 } from '@nestjs/swagger';
-import { Roles } from '../../common/decorators/roles.decorator';
-import { UserRole } from '../users/enums/user-role.enum';
+import { RequireModule } from '../../common/decorators/require-module.decorator';
+import { AccessModule } from '../../common/enums/access-module.enum';
 import { MovingSettingsService } from './moving-settings.service';
 import { MovingMapper } from './moving.mapper';
 import { UpdateMovingSettingsDto } from './dto/update-moving-settings.dto';
@@ -15,7 +15,7 @@ import { MovingSettingsResponseDto } from './dto/truck-class-response.dto';
 /** Singleton settings — GET/PATCH only, no POST/DELETE/`:id`. */
 @ApiTags('admin / moving')
 @ApiBearerAuth()
-@Roles(UserRole.ADMIN)
+@RequireModule(AccessModule.MOVING)
 @Controller('admin/moving/settings')
 export class MovingSettingsAdminController {
   constructor(

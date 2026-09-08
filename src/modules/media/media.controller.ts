@@ -20,8 +20,8 @@ import {
   ApiOperation,
   ApiTags,
 } from '@nestjs/swagger';
-import { Roles } from '../../common/decorators/roles.decorator';
-import { UserRole } from '../users/enums/user-role.enum';
+import { RequireModule } from '../../common/decorators/require-module.decorator';
+import { AccessModule } from '../../common/enums/access-module.enum';
 import { MediaService } from './media.service';
 import { UploadMediaDto } from './dto/upload-media.dto';
 import { QueryMediaDto } from './dto/query-media.dto';
@@ -31,7 +31,7 @@ const MAX_RASTER_MB = 20;
 
 @ApiTags('admin / media')
 @ApiBearerAuth()
-@Roles(UserRole.ADMIN)
+@RequireModule(AccessModule.CONTENT_MEDIA)
 @Controller('admin/media')
 export class MediaController {
   constructor(private readonly mediaService: MediaService) {}

@@ -18,8 +18,8 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { Public } from '../../common/decorators/public.decorator';
-import { Roles } from '../../common/decorators/roles.decorator';
-import { UserRole } from '../users/enums/user-role.enum';
+import { RequireModule } from '../../common/decorators/require-module.decorator';
+import { AccessModule } from '../../common/enums/access-module.enum';
 import { MovingService } from './moving.service';
 import { MovingAddonsService } from './moving-addons.service';
 import { MovingSettingsService } from './moving-settings.service';
@@ -97,7 +97,7 @@ export class MovingController {
 
 @ApiTags('admin / moving')
 @ApiBearerAuth()
-@Roles(UserRole.ADMIN)
+@RequireModule(AccessModule.MOVING)
 @Controller('admin/moving/truck-classes')
 export class MovingAdminController {
   constructor(

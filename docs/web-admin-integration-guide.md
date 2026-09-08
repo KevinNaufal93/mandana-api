@@ -49,20 +49,31 @@ before assuming the API is broken.
 
 ## 1. The shape every module shares
 
-- **Auth**: Bearer JWT from `POST /api/v1/auth/login`, role `admin`.
-  Every route below 403s for a non-admin (`editor`) token.
+- **Auth**: Bearer JWT from `POST /api/v1/auth/login`. Every module
+  covered by this doc is RBAC-grantable (see
+  [rbac-admin-integration.md](rbac-admin-integration.md)) — an `editor`
+  token 403s unless that role has been granted the module a route
+  belongs to; an `admin` token always succeeds. A handful of surfaces
+  elsewhere in the API (`/admin/users`, `/admin/rbac` itself,
+  `/admin/notifications`) are hard-gated to `admin` regardless of the
+  matrix — none of those are covered by this doc.
 - **Envelope**: `{ "data": ... }`, or `{ "data": [...], "meta": {...} }`
   on the handful of endpoints that paginate (large collections like
   event items or properties; most admin-editable catalogs — content
   blocks, truck classes, storage unit types — are small enough to list
   unpaginated).
 - **Errors**: always `{ statusCode, timestamp, path, error: { message,
-  error, statusCode } }`. **400** validation, **403** wrong role, **404**
-  unknown `:id`, **409** a lifecycle/delete guard was violated (see §6).
-- **Roles decorator**: class-level `@Roles(UserRole.ADMIN)` on every
-  admin controller — meaning if you ever see a 403 on a route that looks
-  like it should be public, it's not a bug, that resource genuinely has
-  no public read path (content blocks included — see §8).
+  error, statusCode } }`. **400** validation, **403** wrong role or
+  missing module grant, **404** unknown `:id`, **409** a lifecycle/delete
+  guard was violated (see §6).
+- **Authorization decorator**: class-level `@RequireModule(...)` on
+  every admin controller this doc covers (a handful of others —
+  `/admin/users` foremost — stay on the older, non-grantable
+  `@Roles(UserRole.ADMIN)`; see
+  [rbac-admin-integration.md](rbac-admin-integration.md)§5 for the full
+  split) — meaning if you ever see a 403 on a route that looks like it
+  should be public, it's not a bug, that resource genuinely has no
+  public read path (content blocks included — see §8).
 
 ## 2. Attaching an image: upload, then reference the id
 

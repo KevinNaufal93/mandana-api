@@ -17,8 +17,8 @@ import {
   ApiOperation,
   ApiTags,
 } from '@nestjs/swagger';
-import { Roles } from '../../common/decorators/roles.decorator';
-import { UserRole } from '../users/enums/user-role.enum';
+import { RequireModule } from '../../common/decorators/require-module.decorator';
+import { AccessModule } from '../../common/enums/access-module.enum';
 import { MovingAddonsService } from './moving-addons.service';
 import { MovingMapper } from './moving.mapper';
 import { CreateMovingAddonDto } from './dto/create-moving-addon.dto';
@@ -31,7 +31,7 @@ import {
 
 @ApiTags('admin / moving')
 @ApiBearerAuth()
-@Roles(UserRole.ADMIN)
+@RequireModule(AccessModule.MOVING)
 @Controller('admin/moving/addons')
 export class MovingAddonsAdminController {
   constructor(

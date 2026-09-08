@@ -24,10 +24,10 @@ import {
 import type { Response } from 'express';
 import { Observable } from 'rxjs';
 import { Public } from '../../common/decorators/public.decorator';
-import { Roles } from '../../common/decorators/roles.decorator';
+import { RequireModule } from '../../common/decorators/require-module.decorator';
 import { SkipTransform } from '../../common/decorators/skip-transform.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
-import { UserRole } from '../users/enums/user-role.enum';
+import { AccessModule } from '../../common/enums/access-module.enum';
 import { User } from '../users/entities/user.entity';
 import { AuthService } from '../auth/auth.service';
 import { JwtStreamGuard } from '../auth/guards/jwt-stream.guard';
@@ -156,7 +156,7 @@ export class StorageController {
 
 @ApiTags('admin / storage')
 @ApiBearerAuth()
-@Roles(UserRole.ADMIN)
+@RequireModule(AccessModule.STORAGE)
 @Controller('admin/storage')
 export class StorageAdminController {
   constructor(

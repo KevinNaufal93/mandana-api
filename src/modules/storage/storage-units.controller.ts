@@ -17,8 +17,8 @@ import {
   ApiOperation,
   ApiTags,
 } from '@nestjs/swagger';
-import { Roles } from '../../common/decorators/roles.decorator';
-import { UserRole } from '../users/enums/user-role.enum';
+import { RequireModule } from '../../common/decorators/require-module.decorator';
+import { AccessModule } from '../../common/enums/access-module.enum';
 import { StorageUnitsService } from './storage-units.service';
 import { StorageMapper } from './storage.mapper';
 import { CreateStorageUnitDto } from './dto/create-storage-unit.dto';
@@ -34,7 +34,7 @@ import {
 
 @ApiTags('admin / storage')
 @ApiBearerAuth()
-@Roles(UserRole.ADMIN)
+@RequireModule(AccessModule.STORAGE)
 @Controller('admin/storage/units')
 export class StorageUnitsController {
   constructor(

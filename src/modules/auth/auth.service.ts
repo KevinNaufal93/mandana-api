@@ -6,12 +6,14 @@ import type { Cache } from 'cache-manager';
 import * as bcrypt from 'bcrypt';
 import { UsersService } from '../users/users.service';
 import { UsersMapper } from '../users/users.mapper';
+import { RbacService } from '../rbac/rbac.service';
 import {
   JwtPayload,
   ADMIN_STREAM_TICKET_PURPOSE,
   StreamTicketPayload,
 } from './interfaces/jwt-payload.interface';
 import { User } from '../users/entities/user.entity';
+import { MeDto } from './dto/me.dto';
 
 /** Ticket lifetime, seconds. Covers only the time to open the SSE connection
  * — once the stream is open it stays open; the ticket is never re-checked. */
@@ -22,6 +24,7 @@ export class AuthService {
   constructor(
     private readonly usersService: UsersService,
     private readonly usersMapper: UsersMapper,
+    private readonly rbacService: RbacService,
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
     @Inject(CACHE_MANAGER) private readonly cacheManager: Cache,
@@ -52,11 +55,15 @@ export class AuthService {
    * paints the topbar avatar), so it pays for its own extra lookup here —
    * once per call, not once per request.
    */
-  async getProfile(userId: string) {
+  async getProfile(userId: string): Promise<MeDto> {
     const user = await this.usersService.findByIdOrFail(userId, {
       withPhoto: true,
     });
-    return this.usersMapper.toDto(user);
+    // Resolved from the live DB row's role, not a JWT claim — a grant
+    // change (or a role change) is reflected on the very next call, no
+    // re-login required. See RbacService.getGrantedModules.
+    const modules = await this.rbacService.getGrantedModules(user.role);
+    return { ...this.usersMapper.toDto(user), modules };
   }
 
   /**

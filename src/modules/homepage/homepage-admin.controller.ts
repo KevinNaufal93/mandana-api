@@ -7,15 +7,15 @@ import {
   Post,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
-import { Roles } from '../../common/decorators/roles.decorator';
-import { UserRole } from '../users/enums/user-role.enum';
+import { RequireModule } from '../../common/decorators/require-module.decorator';
+import { AccessModule } from '../../common/enums/access-module.enum';
 import { HomepageService } from './homepage.service';
 import { HomepageCacheService } from './homepage-cache.service';
 import { SetRecommendationsDto } from './dto/set-recommendations.dto';
 
 @ApiTags('admin / homepage')
 @ApiBearerAuth()
-@Roles(UserRole.ADMIN)
+@RequireModule(AccessModule.CONTENT_MEDIA)
 @Controller('admin/homepage')
 export class HomepageAdminController {
   constructor(
