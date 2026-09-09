@@ -20,13 +20,13 @@ import {
 } from '@nestjs/swagger';
 import { Observable } from 'rxjs';
 import { Public } from '../../common/decorators/public.decorator';
-import { Roles } from '../../common/decorators/roles.decorator';
+import { RequireModule } from '../../common/decorators/require-module.decorator';
 import { SkipTransform } from '../../common/decorators/skip-transform.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
-import { UserRole } from '../users/enums/user-role.enum';
+import { AccessModule } from '../../common/enums/access-module.enum';
 import { User } from '../users/entities/user.entity';
 import { AuthService } from '../auth/auth.service';
-import { JwtStreamGuard } from '../auth/guards/jwt-stream.guard';
+import { JwtNotificationsStreamGuard } from '../auth/guards/jwt-stream.guard';
 import { NotificationsService } from './notifications.service';
 import { NotificationsMapper } from './notifications.mapper';
 import { QueryAdminNotificationsDto } from './dto/query-admin-notifications.dto';
@@ -40,7 +40,7 @@ import {
 
 @ApiTags('admin / notifications')
 @ApiBearerAuth()
-@Roles(UserRole.ADMIN)
+@RequireModule(AccessModule.NOTIFICATIONS)
 @Controller('admin/notifications')
 export class NotificationsAdminController {
   constructor(
@@ -97,20 +97,21 @@ export class NotificationsAdminController {
   })
   @ApiOkResponse({ type: NotificationStreamTicketResponseDto })
   issueStreamTicket(@CurrentUser() user: User) {
-    return this.authService.issueStreamTicket(user);
+    return this.authService.issueStreamTicket(user, AccessModule.NOTIFICATIONS);
   }
 }
 
 // ─── Admin stream controller ──────────────────────────────────────────────────
 // Deliberately its own class, NOT part of NotificationsAdminController: that
-// class carries a class-level @Roles(ADMIN), and @Public() on a single
-// method inside it would still leave @Roles' metadata in effect --
-// RolesGuard would then run before JwtStreamGuard, find requiredRoles =
-// [ADMIN], and crash dereferencing request.user.role (JwtAuthGuard never ran
-// to populate it, since @Public() skipped it). Isolating the route in its
-// own controller with no @Roles at all sidesteps that entirely;
-// JwtStreamStrategy already re-checks the ADMIN role itself. Same pattern as
-// StorageAdminStreamController.
+// class carries a class-level @RequireModule(NOTIFICATIONS), and RolesGuard
+// runs globally regardless (@Public() only skips JwtAuthGuard, so it would
+// still see that metadata). Isolating this route means RolesGuard has
+// nothing to check here at all -- the module grant is instead re-verified
+// live inside JwtNotificationsStreamStrategy.validate() (see
+// jwt-stream.strategy.ts), because that's also where the ticket's `module`
+// claim gets checked against this stream's fixed module, and a route-level
+// @RequireModule can't express "only if the ticket says so". Same pattern
+// as StorageAdminStreamController.
 
 @ApiTags('admin / notifications')
 @Controller('admin/notifications')
@@ -118,7 +119,7 @@ export class NotificationsAdminStreamController {
   constructor(private readonly notificationsService: NotificationsService) {}
 
   @Public()
-  @UseGuards(JwtStreamGuard)
+  @UseGuards(JwtNotificationsStreamGuard)
   @SkipTransform()
   @Sse('stream')
   @ApiOperation({

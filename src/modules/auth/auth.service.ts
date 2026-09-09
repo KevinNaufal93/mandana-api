@@ -14,6 +14,7 @@ import {
 } from './interfaces/jwt-payload.interface';
 import { User } from '../users/entities/user.entity';
 import { MeDto } from './dto/me.dto';
+import { AccessModule } from '../../common/enums/access-module.enum';
 
 /** Ticket lifetime, seconds. Covers only the time to open the SSE connection
  * — once the stream is open it stays open; the ticket is never re-checked. */
@@ -70,18 +71,28 @@ export class AuthService {
    * Mints a short-lived, single-purpose token for authenticating an
    * EventSource connection (`?ticket=`), which cannot send a normal
    * `Authorization` header. Reuses the access-token secret — no new env var
-   * — but the `purpose` claim is what actually gates it: `JwtStreamStrategy`
-   * rejects any token missing it, so a plain access token can't double as a
-   * ticket even though it would otherwise verify fine against this secret.
+   * — but the `purpose` claim is what actually gates it: the stream
+   * strategy rejects any token missing it, so a plain access token can't
+   * double as a ticket even though it would otherwise verify fine against
+   * this secret.
+   *
+   * `module` is signed into the ticket and pins it to one stream: the
+   * caller-specific check (does this role actually have `module` granted)
+   * already happened via that route's own `@RequireModule`/`@Roles` guard
+   * before this ever runs, so this only needs to stamp which module the
+   * caller was authorized for — see jwt-stream.strategy.ts for the other
+   * half, which refuses to honor the ticket on any stream but that one.
    */
   async issueStreamTicket(
     user: User,
+    module: AccessModule,
   ): Promise<{ ticket: string; expiresIn: number }> {
     const payload: StreamTicketPayload = {
       sub: user.id,
       email: user.email,
       role: user.role,
       purpose: ADMIN_STREAM_TICKET_PURPOSE,
+      module,
     };
 
     const accessSecret =

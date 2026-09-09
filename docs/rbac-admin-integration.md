@@ -81,8 +81,8 @@ ships a new module.
     "description": "Kelola akun admin dan editor. Hanya untuk admin.",
     "grantable": false, "alwaysOn": false },
   { "key": "notifications", "label": "Notifikasi",
-    "description": "Notifikasi admin real-time. Hanya untuk admin.",
-    "grantable": false, "alwaysOn": false },
+    "description": "Notifikasi admin real-time.",
+    "grantable": true, "alwaysOn": false },
   { "key": "rbac", "label": "Roles & Permissions",
     "description": "Kelola hak akses modul per peran. Hanya untuk admin.",
     "grantable": false, "alwaysOn": false } ] }
@@ -99,8 +99,8 @@ them:
 - **`grantable: false`** (and not `alwaysOn`) — the opposite kind of
   fixed: can **never** be granted to a non-admin role, checked
   server-side independent of the UI (§4's PUT rejects it with 400).
-  `users`, `notifications`, `rbac` today. `users` specifically is
-  non-grantable as a deliberate anti-escalation measure — see §5.
+  `users` and `rbac` today. `users` specifically is non-grantable as a
+  deliberate anti-escalation measure — see §5.
 
 `label` is English (matches the sidebar's existing English labels);
 `description` is Indonesian (matches the rest of the panel's body
@@ -185,7 +185,7 @@ itself:
 | `moving` | ✅ | `/admin/moving/truck-classes`, `/admin/moving/addons`, `/admin/moving/bookings`, `/admin/moving/settings` |
 | `content-media` | ✅ | `/admin/media`, `/admin/content-blocks`, `/admin/homepage` |
 | `users` | ❌ admin-only | `/admin/users` |
-| `notifications` | ❌ admin-only | `/admin/notifications` (+ its SSE stream — see below) |
+| `notifications` | ✅ | `/admin/notifications` (+ its SSE stream — see below) |
 | — | ❌ admin-only, no UI today | `/admin/inquiries` — not RBAC-grantable; there's no admin-panel screen for it yet, so it stayed on the hard role check rather than being given a module nobody can reach |
 
 **Nothing about calling these routes changed shape-wise** — same DTOs,
@@ -205,17 +205,31 @@ token whose grants don't include `moving` still returns:
 need to change; only the *login-time and navigation-time* gating
 around them does (§2, §6).
 
-**`users` and `notifications` are deliberately not grantable — this is
-an anti-escalation measure, not an oversight.** An editor with user CRUD
-could create or promote an account to `admin`; keeping `/admin/users`
-hard-role-gated (independent of the matrix) closes that off at the API
-layer regardless of what the matrix ever allows. `notifications` stayed
-admin-only for a narrower reason: its SSE stream ticket
-(`JwtStreamStrategy`) hard-codes an `admin`-role check that doesn't
-consult the matrix at all — granting `notifications` to editor would
-need that strategy updated too, which hasn't happened. If you need
-editor-visible notifications later, that strategy is the other place
-to change, not just the module's `grantable` flag.
+**`users` is deliberately not grantable — this is an anti-escalation
+measure, not an oversight.** An editor with user CRUD could create or
+promote an account to `admin`; keeping `/admin/users` hard-role-gated
+(independent of the matrix) closes that off at the API layer regardless
+of what the matrix ever allows.
+
+**`notifications` is grantable, including its SSE stream — not just its
+REST routes.** This needed more than flipping `grantable`, because a
+stream authenticates differently: `POST /admin/notifications/stream-ticket`
+is a normal Bearer-authenticated call (gated like any other route in the
+table above), but `GET /admin/notifications/stream` itself authenticates
+via a short-lived `?ticket=` — `EventSource` can't send an `Authorization`
+header — checked by its own Passport strategy, not by the matrix directly.
+That strategy now re-checks the live grant on every connection (not just
+once at ticket-mint time), and the ticket itself carries a `module` claim
+so a ticket minted for one stream can't be replayed against a different
+one — load-bearing once different roles can hold different subsets of
+grantable modules, where before every admin stream was equivalent because
+every caller who could reach one could reach all of them. `storage`'s
+identical SSE stream picked up the same live-grant re-check as part of
+this change, since both streams share the same strategy shape (see
+`mandana-api/src/modules/auth/strategies/jwt-stream.strategy.ts`) — not a
+new capability for `storage` (it was already grantable), just a latent gap
+closed: previously an editor granted `storage` got the REST routes but the
+stream ticket strategy still hard-coded an `admin` check underneath.
 
 ## 6. `GET /auth/me` now returns the caller's modules
 

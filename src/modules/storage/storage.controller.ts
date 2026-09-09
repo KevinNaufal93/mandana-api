@@ -30,7 +30,7 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { AccessModule } from '../../common/enums/access-module.enum';
 import { User } from '../users/entities/user.entity';
 import { AuthService } from '../auth/auth.service';
-import { JwtStreamGuard } from '../auth/guards/jwt-stream.guard';
+import { JwtStorageStreamGuard } from '../auth/guards/jwt-stream.guard';
 import { StorageService } from './storage.service';
 import { StorageAvailabilityService } from './storage-availability.service';
 import { StorageMapper } from './storage.mapper';
@@ -320,19 +320,21 @@ export class StorageAdminController {
   })
   @ApiOkResponse({ type: StorageStreamTicketResponseDto })
   issueStreamTicket(@CurrentUser() user: User) {
-    return this.authService.issueStreamTicket(user);
+    return this.authService.issueStreamTicket(user, AccessModule.STORAGE);
   }
 }
 
 // ─── Admin stream controller ──────────────────────────────────────────────────
 // Deliberately its own class, NOT part of StorageAdminController: that class
-// carries a class-level @Roles(ADMIN), and @Public() on a single method
-// inside it would still leave @Roles' metadata in effect — RolesGuard would
-// then run before JwtStreamGuard, find requiredRoles = [ADMIN], and crash
-// dereferencing request.user.role (JwtAuthGuard never ran to populate it,
-// since @Public() skipped it). Isolating the route in its own controller
-// with no @Roles at all sidesteps that entirely; JwtStreamStrategy already
-// re-checks the ADMIN role itself (see jwt-stream.strategy.ts).
+// carries a class-level @RequireModule(STORAGE), and RolesGuard runs
+// globally regardless (@Public() only skips JwtAuthGuard, so it would still
+// see that metadata). Isolating this route means RolesGuard has nothing to
+// check here at all — the module grant is instead re-verified live inside
+// JwtStorageStreamStrategy.validate() (see jwt-stream.strategy.ts), because
+// that's also where the ticket's `module` claim gets checked against this
+// stream's fixed module, and a route-level @RequireModule can't express
+// "only if the ticket says so". Same pattern as
+// NotificationsAdminStreamController.
 
 @ApiTags('admin / storage')
 @Controller('admin/storage')
@@ -340,7 +342,7 @@ export class StorageAdminStreamController {
   constructor(private readonly availability: StorageAvailabilityService) {}
 
   @Public()
-  @UseGuards(JwtStreamGuard)
+  @UseGuards(JwtStorageStreamGuard)
   @SkipTransform()
   @Sse('stream')
   @ApiOperation({

@@ -85,8 +85,8 @@ export const ACCESS_MODULES: AccessModuleMeta[] = [
   {
     key: AccessModule.NOTIFICATIONS,
     label: 'Notifikasi',
-    description: 'Notifikasi admin real-time. Hanya untuk admin.',
-    grantable: false,
+    description: 'Notifikasi admin real-time.',
+    grantable: true,
     alwaysOn: false,
   },
   {

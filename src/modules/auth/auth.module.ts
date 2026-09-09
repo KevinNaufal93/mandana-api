@@ -7,7 +7,10 @@ import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { JwtRefreshStrategy } from './strategies/jwt-refresh.strategy';
-import { JwtStreamStrategy } from './strategies/jwt-stream.strategy';
+import {
+  JwtNotificationsStreamStrategy,
+  JwtStorageStreamStrategy,
+} from './strategies/jwt-stream.strategy';
 
 @Module({
   imports: [
@@ -19,7 +22,13 @@ import { JwtStreamStrategy } from './strategies/jwt-stream.strategy';
     // JwtModule registered without global secret — each sign call provides its own secret
     JwtModule.register({}),
   ],
-  providers: [AuthService, JwtStrategy, JwtRefreshStrategy, JwtStreamStrategy],
+  providers: [
+    AuthService,
+    JwtStrategy,
+    JwtRefreshStrategy,
+    JwtNotificationsStreamStrategy,
+    JwtStorageStreamStrategy,
+  ],
   controllers: [AuthController],
   // AuthService is consumed by StorageModule (issueStreamTicket()) — see
   // POST /admin/storage/stream-ticket.
