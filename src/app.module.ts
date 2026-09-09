@@ -24,6 +24,7 @@ import { StorageModule } from './modules/storage/storage.module';
 import { EventSupportModule } from './modules/event-support/event-support.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { RbacModule } from './modules/rbac/rbac.module';
+import { ArticlesModule } from './modules/articles/articles.module';
 
 @Module({
   imports: [
@@ -72,6 +73,7 @@ import { RbacModule } from './modules/rbac/rbac.module';
     StorageModule,
     EventSupportModule,
     NotificationsModule,
+    ArticlesModule,
   ],
   providers: [
     // Global JWT guard: all routes protected by default; @Public() opts out

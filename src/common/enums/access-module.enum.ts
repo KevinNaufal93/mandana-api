@@ -16,6 +16,7 @@ export enum AccessModule {
   USERS = 'users',
   NOTIFICATIONS = 'notifications',
   RBAC = 'rbac',
+  ARTICLES = 'articles',
 }
 
 export interface AccessModuleMeta {
@@ -94,6 +95,13 @@ export const ACCESS_MODULES: AccessModuleMeta[] = [
     label: 'Roles & Permissions',
     description: 'Kelola hak akses modul per peran. Hanya untuk admin.',
     grantable: false,
+    alwaysOn: false,
+  },
+  {
+    key: AccessModule.ARTICLES,
+    label: 'Article Management',
+    description: 'Kelola artikel dan kategori untuk konten SEO.',
+    grantable: true,
     alwaysOn: false,
   },
 ];

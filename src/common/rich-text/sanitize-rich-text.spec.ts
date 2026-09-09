@@ -42,6 +42,15 @@ describe('sanitizeRichText', () => {
     expect(out).toContain('target="_blank"');
     expect(out).toContain('rel="noopener noreferrer nofollow"');
   });
+
+  it('preserves figure/figcaption for image captions', () => {
+    const out = sanitizeRichText(
+      '<figure><img src="https://x.test/a.png" alt="x"><figcaption>Caption</figcaption></figure>',
+    );
+    expect(out).toContain('<figure>');
+    expect(out).toContain('<figcaption>Caption</figcaption>');
+    expect(out).toContain('<img src="https://x.test/a.png" alt="x"');
+  });
 });
 
 describe('richTextToPlain', () => {

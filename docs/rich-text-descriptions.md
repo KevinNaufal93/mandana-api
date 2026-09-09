@@ -13,7 +13,7 @@ Implementation lives in [`src/common/rich-text`](../src/common/rich-text/):
 
 ## Allow-list
 
-| Tags | `p br span strong b em i u s strike blockquote ol ul li a h1–h6 img pre code hr` |
+| Tags | `p br span strong b em i u s strike blockquote ol ul li a h1–h6 img pre code hr figure figcaption` |
 | --- | --- |
 | Attributes | `a`: `href title target rel`; `img`: `src alt width height`; block/inline tags: `class` (only `ql-*`), `style` |
 | Styles | `color`, `background-color` (hex or `rgb()` only), `text-align` (`left\|center\|right\|justify`) |

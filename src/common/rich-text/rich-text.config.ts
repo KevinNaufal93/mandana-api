@@ -46,6 +46,8 @@ export const RICH_TEXT_SANITIZE_OPTIONS: IOptions = {
     'pre',
     'code',
     'hr',
+    'figure',
+    'figcaption',
   ],
   allowedAttributes: {
     a: ['href', 'title', 'target', 'rel'],
@@ -60,6 +62,8 @@ export const RICH_TEXT_SANITIZE_OPTIONS: IOptions = {
     h4: ['class', 'style'],
     h5: ['class', 'style'],
     h6: ['class', 'style'],
+    figure: ['class', 'style'],
+    figcaption: ['class', 'style'],
   },
   allowedClasses: {
     '*': [/^ql-/],
