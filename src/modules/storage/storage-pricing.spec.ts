@@ -13,10 +13,10 @@ const rateWithWeekly = {
   supportsWeekly: true,
 };
 
-describe('storageQuote — neutrality (pre-weekly-pricing behaviour, unchanged)', () => {
-  it('matches the original 4-arg (rate, quantity, durationMonths) call shape', () => {
-    // Same inputs/outputs as before weekly pricing was added — the 4th
-    // positional arg (`unit`) defaults to 'month'.
+describe('storageQuote — rent math (no duration discount)', () => {
+  it('matches the original 4-arg (rate, quantity, durationMonths) call shape, with no insurance by default', () => {
+    // The 4th positional arg (`unit`) defaults to 'month'; insurancePct
+    // defaults to 0 via STORAGE_DEFAULTS, so total === subtotal here.
     expect(storageQuote(rate, 1, 6)).toEqual({
       monthlyRate: 650_000,
       quantity: 1,
@@ -26,21 +26,21 @@ describe('storageQuote — neutrality (pre-weekly-pricing behaviour, unchanged)'
       unitRate: 650_000,
       unitLabel: 'bulan',
       subtotal: 3_900_000,
-      discountPct: 10,
-      discountAmount: 390_000,
-      total: 3_510_000,
+      discountPct: 0,
+      discountAmount: 0,
+      insurancePct: 0,
+      insuranceAmount: 0,
+      total: 3_900_000,
     });
   });
 
-  it('reproduces every duration-tier boundary from before', () => {
+  it('no longer applies any duration-based discount, at any duration', () => {
     expect(storageQuote(rate, 1, 1).discountPct).toBe(0);
-    expect(storageQuote(rate, 1, 2).discountPct).toBe(0);
-    expect(storageQuote(rate, 1, 3).discountPct).toBe(5);
-    expect(storageQuote(rate, 1, 5).discountPct).toBe(5);
-    expect(storageQuote(rate, 1, 6).discountPct).toBe(10);
-    expect(storageQuote(rate, 1, 11).discountPct).toBe(10);
-    expect(storageQuote(rate, 1, 12).discountPct).toBe(15);
-    expect(storageQuote(rate, 1, 60).discountPct).toBe(15);
+    expect(storageQuote(rate, 1, 3).discountPct).toBe(0);
+    expect(storageQuote(rate, 1, 6).discountPct).toBe(0);
+    expect(storageQuote(rate, 1, 12).discountPct).toBe(0);
+    expect(storageQuote(rate, 1, 60).discountPct).toBe(0);
+    expect(storageQuote(rate, 1, 12).discountAmount).toBe(0);
   });
 
   it('reproduces the all-zero clamp for invalid input', () => {
@@ -51,22 +51,56 @@ describe('storageQuote — neutrality (pre-weekly-pricing behaviour, unchanged)'
     expect(storageQuote({ monthlyRate: -500 }, 1, 6).subtotal).toBe(0);
   });
 
-  it('reproduces quantity multiplication and rounding', () => {
+  it('reproduces quantity multiplication', () => {
     const result = storageQuote(rate, 3, 6);
     expect(result.subtotal).toBe(650_000 * 3 * 6);
-    expect(result.discountAmount % STORAGE_DEFAULTS.roundToIdr).toBe(0);
+    expect(result.total).toBe(result.subtotal);
+  });
+});
+
+describe('storageQuote — insurance', () => {
+  it('adds nothing to the total when insurancePct is 0 (the default)', () => {
+    const result = storageQuote(rate, 2, 2, 'month', { insurancePct: 0 });
+    expect(result.insuranceAmount).toBe(0);
+    expect(result.total).toBe(result.subtotal);
+  });
+
+  it('matches the worked example: 2 units x 2 months at a rate totalling 1,000,000, 20% insurance', () => {
+    // unitRate * quantity * duration = 250_000 * 2 * 2 = 1,000,000 exactly.
+    const result = storageQuote({ monthlyRate: 250_000 }, 2, 2, 'month', {
+      insurancePct: 20,
+    });
+    expect(result.subtotal).toBe(1_000_000);
+    expect(result.insurancePct).toBe(20);
+    expect(result.insuranceAmount).toBe(200_000);
+    expect(result.total).toBe(1_200_000);
+  });
+
+  it('rounds insuranceAmount to roundToIdr', () => {
+    const result = storageQuote({ monthlyRate: 333_333 }, 1, 1, 'month', {
+      insurancePct: 20,
+    });
+    expect(result.insuranceAmount % STORAGE_DEFAULTS.roundToIdr).toBe(0);
+  });
+
+  it('applies insurance on weekly quotes too', () => {
+    const result = storageQuote(rateWithWeekly, 1, 3, 'week', {
+      insurancePct: 10,
+    });
+    expect(result.subtotal).toBe(600_000);
+    expect(result.insuranceAmount).toBe(60_000);
+    expect(result.total).toBe(660_000);
+  });
+
+  it('produces zero insurance on the zero-quantity/zero-duration clamp', () => {
+    const result = storageQuote(rate, 0, 6, 'month', { insurancePct: 20 });
+    expect(result.insurancePct).toBe(20);
+    expect(result.insuranceAmount).toBe(0);
+    expect(result.total).toBe(0);
   });
 });
 
 describe('storageQuote — weekly billing', () => {
-  it('never applies a discount, at any duration', () => {
-    expect(storageQuote(rateWithWeekly, 1, 1, 'week').discountPct).toBe(0);
-    expect(storageQuote(rateWithWeekly, 1, 4, 'week').discountPct).toBe(0);
-    // 12+ weeks must NOT quietly pick up the 12-month tier.
-    expect(storageQuote(rateWithWeekly, 1, 12, 'week').discountPct).toBe(0);
-    expect(storageQuote(rateWithWeekly, 1, 52, 'week').discountPct).toBe(0);
-  });
-
   it('prices off weeklyRate, not monthlyRate', () => {
     const result = storageQuote(rateWithWeekly, 1, 3, 'week');
     expect(result.unitRate).toBe(200_000);

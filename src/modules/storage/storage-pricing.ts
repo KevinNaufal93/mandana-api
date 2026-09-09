@@ -1,31 +1,36 @@
 /**
- * Pure rate math for Smart Storage quotes. No Nest decorators, no I/O —
- * must be mirrored in the frontend repo byte-for-byte, exactly like
- * moving-pricing.ts / lib/moving/pricing.ts. See docs/storage-integration.md.
+ * Pure rate math for Smart Storage quotes. No Nest decorators, no I/O — see
+ * docs/storage-integration.md.
  *
- * IMPORTANT: STORAGE_DEFAULTS (the discount tiers) is duplicated in the
- * frontend repo. Changing a threshold or percentage here without changing it
- * there silently desyncs the client-side estimate from the quoted price.
+ * `mandana-web` never mirrors this math client-side (unlike the Moving
+ * module's old `lib/moving/pricing.ts`, since deleted) — every price comes
+ * from `POST /storage/quote` or a booking response. Nothing to keep in sync.
  *
  * Weekly pricing (added alongside the original monthly-only math): weekly
- * bookings never discount — the tiers below are month-only by design, a
- * reward for a monthly commitment, not something a short weekly stay earns.
+ * bookings and monthly bookings are priced identically now — see the
+ * `insurancePct` doc below.
+ *
+ * Insurance (added alongside the removed duration-discount tiers): every
+ * quote is priced as rent + insurance, where insurance is a configurable
+ * percentage of the rent — `total = subtotal + insuranceAmount`. The
+ * percentage comes from the `storage_settings` singleton
+ * (StorageSettingsService), passed in via `opts.insurancePct`; `0` (the
+ * default) means no insurance line, so a caller that never wires the
+ * setting through gets today's un-inflated total.
  */
 
 export type StorageDurationUnitValue = 'week' | 'month';
 
-export const STORAGE_DEFAULTS = {
+/** Not `as const` — every field here is overridden at runtime with a plain
+ *  `number` read from the DB (StorageSettingsService.get()), so the type
+ *  must stay `number`, not a literal. */
+export const STORAGE_DEFAULTS: { roundToIdr: number; insurancePct: number } = {
   roundToIdr: 1_000,
-  // Longer commitments get a discount off the pre-discount subtotal. Sorted
-  // ascending by minMonths; the last tier whose minMonths the duration meets
-  // or exceeds applies. Month-only — never consulted for a weekly quote.
-  durationDiscountTiers: [
-    { minMonths: 1, discountPct: 0 },
-    { minMonths: 3, discountPct: 5 },
-    { minMonths: 6, discountPct: 10 },
-    { minMonths: 12, discountPct: 15 },
-  ],
-} as const;
+  /** Whole-percent, e.g. `20` = 20%. `0` disables the insurance line
+   *  entirely. Overridden per-call from the `storage_settings` singleton —
+   *  see StorageSettingsService.get(). */
+  insurancePct: 0,
+};
 
 /** The rate fields a unit type (or an inventory row's override) contributes
  * to a quote. weeklyRate/supportsWeekly are optional so existing call sites
@@ -49,9 +54,22 @@ export interface StorageQuoteResult {
   unitRate: number;
   /** 'bulan' | 'minggu' — so the client never re-derives it. */
   unitLabel: string;
+  /** Rent only — unitRate * quantity * duration. */
   subtotal: number;
+  /**
+   * @deprecated The duration-discount tiers were removed — always `0`.
+   * Field kept (rather than dropped) so existing readers in this repo and
+   * both frontend repos, which already gate their "Diskon durasi" row on
+   * `> 0`, don't need a matching edit to stop rendering it.
+   */
   discountPct: number;
+  /** @deprecated Always `0` — see discountPct. */
   discountAmount: number;
+  /** Whole-percent insurance rate applied to `subtotal`. */
+  insurancePct: number;
+  /** Rupiah — `round(subtotal * insurancePct / 100, roundToIdr)`. */
+  insuranceAmount: number;
+  /** `subtotal + insuranceAmount`. */
   total: number;
 }
 
@@ -75,26 +93,18 @@ function roundTo(value: number, step: number): number {
   return Math.round(value / step) * step;
 }
 
-function resolveDiscountPct(
-  durationMonths: number,
-  tiers: typeof STORAGE_DEFAULTS.durationDiscountTiers,
-): number {
-  let pct: number = tiers[0].discountPct;
-  for (const tier of tiers) {
-    if (durationMonths >= tier.minMonths) pct = tier.discountPct;
-  }
-  return pct;
-}
-
 /**
  * Computes the total price for renting `quantity` units of a given rate over
- * `duration` `unit`s (weeks or months), with a duration-based discount
- * applied to the whole-term subtotal — monthly only; a weekly quote's
- * `discountPct` is always 0, never derived from the month tiers (13 weeks
- * must not quietly land in the 3-month bracket).
+ * `duration` `unit`s (weeks or months), plus a configurable insurance
+ * premium on top of the rent — `total = subtotal + insuranceAmount`, where
+ * `insuranceAmount = round(subtotal * insurancePct / 100, roundToIdr)`.
+ * Weekly and monthly bookings are priced identically; there is no longer a
+ * duration-based discount.
  *
  * `unit` defaults to `'month'` and the 4-arg (or fewer) call shape is
- * unchanged, so every pre-existing call site keeps its exact behaviour.
+ * unchanged, so every pre-existing call site keeps its exact behaviour
+ * (insurancePct defaults to 0, so `total === subtotal` unless a caller
+ * passes `opts.insurancePct`).
  *
  * Defensively clamps non-finite/negative/zero input to an all-zero result
  * rather than emitting `NaN` — a broken number on screen is worse than a
@@ -111,6 +121,7 @@ export function storageQuote(
   const monthlyRate = nonNegative(rate.monthlyRate);
   const weeklyRate = nonNegative(rate.weeklyRate);
   const unitRate = unit === 'week' ? weeklyRate : monthlyRate;
+  const insurancePct = nonNegative(defaults.insurancePct);
 
   const safeQuantity =
     Number.isFinite(quantity) && quantity > 0 ? Math.floor(quantity) : 0;
@@ -129,20 +140,18 @@ export function storageQuote(
       subtotal: 0,
       discountPct: 0,
       discountAmount: 0,
+      insurancePct,
+      insuranceAmount: 0,
       total: 0,
     };
   }
 
   const subtotal = unitRate * safeQuantity * safeDuration;
-  const discountPct =
-    unit === 'month'
-      ? resolveDiscountPct(safeDuration, defaults.durationDiscountTiers)
-      : 0;
-  const discountAmount = roundTo(
-    subtotal * (discountPct / 100),
+  const insuranceAmount = roundTo(
+    subtotal * (insurancePct / 100),
     defaults.roundToIdr,
   );
-  const total = subtotal - discountAmount;
+  const total = subtotal + insuranceAmount;
 
   return {
     monthlyRate,
@@ -153,8 +162,10 @@ export function storageQuote(
     unitRate,
     unitLabel: UNIT_LABELS[unit],
     subtotal,
-    discountPct,
-    discountAmount,
+    discountPct: 0,
+    discountAmount: 0,
+    insurancePct,
+    insuranceAmount,
     total,
   };
 }

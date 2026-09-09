@@ -95,8 +95,20 @@ export class StorageBooking extends BaseEntity {
   @Column({ type: 'int' })
   subtotal!: number;
 
+  // Deprecated — the duration-discount tiers were removed. Never written
+  // non-zero again; the column stays because existing rows carry real
+  // history. See insurancePct/insuranceAmount below for what replaced it.
   @Column({ name: 'discount_amount', type: 'int', default: 0 })
   discountAmount!: number;
+
+  // Insurance premium snapshotted at booking time — whole-percent rate
+  // (from the storage_settings singleton) and the Rupiah amount it
+  // produced. total = subtotal + insuranceAmount.
+  @Column({ name: 'insurance_pct', type: 'int', default: 0 })
+  insurancePct!: number;
+
+  @Column({ name: 'insurance_amount', type: 'int', default: 0 })
+  insuranceAmount!: number;
 
   @Column({ type: 'int' })
   total!: number;

@@ -261,6 +261,21 @@ export class StorageAvailabilityResponseDto {
   data!: StorageAvailabilitySnapshotDto;
 }
 
+// ─── Settings ────────────────────────────────────────────────────────────────
+
+export class StorageSettingsDto {
+  @ApiProperty({
+    description:
+      'Whole-percent insurance premium applied to every quote/booking subtotal — 20 means 20%. 0 disables the insurance line.',
+  })
+  insurancePct!: number;
+}
+
+export class StorageSettingsResponseDto {
+  @ApiProperty({ type: StorageSettingsDto })
+  data!: StorageSettingsDto;
+}
+
 // ─── Quote ───────────────────────────────────────────────────────────────────
 
 export class StorageQuoteFacilityDto {
@@ -301,14 +316,26 @@ export class StorageQuoteDto {
   unitRate!: number;
   @ApiProperty({ example: 'bulan', description: '"bulan" | "minggu"' })
   unitLabel!: string;
-  @ApiProperty({ description: 'Rupiah' }) subtotal!: number;
+  @ApiProperty({ description: 'Rupiah — rent only, before insurance' })
+  subtotal!: number;
   @ApiProperty({
     description:
-      'Always 0 for a weekly quote — the duration-discount tiers are month-only.',
+      'Deprecated — the duration-discount tiers were removed. Always 0.',
   })
   discountPct!: number;
-  @ApiProperty({ description: 'Rupiah' }) discountAmount!: number;
-  @ApiProperty({ description: 'Rupiah' }) total!: number;
+  @ApiProperty({ description: 'Deprecated — always 0. See discountPct.' })
+  discountAmount!: number;
+  @ApiProperty({
+    description:
+      'Whole-percent insurance rate applied to subtotal, from the storage_settings singleton.',
+  })
+  insurancePct!: number;
+  @ApiProperty({
+    description: 'Rupiah — round(subtotal * insurancePct / 100).',
+  })
+  insuranceAmount!: number;
+  @ApiProperty({ description: 'Rupiah — subtotal + insuranceAmount' })
+  total!: number;
   @ApiProperty({ example: 'IDR' }) currency!: string;
 }
 
@@ -346,9 +373,24 @@ export class StorageBookingDto {
   unitLabel!: string;
   @ApiProperty({ description: 'Rupiah — the reference monthly rate' })
   monthlyRate!: number;
-  @ApiProperty({ description: 'Rupiah' }) subtotal!: number;
-  @ApiProperty({ description: 'Rupiah' }) discountAmount!: number;
-  @ApiProperty({ description: 'Rupiah' }) total!: number;
+  @ApiProperty({ description: 'Rupiah — rent only, before insurance' })
+  subtotal!: number;
+  @ApiProperty({
+    description:
+      'Deprecated — the duration-discount tiers were removed. Always 0.',
+  })
+  discountAmount!: number;
+  @ApiProperty({
+    description:
+      'Whole-percent insurance rate applied to subtotal, at booking time.',
+  })
+  insurancePct!: number;
+  @ApiProperty({
+    description: 'Rupiah — round(subtotal * insurancePct / 100).',
+  })
+  insuranceAmount!: number;
+  @ApiProperty({ description: 'Rupiah — subtotal + insuranceAmount' })
+  total!: number;
   @ApiProperty({ example: 'IDR' }) currency!: string;
   @ApiProperty() createdAt!: Date;
   @ApiProperty({
@@ -391,9 +433,24 @@ export class StorageBookingAdminDto {
   unitLabel!: string;
   @ApiProperty({ description: 'Rupiah — the reference monthly rate' })
   monthlyRate!: number;
-  @ApiProperty({ description: 'Rupiah' }) subtotal!: number;
-  @ApiProperty({ description: 'Rupiah' }) discountAmount!: number;
-  @ApiProperty({ description: 'Rupiah' }) total!: number;
+  @ApiProperty({ description: 'Rupiah — rent only, before insurance' })
+  subtotal!: number;
+  @ApiProperty({
+    description:
+      'Deprecated — the duration-discount tiers were removed. Always 0.',
+  })
+  discountAmount!: number;
+  @ApiProperty({
+    description:
+      'Whole-percent insurance rate applied to subtotal, at booking time.',
+  })
+  insurancePct!: number;
+  @ApiProperty({
+    description: 'Rupiah — round(subtotal * insurancePct / 100).',
+  })
+  insuranceAmount!: number;
+  @ApiProperty({ description: 'Rupiah — subtotal + insuranceAmount' })
+  total!: number;
   @ApiPropertyOptional({ nullable: true, type: String }) adminNote!:
     string | null;
   @ApiPropertyOptional({ nullable: true, type: String }) confirmedAt!:

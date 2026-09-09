@@ -187,7 +187,8 @@ matches a `startFrom` in the current month if it hasn't ended yet.
   "unitTypeSlug": "medium", "unitTypeName": "Medium", "quantity": 1,
   "startDate": "2026-09-01", "durationMonths": null, "endDate": "2026-09-22",
   "durationUnit": "week", "duration": 3, "unitRate": 200000, "unitLabel": "minggu",
-  "monthlyRate": 650000, "subtotal": 600000, "discountAmount": 0, "total": 600000,
+  "monthlyRate": 650000, "subtotal": 600000, "discountAmount": 0,
+  "insurancePct": 20, "insuranceAmount": 120000, "total": 720000,
   "adminNote": null, "confirmedAt": null, "confirmedByName": null,
   "createdAt": "...", "updatedAt": "..." } }
 ```
@@ -221,7 +222,39 @@ the last unit. `cancel`/`complete` release whatever units the booking held;
 `reject` (from `pending`, before anything was ever claimed) does not. Any
 transition attempted from the wrong starting status → **409**.
 
-## 7. Money
+## 7. Settings singleton
+
+`GET /admin/storage/settings` · `PATCH /admin/storage/settings` — no `:id`,
+no `POST`, no `DELETE`. Same singleton pattern as Moving Support's
+`/admin/moving/settings` (`docs/moving-admin-integration.md` §4) and Event
+Support's `/admin/event-support/settings`.
+
+```jsonc
+// GET → 200 / PATCH → 200 (body: any subset of these fields)
+{ "data": { "insurancePct": 20 } }
+```
+
+| Field | Meaning |
+|---|---|
+| `insurancePct` | Insurance premium as a whole percentage of the rent subtotal — `20` means 20%, **not** basis points (unlike Moving's `MovingAddon.percentBps`, which uses basis points for its own insurance add-on — don't share a formatter between the two). `0` disables the insurance line entirely. |
+
+This row **auto-seeds** the first time it's read if missing (from
+`insurancePct: 0`) — `GET /admin/storage/settings` can never 404.
+
+Changing this **reprices every subsequent quote and booking immediately** —
+no deploy, no cache to bust. It changes **nothing** about a booking already
+captured: every booking snapshots its own `insurancePct`/`insuranceAmount`
+at submission time (§6). There is no public `GET /storage/pricing-config` —
+unlike Moving/Event Support, `mandana-web` never computes storage money
+client-side, so there's no client-side estimate that needs these numbers
+ahead of a quote call.
+
+**Insurance is off (`0`) until ops turns it on.** The migration that added
+this table seeds `insurancePct: 0` so deploying the feature changes no
+existing price — someone has to open this page and set a real percentage
+(e.g. `20`) for the insurance line to appear on quotes and bookings.
+
+## 8. Money
 
 All prices are **integer Rupiah**, no decimals. `monthlyRate`/`weeklyRate`/
 `monthlyRateOverride`/`weeklyRateOverride`/`unitRate` are all plain JSON
@@ -230,13 +263,17 @@ integers — the same convention as everywhere else in this API, avoiding the
 `formatIDRShort` (or your local equivalent) for display, never `Number()`
 coercion.
 
-A booking's `subtotal`/`discountAmount`/`total` are snapshotted at creation
-time and never recomputed — a later rate or policy change never rewrites a
-historical booking. **Weekly bookings never discount** —
-`discountAmount` is always `0` on one; the duration-discount tiers
-(`docs/storage-integration.md`, `POST /storage/quote`) are month-only.
+A booking's `subtotal`/`discountAmount`/`insurancePct`/`insuranceAmount`/
+`total` are snapshotted at creation time and never recomputed — a later rate
+or settings change never rewrites a historical booking. `subtotal` is rent
+only (`unitRate * quantity * duration`); `total = subtotal +
+insuranceAmount`. **`discountAmount` is deprecated** — the old duration-based
+discount tiers were removed, so it is always `0` on every booking created
+from now on (older bookings keep their real historical value). It stays on
+every response only so an existing client that renders a "Diskon durasi" row
+conditionally on `discountAmount > 0` needs no matching edit.
 
-## 8. Errors
+## 9. Errors
 
 Same envelope as the rest of the API:
 

@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { HomepageRecommendation } from './entities/homepage-recommendation.entity';
 import { HomepageCacheService } from './homepage-cache.service';
 import { ContentBlocksService } from '../content-blocks/content-blocks.service';
@@ -10,7 +10,7 @@ import { MediaService } from '../media/media.service';
 import { PropertyMapper } from '../properties/property.mapper';
 import { SetRecommendationsDto } from './dto/set-recommendations.dto';
 import { richTextToPlain } from '../../common/rich-text';
-import { PropertyStatus } from '../properties/enums/property-status.enum';
+import { PUBLIC_PROPERTY_STATUSES } from '../properties/enums/property-status.enum';
 
 const CAROUSEL_INTERVAL_MS = 5000;
 
@@ -35,7 +35,7 @@ export class HomepageService {
       this.collectionsService.findHomepage(),
       this.contentBlocksService.findActiveByType(ContentBlockType.SERVICE_CARD),
       this.recRepo.find({
-        where: { property: { status: PropertyStatus.PUBLISHED } },
+        where: { property: { status: In(PUBLIC_PROPERTY_STATUSES) } },
         relations: {
           property: { images: { mediaAsset: true }, propertyType: true },
         },

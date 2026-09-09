@@ -210,9 +210,9 @@ Behavior worth knowing before you build the client:
 
 ### `POST /storage/quote`
 
-Authoritative price for a facility + unit type + duration. Mirrors
-`POST /moving/quote`'s role: render an instant client-side estimate for feel,
-but use this response for anything that ships in the WhatsApp message.
+Authoritative price for a facility + unit type + duration. `mandana-web`
+never computes storage money client-side — every price shown to a customer
+comes from this endpoint or a booking response.
 
 ```jsonc
 // Request — monthly (unchanged, still accepted)
@@ -231,9 +231,11 @@ but use this response for anything that ships in the WhatsApp message.
     "unitRate": 650000,
     "unitLabel": "bulan",
     "subtotal": 3900000,
-    "discountPct": 10,
-    "discountAmount": 390000,
-    "total": 3510000,
+    "discountPct": 0,
+    "discountAmount": 0,
+    "insurancePct": 20,
+    "insuranceAmount": 780000,
+    "total": 4680000,
     "currency": "IDR"
   }
 }
@@ -258,7 +260,9 @@ but use this response for anything that ships in the WhatsApp message.
     "subtotal": 600000,
     "discountPct": 0,
     "discountAmount": 0,
-    "total": 600000,
+    "insurancePct": 20,
+    "insuranceAmount": 120000,
+    "total": 720000,
     "currency": "IDR"
   }
 }
@@ -277,16 +281,17 @@ with no inventory row at all → `404`. Out-of-range `quantity`/`duration`, or
 sending both/neither of `durationMonths`/`duration` → `400` (global
 `ValidationPipe`, `forbidNonWhitelisted: true`).
 
-**Constants must stay in sync.** `STORAGE_DEFAULTS` (`roundToIdr: 1_000`, the
-duration-discount tiers: 0% under 3mo, 5% at 3mo+, 10% at 6mo+, 15% at 12mo+)
-lives in `storage-pricing.ts` in this repo. If you build a client-side instant
-estimate (recommended, same UX reasoning as Moving), mirror these constants
-exactly — there is no shared source between the two repos today. Cross-check
-periodically: same inputs should produce byte-identical totals. **These
-tiers are month-only** — a weekly quote's `discountPct` is always `0`, never
-derived from them (13 weeks must not quietly land in the 3-month bracket). A
-mirrored client-side estimate must apply the same rule: no discount logic on
-a weekly quote, full stop.
+**No more duration discount; insurance replaced it.** There used to be a
+duration-based discount tier (0% under 3mo, 5% at 3mo+, 10% at 6mo+, 15% at
+12mo+) — it has been removed. `discountPct`/`discountAmount` stay on the
+response, always `0`, so an existing client that only renders its "Diskon
+durasi" row when `discountAmount > 0` needs no change. In its place, every
+quote now carries `insurancePct` (whole-percent, e.g. `20` means 20%) and
+`insuranceAmount` (Rupiah), both computed from the `storage_settings`
+singleton — see `docs/storage-admin-integration.md` §4. `total = subtotal +
+insuranceAmount`; `subtotal` remains rent only. There is still no
+client-side pricing mirror to keep in sync — this endpoint is the only
+source of the numbers.
 
 ### `POST /storage/bookings`
 
@@ -331,8 +336,10 @@ reserve a unit** — only a confirmed booking (admin action) takes stock, so
     "unitLabel": "bulan",
     "monthlyRate": 650000,
     "subtotal": 3900000,
-    "discountAmount": 390000,
-    "total": 3510000,
+    "discountAmount": 0,
+    "insurancePct": 20,
+    "insuranceAmount": 780000,
+    "total": 4680000,
     "currency": "IDR",
     "createdAt": "2026-08-13T09:20:00.000Z",
     "whatsappMessage": "Halo Mandana, saya baru saja mengajukan booking Smart Storage.\n\nNo. Referensi: MDN-STG-7K3XQP\n..."

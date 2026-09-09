@@ -13,6 +13,13 @@ export interface PropertyCard {
   slug: string;
   title: string;
   listingType: string;
+  /**
+   * Every public query now filters to PUBLISHED, SOLD or RENTED (see
+   * PUBLIC_PROPERTY_STATUSES) rather than PUBLISHED alone, so a card can be
+   * any of those three — the FE badge needs this to render "Terjual"/
+   * "Tersewa" instead of the listing-type badge on a closed listing.
+   */
+  status: PropertyStatus;
   /** Handover/completion date (YYYY-MM-DD). Only meaningful when listingType is "new". */
   handoverDate: string | null;
   /** Only meaningful when listingType is "new". */
@@ -35,15 +42,6 @@ interface PropertyDetailBase extends PropertyCard {
   descriptionText: string | null;
   latitude: number | null;
   longitude: number | null;
-  /**
-   * Missing from PropertyCard on purpose (the public card list never
-   * needs it — every public query already filters to PUBLISHED). Detail
-   * responses need it though: the admin detail view gates editing on it,
-   * and findBySlug's PUBLISHED-only filter means the public detail
-   * response always carries the same literal value, so exposing it there
-   * too is harmless.
-   */
-  status: PropertyStatus;
   isFeatured: boolean;
   images: Array<
     MediaImageDto & { id: string; isCover: boolean; sortOrder: number }
@@ -151,6 +149,7 @@ export class PropertyMapper {
       slug: p.slug,
       title: p.title,
       listingType: p.listingType,
+      status: p.status,
       handoverDate: p.handoverDate,
       constructionStatus: p.constructionStatus,
       price: toNumber(p.price),
@@ -183,7 +182,6 @@ export class PropertyMapper {
       ...this.toCard(p),
       description: p.description,
       descriptionText: p.descriptionText ?? richTextToPlain(p.description),
-      status: p.status,
       isFeatured: p.isFeatured,
       images: (p.images ?? [])
         .slice()

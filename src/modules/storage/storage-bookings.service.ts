@@ -16,6 +16,7 @@ import { PaginatedResult } from '../../common/interfaces/paginated-result.interf
 import { User } from '../users/entities/user.entity';
 import { StorageService } from './storage.service';
 import { StorageAvailabilityService } from './storage-availability.service';
+import { StorageSettingsService } from './storage-settings.service';
 import { StorageMapper } from './storage.mapper';
 import { StorageDurationUnit } from './enums/storage-duration-unit.enum';
 import {
@@ -65,6 +66,7 @@ export class StorageBookingsService {
     private readonly dataSource: DataSource,
     private readonly storageService: StorageService,
     private readonly availability: StorageAvailabilityService,
+    private readonly settingsService: StorageSettingsService,
     private readonly mapper: StorageMapper,
     private readonly notifications: NotificationsService,
   ) {}
@@ -201,7 +203,10 @@ export class StorageBookingsService {
       );
     }
 
-    const priced = storageQuote(rates, quantity, duration, durationUnit);
+    const { insurancePct } = await this.settingsService.get();
+    const priced = storageQuote(rates, quantity, duration, durationUnit, {
+      insurancePct,
+    });
     const endDate =
       durationUnit === StorageDurationUnit.WEEK
         ? addWeeksToDateString(dto.startDate, duration)
@@ -226,6 +231,8 @@ export class StorageBookingsService {
         monthlyRate: rates.monthlyRate,
         subtotal: priced.subtotal,
         discountAmount: priced.discountAmount,
+        insurancePct: priced.insurancePct,
+        insuranceAmount: priced.insuranceAmount,
         total: priced.total,
       });
 

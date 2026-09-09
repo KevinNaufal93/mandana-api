@@ -5,6 +5,7 @@ import { StorageInventory } from './entities/storage-inventory.entity';
 import { StorageUnit } from './entities/storage-unit.entity';
 import { StorageBooking } from './entities/storage-booking.entity';
 import { StorageUnitStatus } from './enums/storage-unit-status.enum';
+import { StorageSettings } from './entities/storage-settings.entity';
 import { MediaService } from '../media/media.service';
 import { richTextToPlain } from '../../common/rich-text';
 import { UNIT_LABELS } from './storage-pricing';
@@ -19,6 +20,7 @@ import {
   StorageFacilityDto,
   StorageImageDto,
   StorageInventoryDto,
+  StorageSettingsDto,
   StorageUnitDto,
   StorageUnitTypeDto,
 } from './dto/storage-response.dto';
@@ -218,6 +220,12 @@ export class StorageMapper {
     return [...byFacility.values()];
   }
 
+  // ─── Settings ─────────────────────────────────────────────────────────────
+
+  toSettingsDto(settings: StorageSettings): StorageSettingsDto {
+    return { insurancePct: settings.insurancePct };
+  }
+
   // ─── Bookings ─────────────────────────────────────────────────────────────
 
   /**
@@ -235,6 +243,12 @@ export class StorageMapper {
       `Lokasi: ${booking.facility.name}`,
       `Ukuran: ${booking.unitType.name} x${booking.quantity}`,
       `Mulai: ${booking.startDate} (${booking.durationUnits} ${UNIT_LABELS[booking.durationUnit]})`,
+      `Subtotal: ${money(booking.subtotal)}`,
+      ...(booking.insuranceAmount > 0
+        ? [
+            `Asuransi (${booking.insurancePct}%): ${money(booking.insuranceAmount)}`,
+          ]
+        : []),
       `Total: ${money(booking.total)}`,
       '',
       'Mohon konfirmasi ketersediaan dan langkah selanjutnya.',
@@ -265,6 +279,8 @@ export class StorageMapper {
       monthlyRate: booking.monthlyRate,
       subtotal: booking.subtotal,
       discountAmount: booking.discountAmount,
+      insurancePct: booking.insurancePct,
+      insuranceAmount: booking.insuranceAmount,
       total: booking.total,
       currency: 'IDR',
       createdAt: booking.createdAt,
@@ -296,6 +312,8 @@ export class StorageMapper {
       monthlyRate: booking.monthlyRate,
       subtotal: booking.subtotal,
       discountAmount: booking.discountAmount,
+      insurancePct: booking.insurancePct,
+      insuranceAmount: booking.insuranceAmount,
       total: booking.total,
       adminNote: booking.adminNote,
       confirmedAt: booking.confirmedAt

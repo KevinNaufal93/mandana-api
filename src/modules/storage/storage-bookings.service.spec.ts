@@ -16,6 +16,7 @@ import { SortOrder } from '../../common/enums/sort-order.enum';
 import { QueryStorageBookingsDto } from './dto/query-storage-bookings.dto';
 import { StorageService } from './storage.service';
 import { StorageAvailabilityService } from './storage-availability.service';
+import { StorageSettingsService } from './storage-settings.service';
 import { StorageMapper } from './storage.mapper';
 import { NotificationsService } from '../notifications/notifications.service';
 
@@ -73,6 +74,7 @@ describe('StorageBookingsService.findAllAdmin', () => {
         { provide: getDataSourceToken(), useValue: {} },
         { provide: StorageService, useValue: {} },
         { provide: StorageAvailabilityService, useValue: {} },
+        { provide: StorageSettingsService, useValue: {} },
         { provide: StorageMapper, useValue: {} },
         {
           provide: NotificationsService,

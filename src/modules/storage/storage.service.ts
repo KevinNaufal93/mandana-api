@@ -21,6 +21,7 @@ import { StorageDurationUnit } from './enums/storage-duration-unit.enum';
 import { resolveUniqueSlug } from '../../common/utils/slugify';
 import { resolveStorageRates, storageQuote } from './storage-pricing';
 import { StorageAvailabilityService } from './storage-availability.service';
+import { StorageSettingsService } from './storage-settings.service';
 
 @Injectable()
 export class StorageService {
@@ -34,6 +35,7 @@ export class StorageService {
     @InjectRepository(StorageUnit)
     private readonly unitRepo: Repository<StorageUnit>,
     private readonly availability: StorageAvailabilityService,
+    private readonly settingsService: StorageSettingsService,
   ) {}
 
   // ─── Unit types ───────────────────────────────────────────────────────────
@@ -450,16 +452,19 @@ export class StorageService {
     }
 
     const quantity = dto.quantity ?? 1;
-    const result = storageQuote(rates, quantity, duration, durationUnit);
+    const { insurancePct } = await this.settingsService.get();
+    const result = storageQuote(rates, quantity, duration, durationUnit, {
+      insurancePct,
+    });
 
     return {
       facility: { slug: facility.slug, name: facility.name },
       unitType: { slug: unitType.slug, name: unitType.name },
       ...result,
-      // storage-pricing.ts is decorator-free and mirrored byte-for-byte in
-      // the frontend repo, so it deals in the plain 'week' | 'month' union
-      // rather than this Nest-flavoured enum — same underlying string
-      // values, safe to re-type at this boundary.
+      // storage-pricing.ts is decorator-free (no Nest, no I/O) and deals in
+      // the plain 'week' | 'month' union rather than this Nest-flavoured
+      // enum — same underlying string values, safe to re-type at this
+      // boundary.
       durationUnit: result.durationUnit as StorageDurationUnit,
       currency: 'IDR',
     };

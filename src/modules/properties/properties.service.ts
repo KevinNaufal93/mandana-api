@@ -20,7 +20,10 @@ import { UpdatePropertyDto } from './dto/update-property.dto';
 import { AddPropertyImageDto } from './dto/add-property-image.dto';
 import { UpdatePropertyImageDto } from './dto/update-property-image.dto';
 import { PropertyImageInputDto } from './dto/property-image-input.dto';
-import { PropertyStatus } from './enums/property-status.enum';
+import {
+  PropertyStatus,
+  PUBLIC_PROPERTY_STATUSES,
+} from './enums/property-status.enum';
 import { PropertySort } from './enums/property-sort.enum';
 import { ListingType } from './enums/listing-type.enum';
 import { ConstructionStatus } from './enums/construction-status.enum';
@@ -110,7 +113,9 @@ export class PropertiesService {
       .leftJoinAndSelect('p.images', 'img')
       .leftJoinAndSelect('img.mediaAsset', 'imgAsset')
       .leftJoinAndSelect('p.propertyType', 'pt')
-      .where('p.status = :status', { status: PropertyStatus.PUBLISHED });
+      .where('p.status IN (:...statuses)', {
+        statuses: PUBLIC_PROPERTY_STATUSES,
+      });
 
     if (search) {
       qb.andWhere(
@@ -156,7 +161,7 @@ export class PropertiesService {
 
   async findBySlug(slug: string): Promise<PublicPropertyDetail> {
     const property = await this.propertiesRepo.findOne({
-      where: { slug, status: PropertyStatus.PUBLISHED },
+      where: { slug, status: In(PUBLIC_PROPERTY_STATUSES) },
       relations: DETAIL_RELATIONS,
     });
     if (!property) throw new NotFoundException(`Property '${slug}' not found`);
@@ -186,7 +191,7 @@ export class PropertiesService {
     const boundedLimit = Math.min(Math.max(limit, 1), SIMILAR_MAX_LIMIT);
 
     const source = await this.propertiesRepo.findOne({
-      where: { slug, status: PropertyStatus.PUBLISHED },
+      where: { slug, status: In(PUBLIC_PROPERTY_STATUSES) },
     });
     if (!source) throw new NotFoundException(`Property '${slug}' not found`);
 
@@ -207,7 +212,9 @@ export class PropertiesService {
         )`,
         'score',
       )
-      .where('p.status = :status', { status: PropertyStatus.PUBLISHED })
+      .where('p.status IN (:...statuses)', {
+        statuses: PUBLIC_PROPERTY_STATUSES,
+      })
       .andWhere('p.id <> :id', { id: source.id })
       .andWhere('p.listingType = :listingType', {
         listingType: source.listingType,
