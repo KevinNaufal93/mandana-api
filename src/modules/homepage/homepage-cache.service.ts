@@ -2,12 +2,13 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import type { Cache } from 'cache-manager';
 
-// Bumped to v2 when MediaImageDto grew srcsetAvif/placeholder — a stale
-// cached v1 payload would otherwise keep serving the old shape (missing
-// those fields) for up to its full TTL after deploy, silently, since a
-// missing field doesn't error, it just renders as if the feature isn't
-// live. Bump this again any time MediaImageDto's shape changes.
-export const HOMEPAGE_CACHE_KEY = 'homepage:v2';
+// Bumped to v2 when MediaImageDto grew srcsetAvif/placeholder, and to v3
+// when hero.slides[] grew mobileImage — a stale cached payload would
+// otherwise keep serving the old shape (missing those fields) for up to
+// its full TTL after deploy, silently, since a missing field doesn't
+// error, it just renders as if the feature isn't live. Bump this again
+// any time the payload's shape changes.
+export const HOMEPAGE_CACHE_KEY = 'homepage:v3';
 
 @Injectable()
 export class HomepageCacheService {

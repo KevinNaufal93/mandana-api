@@ -57,6 +57,43 @@ describe('CreateContentBlockDto — listingTypeScope validation', () => {
   });
 });
 
+describe('CreateContentBlockDto — mobileMediaAssetId validation', () => {
+  it('accepts an omitted mobileMediaAssetId', async () => {
+    const errors = await validate(build());
+    expect(errors.some((e) => e.property === 'mobileMediaAssetId')).toBe(false);
+  });
+
+  it('accepts a valid UUID', async () => {
+    const errors = await validate(
+      build({
+        type: ContentBlockType.HERO,
+        mobileMediaAssetId: '11111111-1111-4111-8111-111111111111',
+      }),
+    );
+    expect(errors.some((e) => e.property === 'mobileMediaAssetId')).toBe(false);
+  });
+
+  it('rejects a malformed UUID', async () => {
+    const errors = await validate(
+      build({ type: ContentBlockType.HERO, mobileMediaAssetId: 'not-a-uuid' }),
+    );
+    expect(errors.some((e) => e.property === 'mobileMediaAssetId')).toBe(true);
+  });
+
+  // Same deliberate omission as listingTypeScope above — "only valid on
+  // hero" is a cross-field rule the DTO can't express as a rejection;
+  // ContentBlocksService owns it.
+  it('does not itself reject mobileMediaAssetId on a non-hero type — that is the service layer’s job', async () => {
+    const errors = await validate(
+      build({
+        type: ContentBlockType.SERVICE_CARD,
+        mobileMediaAssetId: '11111111-1111-4111-8111-111111111111',
+      }),
+    );
+    expect(errors.some((e) => e.property === 'mobileMediaAssetId')).toBe(false);
+  });
+});
+
 describe('UpdateContentBlockDto — listingTypeScope validation', () => {
   function buildUpdate(
     overrides: Record<string, unknown> = {},
@@ -82,5 +119,34 @@ describe('UpdateContentBlockDto — listingTypeScope validation', () => {
   it('rejects an unknown listing type value', async () => {
     const errors = await validate(buildUpdate({ listingTypeScope: ['bogus'] }));
     expect(errors.some((e) => e.property === 'listingTypeScope')).toBe(true);
+  });
+});
+
+describe('UpdateContentBlockDto — mobileMediaAssetId validation', () => {
+  function buildUpdate(
+    overrides: Record<string, unknown> = {},
+  ): UpdateContentBlockDto {
+    return plainToInstance(UpdateContentBlockDto, { ...overrides });
+  }
+
+  it('accepts null (explicit clear)', async () => {
+    const errors = await validate(buildUpdate({ mobileMediaAssetId: null }));
+    expect(errors.some((e) => e.property === 'mobileMediaAssetId')).toBe(false);
+  });
+
+  it('accepts a valid UUID', async () => {
+    const errors = await validate(
+      buildUpdate({
+        mobileMediaAssetId: '11111111-1111-4111-8111-111111111111',
+      }),
+    );
+    expect(errors.some((e) => e.property === 'mobileMediaAssetId')).toBe(false);
+  });
+
+  it('rejects a malformed UUID', async () => {
+    const errors = await validate(
+      buildUpdate({ mobileMediaAssetId: 'not-a-uuid' }),
+    );
+    expect(errors.some((e) => e.property === 'mobileMediaAssetId')).toBe(true);
   });
 });

@@ -25,7 +25,7 @@ export class ContentBlocksService {
   findAll(query: QueryContentBlocksDto): Promise<ContentBlock[]> {
     return this.repo.find({
       where: query.type ? { type: query.type } : {},
-      relations: { mediaAsset: true },
+      relations: { mediaAsset: true, mobileMediaAsset: true },
       order: { type: 'ASC', sortOrder: 'ASC', createdAt: 'ASC' },
     });
   }
@@ -33,7 +33,7 @@ export class ContentBlocksService {
   findActiveByType(type: ContentBlockType): Promise<ContentBlock[]> {
     return this.repo.find({
       where: { type, isActive: true },
-      relations: { mediaAsset: true },
+      relations: { mediaAsset: true, mobileMediaAsset: true },
       order: { sortOrder: 'ASC', createdAt: 'ASC' },
     });
   }
@@ -74,7 +74,7 @@ export class ContentBlocksService {
   async findOneOrFail(id: string): Promise<ContentBlock> {
     const block = await this.repo.findOne({
       where: { id },
-      relations: { mediaAsset: true },
+      relations: { mediaAsset: true, mobileMediaAsset: true },
     });
     if (!block) throw new NotFoundException(`Content block ${id} not found`);
     return block;
@@ -121,9 +121,18 @@ export class ContentBlocksService {
       );
     }
 
+    // Same belt-and-suspenders relationship with
+    // chk_content_blocks_mobile_media_hero_only.
+    if (dto.mobileMediaAssetId && dto.type !== ContentBlockType.HERO) {
+      throw new BadRequestException(
+        'mobileMediaAssetId is only valid on a hero content block.',
+      );
+    }
+
     const block = this.repo.create({
       type: dto.type,
       mediaAssetId: dto.mediaAssetId ?? null,
+      mobileMediaAssetId: dto.mobileMediaAssetId ?? null,
       title: dto.title,
       subtitle: dto.subtitle ?? null,
       ctaText: dto.ctaText ?? null,
@@ -176,10 +185,24 @@ export class ContentBlocksService {
       );
     }
 
+    // Same post-patch-state pattern, mirroring chk_content_blocks_mobile_media_hero_only.
+    const nextMobileMediaAssetId =
+      dto.mobileMediaAssetId !== undefined
+        ? dto.mobileMediaAssetId
+        : block.mobileMediaAssetId;
+    if (nextMobileMediaAssetId && nextType !== ContentBlockType.HERO) {
+      throw new BadRequestException(
+        'mobileMediaAssetId is only valid on a hero content block — clear it (send mobileMediaAssetId: null) in the same request before changing type.',
+      );
+    }
+
     Object.assign(block, {
       ...(dto.type !== undefined && { type: dto.type }),
       ...(dto.mediaAssetId !== undefined && {
         mediaAssetId: dto.mediaAssetId ?? null,
+      }),
+      ...(dto.mobileMediaAssetId !== undefined && {
+        mobileMediaAssetId: dto.mobileMediaAssetId ?? null,
       }),
       ...(dto.title !== undefined && { title: dto.title }),
       ...(dto.subtitle !== undefined && { subtitle: dto.subtitle ?? null }),

@@ -23,6 +23,8 @@ export type ContentBlockDto = {
   link: string | null;
   mediaAssetId: string | null;
   image: MediaImageDto | null;
+  mobileMediaAssetId: string | null;
+  mobileImage: MediaImageDto | null;
   sortOrder: number;
   isActive: boolean;
   imageOnly: boolean;
@@ -46,6 +48,10 @@ export class ContentBlocksMapper {
       mediaAssetId: block.mediaAssetId,
       image: block.mediaAsset
         ? this.mediaService.buildImageDto(block.mediaAsset)
+        : null,
+      mobileMediaAssetId: block.mobileMediaAssetId,
+      mobileImage: block.mobileMediaAsset
+        ? this.mediaService.buildImageDto(block.mobileMediaAsset)
         : null,
       sortOrder: block.sortOrder,
       isActive: block.isActive,

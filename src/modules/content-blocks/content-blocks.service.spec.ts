@@ -37,6 +37,8 @@ function makeBlock(overrides: Partial<ContentBlock> = {}): ContentBlock {
     type: ContentBlockType.SERVICE_CARD,
     mediaAsset: null,
     mediaAssetId: null,
+    mobileMediaAsset: null,
+    mobileMediaAssetId: null,
     title: 'Title',
     subtitle: null,
     ctaText: null,
@@ -153,6 +155,41 @@ describe('ContentBlocksService', () => {
     });
   });
 
+  describe('create — mobileMediaAssetId', () => {
+    const baseDto = (
+      overrides: Partial<CreateContentBlockDto> = {},
+    ): CreateContentBlockDto => ({
+      type: ContentBlockType.HERO,
+      title: 'Slide',
+      mediaAssetId: 'asset-1',
+      ...overrides,
+    });
+
+    it('rejects mobileMediaAssetId on a non-hero type', async () => {
+      await expect(
+        service.create(
+          baseDto({
+            type: ContentBlockType.SERVICE_CARD,
+            mediaAssetId: undefined,
+            mobileMediaAssetId: 'mobile-asset-1',
+          }),
+        ),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('accepts mobileMediaAssetId on a hero block', async () => {
+      const saved = await service.create(
+        baseDto({ mobileMediaAssetId: 'mobile-asset-1' }),
+      );
+      expect(saved.mobileMediaAssetId).toBe('mobile-asset-1');
+    });
+
+    it('defaults mobileMediaAssetId to null when omitted on a hero block', async () => {
+      const saved = await service.create(baseDto());
+      expect(saved.mobileMediaAssetId).toBeNull();
+    });
+  });
+
   describe('update', () => {
     it('rejects flipping a scoped property_promo row to another type without clearing the scope', async () => {
       repo.findOne.mockResolvedValue(
@@ -212,6 +249,61 @@ describe('ContentBlocksService', () => {
         title: 'New title',
       });
       expect(saved.listingTypeScope).toEqual([ListingType.SALE]);
+    });
+  });
+
+  describe('update — mobileMediaAssetId', () => {
+    it('rejects flipping a hero with a mobile image to another type without clearing it', async () => {
+      repo.findOne.mockResolvedValue(
+        makeBlock({
+          type: ContentBlockType.HERO,
+          mediaAssetId: 'asset-1',
+          mobileMediaAssetId: 'mobile-asset-1',
+        }),
+      );
+
+      await expect(
+        service.update('block-1', { type: ContentBlockType.SERVICE_CARD }),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('allows flipping type when the mobile image is cleared in the same request', async () => {
+      repo.findOne.mockResolvedValue(
+        makeBlock({
+          type: ContentBlockType.HERO,
+          mediaAssetId: 'asset-1',
+          mobileMediaAssetId: 'mobile-asset-1',
+        }),
+      );
+
+      const saved = await service.update('block-1', {
+        type: ContentBlockType.SERVICE_CARD,
+        mobileMediaAssetId: null,
+      });
+      expect(saved.mobileMediaAssetId).toBeNull();
+    });
+
+    it('leaves an existing mobile image untouched when the key is omitted', async () => {
+      repo.findOne.mockResolvedValue(
+        makeBlock({
+          type: ContentBlockType.HERO,
+          mediaAssetId: 'asset-1',
+          mobileMediaAssetId: 'mobile-asset-1',
+        }),
+      );
+
+      const saved = await service.update('block-1', { title: 'New title' });
+      expect(saved.mobileMediaAssetId).toBe('mobile-asset-1');
+    });
+
+    it('rejects setting mobileMediaAssetId on an update that resolves to a non-hero type', async () => {
+      repo.findOne.mockResolvedValue(
+        makeBlock({ type: ContentBlockType.SERVICE_CARD }),
+      );
+
+      await expect(
+        service.update('block-1', { mobileMediaAssetId: 'mobile-asset-1' }),
+      ).rejects.toThrow(BadRequestException);
     });
   });
 });

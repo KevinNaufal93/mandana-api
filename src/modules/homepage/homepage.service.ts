@@ -66,6 +66,11 @@ export class HomepageService {
           // mediaAsset is guaranteed non-null for a hero-type block — see
           // chk_content_blocks_hero_requires_media in the owning migration.
           image: this.mediaService.buildImageDto(s.mediaAsset!),
+          // null (not omitted) when no mobile crop has been uploaded — the
+          // web already treats null as "render image alone at every width".
+          mobileImage: s.mobileMediaAsset
+            ? this.mediaService.buildImageDto(s.mobileMediaAsset)
+            : null,
         })),
       },
       collections: collections.map((c, i) => ({

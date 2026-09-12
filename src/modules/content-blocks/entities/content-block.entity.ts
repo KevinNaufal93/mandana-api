@@ -48,6 +48,25 @@ export class ContentBlock extends BaseEntity {
   @Column({ name: 'media_asset_id', nullable: true })
   mediaAssetId!: string | null;
 
+  /** Hero only, and optional even then (unlike `mediaAssetId`, there is no
+   *  "required for hero" rule here): a separately composed crop for
+   *  viewports below ~1024px, swapped in by the client's `<picture>` when
+   *  present, and simply left unset when the primary image should render
+   *  at every width. Enforced against every other type by the DB CHECK
+   *  `chk_content_blocks_mobile_media_hero_only` in the owning migration —
+   *  same "type-agnostic column, type-specific CHECK" shape as
+   *  `listingTypeScope`'s `chk_content_blocks_scope_promo_only`. */
+  @ManyToOne(() => MediaAsset, {
+    nullable: true,
+    eager: false,
+    onDelete: 'SET NULL',
+  })
+  @JoinColumn({ name: 'mobile_media_asset_id' })
+  mobileMediaAsset!: MediaAsset | null;
+
+  @Column({ name: 'mobile_media_asset_id', nullable: true })
+  mobileMediaAssetId!: string | null;
+
   @Column({ type: 'varchar', length: 255, nullable: true })
   title!: string | null;
 

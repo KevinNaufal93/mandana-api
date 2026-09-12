@@ -9,14 +9,15 @@ import {
 import { CreateContentBlockDto } from './create-content-block.dto';
 import { ListingType } from '../../properties/enums/listing-type.enum';
 
-// mediaAssetId and listingTypeScope are omitted from the base before
-// PartialType so each can be redeclared below as nullable (a plain
-// `Partial<Create...>` only widens required -> optional, not
-// optional-X -> optional-nullable — TypeScript rejects redeclaring an
-// inherited property with a wider type).
+// mediaAssetId, mobileMediaAssetId, and listingTypeScope are omitted from
+// the base before PartialType so each can be redeclared below as
+// nullable (a plain `Partial<Create...>` only widens required ->
+// optional, not optional-X -> optional-nullable — TypeScript rejects
+// redeclaring an inherited property with a wider type).
 export class UpdateContentBlockDto extends PartialType(
   OmitType(CreateContentBlockDto, [
     'mediaAssetId',
+    'mobileMediaAssetId',
     'listingTypeScope',
   ] as const),
 ) {
@@ -30,6 +31,15 @@ export class UpdateContentBlockDto extends PartialType(
   @IsOptional()
   @IsUUID()
   mediaAssetId?: string | null;
+
+  // `null` explicitly clears a hero's mobile crop back to "primary image
+  // renders at every width". Whether that's allowed on the block's
+  // (possibly also-changing) type lives in ContentBlocksService.update(),
+  // same as mediaAssetId above.
+  @ApiPropertyOptional({ nullable: true, type: String })
+  @IsOptional()
+  @IsUUID()
+  mobileMediaAssetId?: string | null;
 
   // `null` (like `[]` on create) explicitly clears an existing promo
   // card's scope back to "every listing type" — ContentBlocksService

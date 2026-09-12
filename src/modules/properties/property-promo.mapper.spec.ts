@@ -26,6 +26,8 @@ function makeBlock(overrides: Partial<ContentBlock> = {}): ContentBlock {
     type: ContentBlockType.PROPERTY_PROMO,
     mediaAsset: null,
     mediaAssetId: null,
+    mobileMediaAsset: null,
+    mobileMediaAssetId: null,
     title: 'Jasa Inspeksi Properti',
     subtitle: 'Pastikan kondisi bangunan sebelum Anda membeli.',
     ctaText: 'Jadwalkan Inspeksi',

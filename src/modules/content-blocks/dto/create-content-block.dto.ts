@@ -67,6 +67,23 @@ export class CreateContentBlockDto {
   @IsUUID()
   mediaAssetId?: string;
 
+  // Unconditionally optional, even for type=hero — unlike mediaAssetId,
+  // there is no case where this is required, so plain @IsOptional() is
+  // correct (same reasoning as listingTypeScope below). The "only valid
+  // on hero" rule is a cross-field check the DTO can't express on its
+  // own; it lives in ContentBlocksService.create()/update().
+  @ApiPropertyOptional({
+    description:
+      'Hero only: MediaAsset UUID for a separately composed crop for viewports ' +
+      'below ~1024px (upload with purpose=hero_mobile), not an auto-crop of ' +
+      'mediaAssetId. Optional even when type=hero — when unset the primary ' +
+      'image renders at every width, exactly as it does today. 400 if set on ' +
+      'any type other than hero.',
+  })
+  @IsOptional()
+  @IsUUID()
+  mobileMediaAssetId?: string;
+
   @ApiPropertyOptional({ default: 0 })
   @IsOptional()
   @IsNumber()

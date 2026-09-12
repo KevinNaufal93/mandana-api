@@ -47,6 +47,14 @@ interface PurposeSpec {
 
 const PURPOSE_SPECS: Record<MediaPurpose, PurposeSpec> = {
   [MediaPurpose.HERO]: { widths: [768, 1280, 1920], avifWidths: [1280, 1920] },
+  // 480/768/1080 ~= 1x/2x/3x DPR at the ~400-430px width this image
+  // actually renders at (the <picture> source applies below 1024px, i.e.
+  // through tablet-portrait, not just phone-narrow). Every variant here
+  // stays well under the desktop ladder above, which is the point.
+  [MediaPurpose.HERO_MOBILE]: {
+    widths: [480, 768, 1080],
+    avifWidths: [768, 1080],
+  },
   [MediaPurpose.COVER]: { widths: [400, 800], avifWidths: [] },
   [MediaPurpose.ICON]: { widths: [64, 128, 256], avifWidths: [] },
 };

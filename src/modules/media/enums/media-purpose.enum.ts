@@ -7,6 +7,7 @@
  */
 export enum MediaPurpose {
   HERO = 'hero',
+  HERO_MOBILE = 'hero_mobile',
   COVER = 'cover',
   ICON = 'icon',
 }
