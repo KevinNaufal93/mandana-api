@@ -196,7 +196,7 @@ export class ContentBlocksService {
       );
     }
 
-    Object.assign(block, {
+    const patch: Partial<ContentBlock> = {
       ...(dto.type !== undefined && { type: dto.type }),
       ...(dto.mediaAssetId !== undefined && {
         mediaAssetId: dto.mediaAssetId ?? null,
@@ -214,8 +214,27 @@ export class ContentBlocksService {
       ...(dto.listingTypeScope !== undefined && {
         listingTypeScope: nextListingTypeScope,
       }),
-    });
-    const saved = await this.repo.save(block);
+    };
+
+    // repo.update() issues a direct `UPDATE ... SET` against the named
+    // columns and never looks at relation properties — unlike
+    // repo.save(block), which would see this method's `block` still
+    // carrying the `mediaAsset`/`mobileMediaAsset` objects `findOneOrFail()`
+    // eagerly joined above (pointing at whichever asset the row had
+    // *before* this patch) right alongside the freshly-assigned
+    // `mediaAssetId`/`mobileMediaAssetId` scalars. TypeORM can resolve a
+    // `@JoinColumn`'s persisted value from that stale relation object
+    // instead of the id we just set, silently reverting the very change
+    // this method is trying to make (confirmed against this project's
+    // installed typeorm — see SubjectChangedColumnsComputer's relation vs.
+    // column diff passes). Re-fetching below rather than returning the
+    // mutated `block` also guarantees the response's
+    // `mediaAsset`/`mobileMediaAsset` reflect the new row instead of that
+    // same stale relation object.
+    if (Object.keys(patch).length > 0) {
+      await this.repo.update(id, patch);
+    }
+    const saved = await this.findOneOrFail(id);
     await this.cache?.bust();
     return saved;
   }

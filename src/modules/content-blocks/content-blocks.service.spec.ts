@@ -60,6 +60,7 @@ describe('ContentBlocksService', () => {
     findOne: jest.Mock;
     create: jest.Mock;
     save: jest.Mock;
+    update: jest.Mock;
     remove: jest.Mock;
     createQueryBuilder: jest.Mock;
   };
@@ -72,6 +73,18 @@ describe('ContentBlocksService', () => {
       findOne: jest.fn(),
       create: jest.fn((entity: Partial<ContentBlock>) => entity),
       save: jest.fn((entity: ContentBlock) => Promise.resolve(entity)),
+      // service.update() now does repo.update(id, patch) followed by a
+      // findOneOrFail() re-fetch rather than repo.save(block) — modeled
+      // here as mutating whatever repo.findOne() currently resolves to
+      // (every `update` test sets that up via a single, static
+      // `repo.findOne.mockResolvedValue(makeBlock(...))`, so this reaches
+      // the same object both times) so the post-patch assertions on the
+      // re-fetched block keep working unchanged.
+      update: jest.fn(async (_id: string, patch: Partial<ContentBlock>) => {
+        const current = await repo.findOne();
+        if (current) Object.assign(current, patch);
+        return { affected: 1, raw: [], generatedMaps: [] };
+      }),
       remove: jest.fn(),
       createQueryBuilder: jest.fn(() => qb),
     };
