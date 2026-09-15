@@ -314,6 +314,8 @@ export class PropertiesService {
       latitude: dto.latitude ?? null,
       longitude: dto.longitude ?? null,
       isFeatured: dto.isFeatured ?? false,
+      metaTitle: dto.metaTitle ?? null,
+      metaDescription: dto.metaDescription ?? null,
       propertyTypeId: dto.propertyTypeId ?? null,
       agentId: dto.agentId ?? currentUser.id,
       ...(amenities !== undefined && { amenities }),
@@ -393,6 +395,10 @@ export class PropertiesService {
       ...(dto.latitude !== undefined && { latitude: dto.latitude ?? null }),
       ...(dto.longitude !== undefined && { longitude: dto.longitude ?? null }),
       ...(dto.isFeatured !== undefined && { isFeatured: dto.isFeatured }),
+      ...(dto.metaTitle !== undefined && { metaTitle: dto.metaTitle ?? null }),
+      ...(dto.metaDescription !== undefined && {
+        metaDescription: dto.metaDescription ?? null,
+      }),
       ...(dto.propertyTypeId !== undefined && {
         propertyTypeId: dto.propertyTypeId ?? null,
       }),

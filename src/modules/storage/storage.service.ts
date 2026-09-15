@@ -257,6 +257,10 @@ export class StorageService {
       province: dto.province ?? null,
       latitude: dto.latitude ?? null,
       longitude: dto.longitude ?? null,
+      openingHours: dto.openingHours ?? null,
+      phone: dto.phone ?? null,
+      metaTitle: dto.metaTitle ?? null,
+      metaDescription: dto.metaDescription ?? null,
       mediaAssetId: dto.mediaAssetId ?? null,
       isActive: dto.isActive ?? true,
       sortOrder: dto.sortOrder ?? 0,
@@ -294,6 +298,16 @@ export class StorageService {
       ...(dto.latitude !== undefined && { latitude: dto.latitude ?? null }),
       ...(dto.longitude !== undefined && {
         longitude: dto.longitude ?? null,
+      }),
+      ...(dto.openingHours !== undefined && {
+        openingHours: dto.openingHours ?? null,
+      }),
+      ...(dto.phone !== undefined && { phone: dto.phone ?? null }),
+      ...(dto.metaTitle !== undefined && {
+        metaTitle: dto.metaTitle ?? null,
+      }),
+      ...(dto.metaDescription !== undefined && {
+        metaDescription: dto.metaDescription ?? null,
       }),
       ...(dto.mediaAssetId !== undefined && {
         mediaAssetId: dto.mediaAssetId ?? null,

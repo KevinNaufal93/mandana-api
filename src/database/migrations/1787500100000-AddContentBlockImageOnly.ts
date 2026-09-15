@@ -12,9 +12,7 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * belt-and-suspenders applies here, alongside the DTO's `@ValidateIf` and
  * the service-layer check in ContentBlocksService.create()/update().
  */
-export class AddContentBlockImageOnly1787500100000
-  implements MigrationInterface
-{
+export class AddContentBlockImageOnly1787500100000 implements MigrationInterface {
   name = 'AddContentBlockImageOnly1787500100000';
 
   public async up(queryRunner: QueryRunner): Promise<void> {

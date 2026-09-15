@@ -37,6 +37,23 @@ export class StorageFacility extends BaseEntity {
   @Column({ type: 'decimal', precision: 9, scale: 6, nullable: true })
   longitude!: number | null;
 
+  // Free text ("Senin–Sabtu 08.00–17.00"), not structured day/time rows —
+  // simpler to type, and the Google Business Profile is the authoritative
+  // source for hours anyway (see the SEO plan, §11.1).
+  @Column({ name: 'opening_hours', type: 'varchar', length: 255, nullable: true })
+  openingHours!: string | null;
+
+  @Column({ type: 'varchar', length: 32, nullable: true })
+  phone!: string | null;
+
+  // Per-facility SEO override, same convention as Article/Property's
+  // metaTitle/metaDescription — null means "generate one automatically".
+  @Column({ name: 'meta_title', type: 'varchar', length: 255, nullable: true })
+  metaTitle!: string | null;
+
+  @Column({ name: 'meta_description', type: 'varchar', length: 300, nullable: true })
+  metaDescription!: string | null;
+
   @ManyToOne(() => MediaAsset, {
     nullable: true,
     eager: false,

@@ -74,6 +74,34 @@ export class CreateStorageFacilityDto {
   @IsLongitude()
   longitude?: number;
 
+  @ApiPropertyOptional({ example: 'Senin–Sabtu 08.00–17.00' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  openingHours?: string;
+
+  @ApiPropertyOptional({ example: '+62 21 5315 0000' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(32)
+  phone?: string;
+
+  @ApiPropertyOptional({
+    description: 'SEO title override. Falls back to an auto-generated title when omitted.',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  metaTitle?: string;
+
+  @ApiPropertyOptional({
+    description: 'SEO meta description override. Falls back to an auto-generated description when omitted.',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(300)
+  metaDescription?: string;
+
   @ApiPropertyOptional({
     description:
       'Upload an image first via POST /admin/media/upload, then pass its id',

@@ -16,9 +16,7 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * this row) — seeding it keeps the table's contents consistent with what
  * GET /admin/rbac/permissions actually reports for 'editor'.
  */
-export class AddRoleModulePermissions1788800000000
-  implements MigrationInterface
-{
+export class AddRoleModulePermissions1788800000000 implements MigrationInterface {
   name = 'AddRoleModulePermissions1788800000000';
 
   public async up(queryRunner: QueryRunner): Promise<void> {

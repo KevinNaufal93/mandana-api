@@ -148,6 +148,18 @@ export class PropertyDetailDto {
       'Plain-text derivative of `description` (HTML stripped) — SEO meta, share previews.',
   })
   descriptionText!: string | null;
+  @ApiPropertyOptional({
+    nullable: true,
+    type: String,
+    description: 'SEO title override — null means "use `title`".',
+  })
+  metaTitle!: string | null;
+  @ApiPropertyOptional({
+    nullable: true,
+    type: String,
+    description: 'SEO description override — null means "generate one".',
+  })
+  metaDescription!: string | null;
 
   @ApiPropertyOptional({
     nullable: true,

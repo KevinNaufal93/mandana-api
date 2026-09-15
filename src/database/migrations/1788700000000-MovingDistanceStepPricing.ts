@@ -26,9 +26,7 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * 4,501 comes back as 4,502). All four seeded rates are even, so seed data
  * round-trips exactly; only an ops-entered odd rate drifts by 1 Rupiah.
  */
-export class MovingDistanceStepPricing1788700000000
-  implements MigrationInterface
-{
+export class MovingDistanceStepPricing1788700000000 implements MigrationInterface {
   name = 'MovingDistanceStepPricing1788700000000';
 
   public async up(queryRunner: QueryRunner): Promise<void> {

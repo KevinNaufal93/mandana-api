@@ -17,6 +17,7 @@ export enum AccessModule {
   NOTIFICATIONS = 'notifications',
   RBAC = 'rbac',
   ARTICLES = 'articles',
+  SEO = 'seo',
 }
 
 export interface AccessModuleMeta {
@@ -101,6 +102,13 @@ export const ACCESS_MODULES: AccessModuleMeta[] = [
     key: AccessModule.ARTICLES,
     label: 'Article Management',
     description: 'Kelola artikel dan kategori untuk konten SEO.',
+    grantable: true,
+    alwaysOn: false,
+  },
+  {
+    key: AccessModule.SEO,
+    label: 'SEO',
+    description: 'Kelola judul, deskripsi, dan pengaturan SEO situs.',
     grantable: true,
     alwaysOn: false,
   },

@@ -108,6 +108,22 @@ export class Property extends BaseEntity {
   @Column({ name: 'is_featured', default: false })
   isFeatured!: boolean;
 
+  /** SEO title override — null falls back to `title` client-side (same
+   *  convention as Article.metaTitle). */
+  @Column({ name: 'meta_title', type: 'varchar', length: 255, nullable: true })
+  metaTitle!: string | null;
+
+  /** SEO description override — null falls back to a generated sentence
+   *  built from title/area/price, or to `descriptionText` when set (see
+   *  PropertyMapper.toDetail and the web repo's app/properties/[slug]/page.tsx). */
+  @Column({
+    name: 'meta_description',
+    type: 'varchar',
+    length: 300,
+    nullable: true,
+  })
+  metaDescription!: string | null;
+
   @ManyToOne(() => PropertyType, (pt) => pt.properties, { nullable: true })
   @JoinColumn({ name: 'property_type_id' })
   propertyType!: PropertyType | null;

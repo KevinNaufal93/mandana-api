@@ -144,6 +144,24 @@ export class CreatePropertyDto {
   @IsBoolean()
   isFeatured?: boolean;
 
+  @ApiPropertyOptional({
+    description:
+      'SEO title override. Client falls back to `title` when null — same convention as Article.metaTitle.',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  metaTitle?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'SEO description override. Client falls back to a generated sentence (or `descriptionText`) when null.',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(300)
+  metaDescription?: string;
+
   @ApiPropertyOptional({ description: 'PropertyType UUID' })
   @IsOptional()
   @IsUUID()

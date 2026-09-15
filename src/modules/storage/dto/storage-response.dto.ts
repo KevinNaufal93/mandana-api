@@ -100,6 +100,14 @@ export class StorageFacilityDto {
     number | null;
   @ApiPropertyOptional({ nullable: true, type: Number }) longitude!:
     number | null;
+  @ApiPropertyOptional({ nullable: true, type: String }) openingHours!:
+    string | null;
+  @ApiPropertyOptional({ nullable: true, type: String }) phone!:
+    string | null;
+  @ApiPropertyOptional({ nullable: true, type: String }) metaTitle!:
+    string | null;
+  @ApiPropertyOptional({ nullable: true, type: String }) metaDescription!:
+    string | null;
   @ApiPropertyOptional({ nullable: true, type: StorageImageDto })
   image!: StorageImageDto | null;
   @ApiProperty() isActive!: boolean;

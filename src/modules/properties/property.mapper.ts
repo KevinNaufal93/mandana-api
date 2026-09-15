@@ -40,6 +40,10 @@ interface PropertyDetailBase extends PropertyCard {
   description: string | null;
   /** Plain-text derivative of `description` (HTML stripped) — SEO meta, share previews. */
   descriptionText: string | null;
+  /** SEO title override — null means "use `title`". */
+  metaTitle: string | null;
+  /** SEO description override — null means "generate one". */
+  metaDescription: string | null;
   latitude: number | null;
   longitude: number | null;
   isFeatured: boolean;
@@ -182,6 +186,8 @@ export class PropertyMapper {
       ...this.toCard(p),
       description: p.description,
       descriptionText: p.descriptionText ?? richTextToPlain(p.description),
+      metaTitle: p.metaTitle,
+      metaDescription: p.metaDescription,
       isFeatured: p.isFeatured,
       images: (p.images ?? [])
         .slice()

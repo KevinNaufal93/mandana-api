@@ -98,7 +98,7 @@ export class MovingBookingDto {
     nullable: true,
     type: Number,
     description:
-      'Sum of every leg\'s chargeableSteps. null on a booking captured before 500 m step pricing shipped.',
+      "Sum of every leg's chargeableSteps. null on a booking captured before 500 m step pricing shipped.",
   })
   chargeableSteps!: number | null;
   @ApiProperty()
