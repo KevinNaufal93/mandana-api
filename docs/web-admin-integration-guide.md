@@ -265,6 +265,8 @@ item 5 in §10 the same way for every row you fetch — check the `type`.
 | Moving add-ons | `/admin/moving/addons` | `/moving/*` | [moving-admin-integration.md](moving-admin-integration.md) |
 | Storage unit types/facilities | `/admin/storage/units`, `/admin/storage` | `/storage/*` | [storage-admin-integration.md](storage-admin-integration.md) |
 | Collections | `/admin/collections` | via `/homepage` + `/collections/:slug` | [homepage-integration.md](homepage-integration.md) |
+| Articles + article categories | `/admin/articles`, `/admin/article-categories` | `/articles`, `/article-categories` | [articles-admin-integration.md](articles-admin-integration.md) |
+| SEO share images (sitewide default + per fixed page) | `/admin/seo/settings`, `/admin/seo/pages/:pageKey` | via `/seo` | cross-repo — `mandana-web/docs/seo/developer-guide.md` |
 | Media library (upload/browse/delete) | `/admin/media` | — (never public) | §2 above |
 | Properties (multi-image, own staging system) | `/admin/properties` | `/properties*` | out of scope here — see `lib/properties/image-staging.ts` |
 

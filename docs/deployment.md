@@ -178,6 +178,15 @@ Open a psql shell: `docker compose -f docker-compose.prod.yml exec postgres psql
   with `{ protocol: "https", hostname: "<bucket>.s3.<region>.amazonaws.com" }`.
 - Regenerate the API types: point `gen:api` at
   `https://dXXXX.cloudfront.net/docs-json`.
+- **Do not stop here if the goal is a real public launch.** `NEXT_PUBLIC_API_BASE_URL`
+  alone gets the site *working*, but the site stays permanently invisible to Google —
+  `NEXT_PUBLIC_ALLOW_INDEXING` defaults off and forces `noindex` + a `robots.txt`
+  disallow on every page until it's explicitly switched on, which itself requires
+  `NEXT_PUBLIC_SITE_URL` to already be the real domain (the build fails on purpose
+  otherwise). That's a separate, ordered sequence — domain → `NEXT_PUBLIC_SITE_URL` →
+  `NEXT_PUBLIC_ALLOW_INDEXING=true` → search engines — fully covered in
+  `mandana-web/docs/seo/launch-runbook.md`. Treat this section as "the site runs,"
+  not "the site is launched."
 
 ## 6. Verify end-to-end
 

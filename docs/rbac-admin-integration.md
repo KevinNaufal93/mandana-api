@@ -85,8 +85,18 @@ ships a new module.
     "grantable": true, "alwaysOn": false },
   { "key": "rbac", "label": "Roles & Permissions",
     "description": "Kelola hak akses modul per peran. Hanya untuk admin.",
-    "grantable": false, "alwaysOn": false } ] }
+    "grantable": false, "alwaysOn": false },
+  { "key": "articles", "label": "Article Management",
+    "description": "Kelola artikel dan kategori untuk konten SEO.",
+    "grantable": true, "alwaysOn": false },
+  { "key": "seo", "label": "SEO",
+    "description": "Kelola judul, deskripsi, dan pengaturan SEO situs.",
+    "grantable": true, "alwaysOn": false } ] }
 ```
+
+`seo` also gates the admin legal-pages editor (`/admin/legal/*`) — there is
+no separate `legal` module. See `mandana-web/docs/seo/developer-guide.md`
+§2.2 if that ever needs splitting out.
 
 Two flags per row, and they mean different things — don't conflate
 them:
