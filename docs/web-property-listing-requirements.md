@@ -48,6 +48,10 @@ falls back to static options and `?propertyTypeSlug=…` matches nothing.
    | Kavling | `kavling` |
    | Ruko | `ruko` |
 
+   > ⚠️ **Update (2026-09-15):** `townhouse` was removed as a property type —
+   > see the `RemoveTownhousePropertyType` migration. The table above is the
+   > original seed list and is kept for history only.
+
 2. Backfill existing published properties with a `propertyTypeId` so filtering by
    type actually returns rows (currently `propertyTypeId` is null on seed data).
 
