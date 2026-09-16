@@ -267,6 +267,7 @@ item 5 in §10 the same way for every row you fetch — check the `type`.
 | Collections | `/admin/collections` | via `/homepage` + `/collections/:slug` | [homepage-integration.md](homepage-integration.md) |
 | Articles + article categories | `/admin/articles`, `/admin/article-categories` | `/articles`, `/article-categories` | [articles-admin-integration.md](articles-admin-integration.md) |
 | SEO share images (sitewide default + per fixed page) | `/admin/seo/settings`, `/admin/seo/pages/:pageKey` | via `/seo` | cross-repo — `mandana-web/docs/seo/developer-guide.md` |
+| Page images (fixed-slot images on a static page — today: Tentang Kami) | `/admin/page-images/:slotKey` | `/page-images` | [page-images-admin-integration.md](page-images-admin-integration.md) |
 | Media library (upload/browse/delete) | `/admin/media` | — (never public) | §2 above |
 | Properties (multi-image, own staging system) | `/admin/properties` | `/properties*` | out of scope here — see `lib/properties/image-staging.ts` |
 

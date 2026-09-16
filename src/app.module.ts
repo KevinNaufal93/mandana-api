@@ -27,6 +27,7 @@ import { RbacModule } from './modules/rbac/rbac.module';
 import { ArticlesModule } from './modules/articles/articles.module';
 import { SeoModule } from './modules/seo/seo.module';
 import { LegalModule } from './modules/legal/legal.module';
+import { PageImagesModule } from './modules/page-images/page-images.module';
 
 @Module({
   imports: [
@@ -78,6 +79,7 @@ import { LegalModule } from './modules/legal/legal.module';
     ArticlesModule,
     SeoModule,
     LegalModule,
+    PageImagesModule,
   ],
   providers: [
     // Global JWT guard: all routes protected by default; @Public() opts out
