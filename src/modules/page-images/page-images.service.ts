@@ -8,13 +8,14 @@ import { PageImagesCacheService } from './page-images-cache.service';
 import { PageImagesMapper, PageImagePayload } from './page-images.mapper';
 
 /**
- * Reads/writes the 3 fixed page_images rows. Auto-seeds on read like
- * SeoService/LegalService — a row with a null mediaAssetId is safe (the
- * web app falls back to its own hardcoded static image), so a DB restored
- * before the seeding migration ran, or a slot added to PAGE_IMAGE_SLOTS
- * without a matching migration yet, degrades gracefully instead of
- * 500ing. The real initial rows (mediaAssetId: null) come from the
- * migration's seed — see AddPageImages' own comment.
+ * Reads/writes the fixed page_images rows (one per PAGE_IMAGE_SLOT_KEYS
+ * entry). Auto-seeds on read like SeoService/LegalService — a row with a
+ * null mediaAssetId is safe (the web app falls back to its own hardcoded
+ * static image), so a DB restored before the seeding migration ran, or a
+ * slot added to PAGE_IMAGE_SLOTS without a matching migration yet,
+ * degrades gracefully instead of 500ing. The real initial rows
+ * (mediaAssetId: null) come from each migration's seed — see
+ * AddPageImages/AddHomePageImages' own comments.
  */
 @Injectable()
 export class PageImagesService {

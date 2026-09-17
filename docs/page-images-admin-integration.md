@@ -2,7 +2,8 @@
 
 Audience: the admin panel — managing fixed image slots on static pages
 that aren't backed by a repeatable content-block list (today: the three
-photos on `/tentang-kami`). Public read is `GET /page-images` — see §5.
+photos on `/tentang-kami` and two on `/`). Public read is `GET
+/page-images` — see §5.
 
 ## 1. Base URL, auth & response envelope
 
@@ -30,6 +31,13 @@ The closed set of slots today:
 | `about_hero` | `/tentang-kami` | The full-bleed banner behind the page's `<h1>` |
 | `about_story` | `/tentang-kami` | The photo beside "Satu Platform untuk Setiap Kebutuhan Properti" |
 | `about_help_cta` | `/tentang-kami` | The photo behind the "Apa yang bisa kami bantu?" glass panel |
+| `home_property_valuation` | `/` | The full-bleed banner behind "Ingin tahu berapa nilai properti Anda?" |
+| `home_help_cta` | `/` | The photo behind the homepage's own "Apa yang bisa kami bantu?" glass panel |
+
+`home_help_cta` and `about_help_cta` are deliberately separate slots, not
+one shared image — `HelpCta` is the same component on both pages, but each
+page's photo is managed independently (the 3 Artikel pages that also
+render `HelpCta` are out of scope for now and keep a hardcoded photo).
 
 Adding a slot later is a new `PageImageSlot` enum member + a migration
 row insert — no schema-breaking change, since `slot_key` is `varchar`,
@@ -50,10 +58,12 @@ addition).
     "image": { "url": "...", "srcset": "...", "srcsetAvif": "...",
                "placeholder": "data:image/webp;base64,...", "alt": null,
                "width": 1200, "height": 800 } },
-  { "slotKey": "about_help_cta", "image": null } ] }
+  { "slotKey": "about_help_cta", "image": null },
+  { "slotKey": "home_property_valuation", "image": null },
+  { "slotKey": "home_help_cta", "image": null } ] }
 ```
 
-Always returns all three rows, in the order above — there's no filter,
+Always returns all five rows, in the order above — there's no filter,
 no pagination, and no way to get a partial list.
 
 ```jsonc
@@ -72,13 +82,14 @@ before the controller method runs, same as `PATCH /admin/seo/pages/:pageKey`.
 ## 4. Upload, then attach
 
 Same two-step flow as every other image field in this API: upload first
-via `POST /admin/media/upload` (multipart, `purpose: "hero"` for
-`about_hero` — it's the widest/most prominent slot and benefits from the
-AVIF srcset that purpose generates; `purpose: "cover"` for the other
-two), then PATCH the returned asset id into the slot. There is no
-combined "upload and attach in one request" endpoint. Deleting a slot's
-image (`mediaAssetId: null`) does **not** delete the underlying media
-asset — it stays in the media library, same as content-blocks (§7 of
+via `POST /admin/media/upload` (multipart, `purpose: "hero"` for all five
+slots — every one of them renders wide enough on desktop, at up to ~2×
+DPR, to need the 1920px rung and AVIF srcset that purpose generates; the
+`cover` purpose's 800px ceiling was too small once measured against the
+actual render box), then PATCH the returned asset id into the slot. There
+is no combined "upload and attach in one request" endpoint. Deleting a
+slot's image (`mediaAssetId: null`) does **not** delete the underlying
+media asset — it stays in the media library, same as content-blocks (§7 of
 that guide).
 
 ## 5. Public read
@@ -97,7 +108,7 @@ page renders its own hardcoded fallback photo for that slot instead.
 
 | Status | Cause |
 |---|---|
-| 400 | `mediaAssetId` isn't a valid UUID (and isn't `null`); or `slotKey` in the URL isn't one of the three known keys (`ParseEnumPipe` rejects it before the handler runs — never a 404) |
+| 400 | `mediaAssetId` isn't a valid UUID (and isn't `null`); or `slotKey` in the URL isn't one of the five known keys (`ParseEnumPipe` rejects it before the handler runs — never a 404) |
 | 403 | Token's role/modules don't include `content-media` |
 
 No documented 409/conflict case — unlike content-blocks (which has none

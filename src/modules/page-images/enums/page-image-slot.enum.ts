@@ -12,6 +12,8 @@ export enum PageImageSlot {
   ABOUT_HERO = 'about_hero',
   ABOUT_STORY = 'about_story',
   ABOUT_HELP_CTA = 'about_help_cta',
+  HOME_PROPERTY_VALUATION = 'home_property_valuation',
+  HOME_HELP_CTA = 'home_help_cta',
 }
 
 export interface PageImageSlotMeta {
@@ -43,6 +45,18 @@ export const PAGE_IMAGE_SLOTS: PageImageSlotMeta[] = [
     pageKey: 'about',
     label: 'Gambar "Apa yang bisa kami bantu?"',
     path: '/tentang-kami',
+  },
+  {
+    key: PageImageSlot.HOME_PROPERTY_VALUATION,
+    pageKey: 'home',
+    label: 'Gambar "Ingin tahu berapa nilai properti Anda?"',
+    path: '/',
+  },
+  {
+    key: PageImageSlot.HOME_HELP_CTA,
+    pageKey: 'home',
+    label: 'Gambar "Apa yang bisa kami bantu?"',
+    path: '/',
   },
 ];
 
