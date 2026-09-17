@@ -48,7 +48,7 @@ export class MediaController {
   @Get(':id')
   @ApiOperation({ summary: 'Get one media asset' })
   findOne(@Param('id', ParseUUIDPipe) id: string) {
-    return this.mediaService.findOneOrFail(id);
+    return this.mediaService.findOneAdmin(id);
   }
 
   @Post('upload')

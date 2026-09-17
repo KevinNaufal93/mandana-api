@@ -77,7 +77,10 @@ export const RICH_TEXT_SANITIZE_OPTIONS: IOptions = {
   },
   allowedSchemes: ['http', 'https', 'mailto', 'tel'],
   allowedSchemesByTag: {
-    img: ['https'],
+    // Dev/staging serve media off MEDIA_PUBLIC_URL=http://localhost:9000/...
+    // (see env.validation.ts) — https-only here would silently strip every
+    // inline body image on save outside production.
+    img: process.env.NODE_ENV === 'production' ? ['https'] : ['https', 'http'],
   },
   transformTags: {
     a: (tagName, attribs) => ({

@@ -207,6 +207,17 @@ export class MediaService implements OnModuleInit {
     return asset;
   }
 
+  /** Same lookup as `findOneOrFail()`, plus the renderable `image` DTO
+   *  `findAllAdmin()` rows already carry. `GET /admin/media/:id` uses this
+   *  (not the bare `findOneOrFail()`) so an admin caller that only has an
+   *  id — e.g. RichTextEditor's inline image insert, right after upload —
+   *  can resolve an actual URL to persist, instead of the raw `variants`
+   *  storage-key map. */
+  async findOneAdmin(id: string): Promise<MediaAsset & { image: MediaImageDto }> {
+    const asset = await this.findOneOrFail(id);
+    return { ...asset, image: this.buildImageDto(asset) };
+  }
+
   async findAllAdmin(
     query: QueryMediaDto,
   ): Promise<PaginatedResult<MediaAssetListItem>> {
