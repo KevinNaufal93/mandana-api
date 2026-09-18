@@ -32,4 +32,11 @@ export default () => ({
     // Switch to CDN URL in production — all image URLs are built from this base
     publicUrl: process.env.MEDIA_PUBLIC_URL,
   },
+  revalidation: {
+    // Both optional — see env.validation.ts's comment. `?? null` (not just
+    // `undefined`) so ArticleRevalidationService's `config.get(...) ?? null`
+    // check has one unambiguous "not configured" value to compare against.
+    webBaseUrl: process.env.MANDANA_WEB_BASE_URL ?? null,
+    secret: process.env.REVALIDATE_SECRET ?? null,
+  },
 });

@@ -28,6 +28,7 @@ import {
   AdminArticleCard,
   AdminArticleDetail,
 } from './article.mapper';
+import { ArticleRevalidationService } from './article-revalidation.service';
 
 const DETAIL_RELATIONS = {
   category: true,
@@ -46,6 +47,7 @@ export class ArticlesService {
     @InjectRepository(ArticleCategory)
     private readonly categoriesRepo: Repository<ArticleCategory>,
     private readonly mapper: ArticleMapper,
+    private readonly articleRevalidation: ArticleRevalidationService,
   ) {}
 
   // ─── Public ───────────────────────────────────────────────────────────────
@@ -226,12 +228,26 @@ export class ArticlesService {
     });
 
     const saved = await this.articlesRepo.save(article);
-    return this.adminFindOne(saved.id);
+    const detail = await this.adminFindOne(saved.id);
+
+    // A create() that goes straight to PUBLISHED (skipping DRAFT) is live
+    // immediately — reusing a slug freed by a since-deleted article would
+    // otherwise keep serving that old cached page for up to 300s. Not
+    // awaited: see ArticleRevalidationService's own doc comment for why.
+    if (status === ArticleStatus.PUBLISHED) {
+      void this.articleRevalidation.notifyArticleChanged({
+        slug: detail.slug,
+        categorySlug: detail.category.slug,
+      });
+    }
+
+    return detail;
   }
 
   async update(id: string, dto: UpdateArticleDto): Promise<AdminArticleDetail> {
     const article = await this.adminFindOneRaw(id);
     const wasAlreadyPublished = article.status === ArticleStatus.PUBLISHED;
+    const previousSlug = article.slug;
 
     if (dto.slug !== undefined && dto.slug !== article.slug) {
       if (wasAlreadyPublished) {
@@ -300,12 +316,51 @@ export class ArticlesService {
     }
 
     await this.articlesRepo.save(article);
-    return this.adminFindOne(id);
+    const detail = await this.adminFindOne(id);
+
+    // Covers: a content edit reaching an already-live page, and any
+    // publish/unpublish transition — both need the public page to refresh.
+    // Skips a draft-to-draft edit (nothing public to refresh) and a bare
+    // re-send of the same status with nothing else changed (no-op either
+    // side). Reuses wasAlreadyPublished/isContentChange, both already
+    // computed above for other reasons — no new bookkeeping. Not awaited:
+    // see ArticleRevalidationService's own doc comment for why.
+    const isPublishedNow = article.status === ArticleStatus.PUBLISHED;
+    const shouldRevalidate =
+      (wasAlreadyPublished || isPublishedNow) &&
+      (isContentChange || wasAlreadyPublished !== isPublishedNow);
+    if (shouldRevalidate) {
+      void this.articleRevalidation.notifyArticleChanged({
+        slug: detail.slug,
+        categorySlug: detail.category.slug,
+        ...(previousSlug !== detail.slug && { previousSlug }),
+      });
+    }
+
+    return detail;
   }
 
   async remove(id: string): Promise<void> {
-    const article = await this.adminFindOneRaw(id);
+    // Loaded with the category relation (unlike adminFindOneRaw) purely so
+    // a since-deleted published article's cached page/listing can still be
+    // told to refresh below — same staleness problem create()/update() fix,
+    // just on the way out instead of in.
+    const article = await this.articlesRepo.findOne({
+      where: { id },
+      relations: { category: true },
+    });
+    if (!article) throw new NotFoundException(`Article ${id} not found`);
+    const wasPublished = article.status === ArticleStatus.PUBLISHED;
+    const { slug, category } = article;
+
     await this.articlesRepo.remove(article);
+
+    if (wasPublished) {
+      void this.articleRevalidation.notifyArticleChanged({
+        slug,
+        categorySlug: category.slug,
+      });
+    }
   }
 
   // ─── Private helpers ────────────────────────────────────────────────────

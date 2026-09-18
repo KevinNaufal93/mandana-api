@@ -13,6 +13,7 @@ import {
   ArticleCategoriesAdminController,
 } from './article-categories.controller';
 import { ArticleMapper } from './article.mapper';
+import { ArticleRevalidationService } from './article-revalidation.service';
 import { MediaModule } from '../media/media.module';
 
 @Module({
@@ -20,7 +21,12 @@ import { MediaModule } from '../media/media.module';
     TypeOrmModule.forFeature([Article, ArticleCategory]),
     MediaModule, // for ArticleMapper's MediaService.buildImageDto() calls
   ],
-  providers: [ArticlesService, ArticleCategoriesService, ArticleMapper],
+  providers: [
+    ArticlesService,
+    ArticleCategoriesService,
+    ArticleMapper,
+    ArticleRevalidationService,
+  ],
   controllers: [
     ArticlesController,
     ArticlesAdminController,

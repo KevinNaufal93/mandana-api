@@ -29,4 +29,13 @@ export const envValidationSchema = Joi.object({
 
   // Public base URL for media — dev: http://localhost:9000/<bucket>, prod: CDN base
   MEDIA_PUBLIC_URL: Joi.string().required(),
+
+  // On-demand ISR revalidation webhook to mandana-web (ArticleRevalidationService)
+  // — optional, unlike everything else in this file: unset in dev/test/CI just
+  // disables it (no-op + a one-time warning log), since mandana-web's own 300s
+  // time-based ISR still works without this. REVALIDATE_SECRET must exactly
+  // match mandana-web's own REVALIDATE_SECRET (see that repo's .env.example) —
+  // it's a shared secret value, not a technically-linked variable name.
+  MANDANA_WEB_BASE_URL: Joi.string().uri().optional(),
+  REVALIDATE_SECRET: Joi.string().min(16).optional(),
 });

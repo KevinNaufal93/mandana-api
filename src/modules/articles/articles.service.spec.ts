@@ -12,6 +12,7 @@ import {
 } from '@nestjs/common';
 import { ArticlesService } from './articles.service';
 import { ArticleMapper } from './article.mapper';
+import { ArticleRevalidationService } from './article-revalidation.service';
 import { Article } from './entities/article.entity';
 import { ArticleCategory } from './entities/article-category.entity';
 import { ArticleStatus } from './enums/article-status.enum';
@@ -110,6 +111,7 @@ describe('ArticlesService', () => {
     toAdminCard: jest.Mock;
     toAdminDetail: jest.Mock;
   };
+  let articleRevalidation: { notifyArticleChanged: jest.Mock };
 
   beforeEach(async () => {
     articlesQb = makeQb();
@@ -140,8 +142,17 @@ describe('ArticlesService', () => {
       toCard: jest.fn((a: Article) => ({ id: a.id })),
       toDetail: jest.fn((a: Article) => ({ id: a.id })),
       toAdminCard: jest.fn((a: Article) => ({ id: a.id, status: a.status })),
-      toAdminDetail: jest.fn((a: Article) => ({ id: a.id, status: a.status })),
+      // slug/category added (beyond id/status) so the new
+      // articleRevalidation.notifyArticleChanged assertions below have
+      // something real to check the call args against.
+      toAdminDetail: jest.fn((a: Article) => ({
+        id: a.id,
+        status: a.status,
+        slug: a.slug,
+        category: { slug: a.category?.slug ?? 'cat' },
+      })),
     };
+    articleRevalidation = { notifyArticleChanged: jest.fn() };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -152,6 +163,10 @@ describe('ArticlesService', () => {
           useValue: categoriesRepo,
         },
         { provide: ArticleMapper, useValue: mapper },
+        {
+          provide: ArticleRevalidationService,
+          useValue: articleRevalidation,
+        },
       ],
     }).compile();
 
@@ -257,6 +272,36 @@ describe('ArticlesService', () => {
       );
       expect(createArgs(articlesRepo.create).authorId).toBe('user-1');
     });
+
+    it('fires article revalidation when created directly as PUBLISHED', async () => {
+      await service.create(
+        {
+          title: 'T',
+          excerpt: 'E',
+          bodyHtml: '<p>x</p>',
+          categoryId: 'cat-1',
+          status: ArticleStatus.PUBLISHED,
+        },
+        currentUser,
+      );
+      expect(articleRevalidation.notifyArticleChanged).toHaveBeenCalledWith({
+        slug: 'slug-1',
+        categorySlug: 'cat',
+      });
+    });
+
+    it('does not fire article revalidation when created as DRAFT (default)', async () => {
+      await service.create(
+        {
+          title: 'T',
+          excerpt: 'E',
+          bodyHtml: '<p>x</p>',
+          categoryId: 'cat-1',
+        },
+        currentUser,
+      );
+      expect(articleRevalidation.notifyArticleChanged).not.toHaveBeenCalled();
+    });
   });
 
   describe('update', () => {
@@ -358,6 +403,76 @@ describe('ArticlesService', () => {
         service.update(article.id, { categoryId: 'missing-cat' }),
       ).rejects.toThrow(BadRequestException);
     });
+
+    it('fires article revalidation on a DRAFT -> PUBLISHED transition', async () => {
+      const article = makeArticle({
+        status: ArticleStatus.DRAFT,
+        slug: 'my-slug',
+      });
+      setCurrent(article);
+      await service.update(article.id, { status: ArticleStatus.PUBLISHED });
+      expect(articleRevalidation.notifyArticleChanged).toHaveBeenCalledWith({
+        slug: 'my-slug',
+        categorySlug: 'cat',
+      });
+    });
+
+    it('fires article revalidation on a PUBLISHED -> ARCHIVED transition even with no other fields changed', async () => {
+      const article = makeArticle({
+        status: ArticleStatus.PUBLISHED,
+        slug: 'my-slug',
+      });
+      setCurrent(article);
+      await service.update(article.id, { status: ArticleStatus.ARCHIVED });
+      expect(articleRevalidation.notifyArticleChanged).toHaveBeenCalledWith({
+        slug: 'my-slug',
+        categorySlug: 'cat',
+      });
+    });
+
+    it('fires article revalidation on a content edit to an already-published article', async () => {
+      const article = makeArticle({
+        status: ArticleStatus.PUBLISHED,
+        slug: 'my-slug',
+      });
+      setCurrent(article);
+      await service.update(article.id, { title: 'Updated title' });
+      expect(articleRevalidation.notifyArticleChanged).toHaveBeenCalledWith({
+        slug: 'my-slug',
+        categorySlug: 'cat',
+      });
+    });
+
+    it('does not fire article revalidation on a content edit to a draft that was never published', async () => {
+      const article = makeArticle({ status: ArticleStatus.DRAFT });
+      setCurrent(article);
+      await service.update(article.id, { title: 'Updated title' });
+      expect(articleRevalidation.notifyArticleChanged).not.toHaveBeenCalled();
+    });
+
+    it('does not fire article revalidation on a no-op re-send of the same status', async () => {
+      const article = makeArticle({ status: ArticleStatus.PUBLISHED });
+      setCurrent(article);
+      await service.update(article.id, { status: ArticleStatus.PUBLISHED });
+      expect(articleRevalidation.notifyArticleChanged).not.toHaveBeenCalled();
+    });
+
+    it('includes previousSlug when the slug changes', async () => {
+      const article = makeArticle({
+        status: ArticleStatus.DRAFT,
+        slug: 'old-slug',
+      });
+      setCurrent(article);
+      await service.update(article.id, {
+        slug: 'new-slug',
+        status: ArticleStatus.PUBLISHED,
+      });
+      expect(articleRevalidation.notifyArticleChanged).toHaveBeenCalledWith({
+        slug: 'new-slug',
+        categorySlug: 'cat',
+        previousSlug: 'old-slug',
+      });
+    });
   });
 
   describe('remove', () => {
@@ -366,6 +481,26 @@ describe('ArticlesService', () => {
       await expect(service.remove('missing-id')).rejects.toThrow(
         NotFoundException,
       );
+    });
+
+    it('fires article revalidation when deleting a published article', async () => {
+      const article = makeArticle({
+        status: ArticleStatus.PUBLISHED,
+        slug: 'my-slug',
+      });
+      articlesRepo.findOne.mockResolvedValueOnce(article);
+      await service.remove(article.id);
+      expect(articleRevalidation.notifyArticleChanged).toHaveBeenCalledWith({
+        slug: 'my-slug',
+        categorySlug: 'cat',
+      });
+    });
+
+    it('does not fire article revalidation when deleting a draft', async () => {
+      const article = makeArticle({ status: ArticleStatus.DRAFT });
+      articlesRepo.findOne.mockResolvedValueOnce(article);
+      await service.remove(article.id);
+      expect(articleRevalidation.notifyArticleChanged).not.toHaveBeenCalled();
     });
   });
 });
