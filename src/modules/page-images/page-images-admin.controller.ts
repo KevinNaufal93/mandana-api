@@ -1,12 +1,27 @@
-import { Body, Controller, Get, Param, ParseEnumPipe, Patch } from '@nestjs/common';
-import { ApiBearerAuth, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  ParseEnumPipe,
+  Patch,
+} from '@nestjs/common';
+import {
+  ApiBearerAuth,
+  ApiOkResponse,
+  ApiOperation,
+  ApiTags,
+} from '@nestjs/swagger';
 import { RequireModule } from '../../common/decorators/require-module.decorator';
 import { AccessModule } from '../../common/enums/access-module.enum';
 import { PageImagesService } from './page-images.service';
 import { PageImagesMapper } from './page-images.mapper';
 import { PageImageSlot } from './enums/page-image-slot.enum';
 import { UpdatePageImageDto } from './dto/update-page-image.dto';
-import { PageImageListResponseDto, PageImageResponseDto } from './dto/page-images-response.dto';
+import {
+  PageImageListResponseDto,
+  PageImageResponseDto,
+} from './dto/page-images-response.dto';
 
 /**
  * Gated by AccessModule.CONTENT_MEDIA, not a dedicated module — these

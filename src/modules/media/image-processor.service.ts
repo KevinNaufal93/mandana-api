@@ -46,7 +46,16 @@ interface PurposeSpec {
 }
 
 const PURPOSE_SPECS: Record<MediaPurpose, PurposeSpec> = {
-  [MediaPurpose.HERO]: { widths: [768, 1280, 1920], avifWidths: [1280, 1920] },
+  // 2560 added alongside the hero band's move to a locked 2520×900 (2.8:1)
+  // shape shown via object-contain (never cropped): the band can render up
+  // to its full source width on a wide monitor, and 1920 was visibly soft
+  // there (a 1920 screen at 125% OS scaling is 2400 real pixels; a 2560/
+  // retina display more again). Existing uploads keep their old ladder
+  // until re-uploaded — this only changes what a NEW upload generates.
+  [MediaPurpose.HERO]: {
+    widths: [768, 1280, 1920, 2560],
+    avifWidths: [1280, 1920, 2560],
+  },
   // 480/768/1080 ~= 1x/2x/3x DPR at the ~400-430px width this image
   // actually renders at (the <picture> source applies below 1024px, i.e.
   // through tablet-portrait, not just phone-narrow). Every variant here

@@ -5,6 +5,7 @@ import { PageImage } from './entities/page-image.entity';
 export type PageImagePayload = {
   slotKey: string;
   image: MediaImageDto | null;
+  mobileImage: MediaImageDto | null;
 };
 
 /** Same reasoning as SeoMapper/ContentBlocksMapper: entities carry a raw
@@ -17,7 +18,12 @@ export class PageImagesMapper {
   toPayload(row: PageImage): PageImagePayload {
     return {
       slotKey: row.slotKey,
-      image: row.mediaAsset ? this.mediaService.buildImageDto(row.mediaAsset) : null,
+      image: row.mediaAsset
+        ? this.mediaService.buildImageDto(row.mediaAsset)
+        : null,
+      mobileImage: row.mobileMediaAsset
+        ? this.mediaService.buildImageDto(row.mobileMediaAsset)
+        : null,
     };
   }
 }

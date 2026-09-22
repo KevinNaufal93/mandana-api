@@ -1,8 +1,16 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { PageImage } from './entities/page-image.entity';
-import { PAGE_IMAGE_SLOT_KEYS, PageImageSlot } from './enums/page-image-slot.enum';
+import {
+  PAGE_IMAGE_SLOT_KEYS,
+  PageImageSlot,
+  slotSupportsMobileImage,
+} from './enums/page-image-slot.enum';
 import { UpdatePageImageDto } from './dto/update-page-image.dto';
 import { PageImagesCacheService } from './page-images-cache.service';
 import { PageImagesMapper, PageImagePayload } from './page-images.mapper';
@@ -35,9 +43,13 @@ export class PageImagesService {
   /** All rows, in PAGE_IMAGE_SLOTS' declared order, so the admin list is
    *  stable. Auto-seeds any key missing a row. */
   async getSlots(): Promise<PageImage[]> {
-    const existing = await this.repo.find({ relations: { mediaAsset: true } });
+    const existing = await this.repo.find({
+      relations: { mediaAsset: true, mobileMediaAsset: true },
+    });
     const existingKeys = new Set(existing.map((s) => s.slotKey));
-    const missing = PAGE_IMAGE_SLOT_KEYS.filter((key) => !existingKeys.has(key));
+    const missing = PAGE_IMAGE_SLOT_KEYS.filter(
+      (key) => !existingKeys.has(key),
+    );
 
     if (missing.length > 0) {
       await this.repo.insert(missing.map((slotKey) => ({ slotKey })));
@@ -53,7 +65,7 @@ export class PageImagesService {
 
     const existing = await this.repo.findOne({
       where: { slotKey },
-      relations: { mediaAsset: true },
+      relations: { mediaAsset: true, mobileMediaAsset: true },
     });
     if (existing) return existing;
 
@@ -61,29 +73,45 @@ export class PageImagesService {
     return this.repo.save(created);
   }
 
-  async updateSlot(slotKey: PageImageSlot, dto: UpdatePageImageDto): Promise<PageImage> {
+  async updateSlot(
+    slotKey: PageImageSlot,
+    dto: UpdatePageImageDto,
+  ): Promise<PageImage> {
     // Ensures the row exists (auto-seeds if missing) before the update
     // below, which would otherwise silently affect zero rows.
     await this.getSlot(slotKey);
 
+    if (dto.mobileMediaAssetId && !slotSupportsMobileImage(slotKey)) {
+      throw new BadRequestException(
+        `mobileMediaAssetId is not valid on slot "${slotKey}" — only slots with ` +
+          'supportsMobileImage: true (PageImageSlotMeta) accept a mobile image.',
+      );
+    }
+
     // A raw column update, not load-mutate-save: getSlot() above loads
-    // the `mediaAsset` relation, and saving an entity that still carries
-    // that stale relation object alongside a directly-assigned
-    // `mediaAssetId` lets TypeORM re-derive the FK from the relation on
-    // write, silently discarding an explicit `null` clear. `repo.update()`
-    // touches only the column, sidestepping that entirely — confirmed
-    // live: the load-mutate-save version passed every automated test
-    // (which mocks the repository) but failed to actually clear a slot
-    // against a real database.
+    // the `mediaAsset`/`mobileMediaAsset` relations, and saving an entity
+    // that still carries those stale relation objects alongside a
+    // directly-assigned `mediaAssetId`/`mobileMediaAssetId` lets TypeORM
+    // re-derive the FK from the relation on write, silently discarding an
+    // explicit `null` clear. `repo.update()` touches only the column,
+    // sidestepping that entirely — confirmed live: the load-mutate-save
+    // version passed every automated test (which mocks the repository)
+    // but failed to actually clear a slot against a real database.
     if (dto.mediaAssetId !== undefined) {
       await this.repo.update({ slotKey }, { mediaAssetId: dto.mediaAssetId });
+    }
+    if (dto.mobileMediaAssetId !== undefined) {
+      await this.repo.update(
+        { slotKey },
+        { mobileMediaAssetId: dto.mobileMediaAssetId },
+      );
     }
 
     await this.cache.bust();
 
     return this.repo.findOneOrFail({
       where: { slotKey },
-      relations: { mediaAsset: true },
+      relations: { mediaAsset: true, mobileMediaAsset: true },
     });
   }
 

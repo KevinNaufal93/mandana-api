@@ -10,4 +10,20 @@ export class UpdatePageImageDto {
   @IsOptional()
   @IsUUID()
   mediaAssetId?: string | null;
+
+  // Only valid on a slot with supportsMobileImage: true
+  // (PageImageSlotMeta) — PageImagesService.updateSlot() 400s otherwise.
+  // `null` explicitly clears back to "primary image renders at every
+  // width". Must be uploaded with purpose=hero_mobile. Mirrors
+  // UpdateContentBlockDto.mobileMediaAssetId.
+  @ApiPropertyOptional({
+    nullable: true,
+    description:
+      'Media asset UUID for the mobile (<1024px) crop, uploaded with purpose=hero_mobile. ' +
+      'Only valid on a slot with supportsMobileImage: true — 400 otherwise. ' +
+      'Send null to clear it back to the primary image rendering at every width.',
+  })
+  @IsOptional()
+  @IsUUID()
+  mobileMediaAssetId?: string | null;
 }

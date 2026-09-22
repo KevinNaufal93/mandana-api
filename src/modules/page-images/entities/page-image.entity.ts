@@ -25,4 +25,17 @@ export class PageImage extends BaseEntity {
 
   @Column({ name: 'media_asset_id', nullable: true, type: 'uuid' })
   mediaAssetId!: string | null;
+
+  /** A separately composed crop for viewports below ~1024px — only
+   *  meaningful when this slot's `PageImageSlotMeta.supportsMobileImage`
+   *  is true (`page-image-slot.enum.ts`); `PageImagesService.updateSlot()`
+   *  rejects setting it on any other slot. Left unset, the primary image
+   *  above renders at every width, exactly as before this column existed.
+   *  Mirrors `ContentBlock.mobileMediaAsset`. */
+  @ManyToOne(() => MediaAsset, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'mobile_media_asset_id' })
+  mobileMediaAsset!: MediaAsset | null;
+
+  @Column({ name: 'mobile_media_asset_id', nullable: true, type: 'uuid' })
+  mobileMediaAssetId!: string | null;
 }

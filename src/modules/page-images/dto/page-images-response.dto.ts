@@ -24,6 +24,10 @@ export class PageImageDto {
   @ApiProperty({ enum: PageImageSlot }) slotKey!: PageImageSlot;
   @ApiPropertyOptional({ nullable: true, type: PageImageImageDto })
   image!: PageImageImageDto | null;
+  /** Null on every slot except the two with supportsMobileImage: true
+   *  (PageImageSlotMeta) — and null there too until an admin uploads one. */
+  @ApiPropertyOptional({ nullable: true, type: PageImageImageDto })
+  mobileImage!: PageImageImageDto | null;
 }
 
 export class PageImageListResponseDto {

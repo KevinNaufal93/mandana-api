@@ -25,6 +25,18 @@ export interface PageImageSlotMeta {
   label: string;
   /** Site-relative path, for reference only. */
   path: string;
+  /** Whether this slot accepts a second, mobile-only image
+   *  (`mobile_media_asset_id`) — only the two full-bleed fixed-height
+   *  bands (`about_hero`, `home_property_valuation`) need one: they're
+   *  locked to a fixed desktop shape and shown whole via object-contain,
+   *  so below ~1024px a wide banner would letterbox rather than fill the
+   *  (taller, narrower) band without its own composition. The other three
+   *  slots are fixed aspect-ratio boxes that crop by design at every
+   *  width, so one image already covers every screen. Defaults to false
+   *  when omitted — see `PageImagesService.updateSlot()` for the
+   *  enforcement (`page_images.slot_key` is `varchar`, not an enum, so
+   *  this flag — not a DB CHECK — is the single source of truth). */
+  supportsMobileImage?: boolean;
 }
 
 export const PAGE_IMAGE_SLOTS: PageImageSlotMeta[] = [
@@ -33,6 +45,7 @@ export const PAGE_IMAGE_SLOTS: PageImageSlotMeta[] = [
     pageKey: 'about',
     label: 'Gambar hero',
     path: '/tentang-kami',
+    supportsMobileImage: true,
   },
   {
     key: PageImageSlot.ABOUT_STORY,
@@ -51,6 +64,7 @@ export const PAGE_IMAGE_SLOTS: PageImageSlotMeta[] = [
     pageKey: 'home',
     label: 'Gambar "Ingin tahu berapa nilai properti Anda?"',
     path: '/',
+    supportsMobileImage: true,
   },
   {
     key: PageImageSlot.HOME_HELP_CTA,
@@ -59,5 +73,14 @@ export const PAGE_IMAGE_SLOTS: PageImageSlotMeta[] = [
     path: '/',
   },
 ];
+
+/** Looked up by slotKey in PageImagesService — see this interface's own
+ *  supportsMobileImage doc for why an application-level lookup, not a DB
+ *  CHECK, is the enforcement point. */
+export function slotSupportsMobileImage(key: PageImageSlot): boolean {
+  return (
+    PAGE_IMAGE_SLOTS.find((s) => s.key === key)?.supportsMobileImage ?? false
+  );
+}
 
 export const PAGE_IMAGE_SLOT_KEYS = PAGE_IMAGE_SLOTS.map((s) => s.key);
