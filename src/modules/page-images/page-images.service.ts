@@ -9,6 +9,7 @@ import { PageImage } from './entities/page-image.entity';
 import {
   PAGE_IMAGE_SLOT_KEYS,
   PageImageSlot,
+  slotSupportsHeading,
   slotSupportsMobileImage,
 } from './enums/page-image-slot.enum';
 import { UpdatePageImageDto } from './dto/update-page-image.dto';
@@ -88,6 +89,20 @@ export class PageImagesService {
       );
     }
 
+    // A non-empty heading/subtitle or imageOnly: true is only meaningful
+    // on a slot whose web component actually renders configurable text
+    // (PageImageSlotMeta.supportsHeading) — same truthy-only guard as
+    // mobileMediaAssetId above, so `null`/`false` (a clear) is always
+    // allowed even on a non-supporting slot.
+    const settingHeadingText =
+      Boolean(dto.heading) || Boolean(dto.subtitle) || dto.imageOnly === true;
+    if (settingHeadingText && !slotSupportsHeading(slotKey)) {
+      throw new BadRequestException(
+        `heading/subtitle/imageOnly is not valid on slot "${slotKey}" — only slots with ` +
+          'supportsHeading: true (PageImageSlotMeta) accept configurable text.',
+      );
+    }
+
     // A raw column update, not load-mutate-save: getSlot() above loads
     // the `mediaAsset`/`mobileMediaAsset` relations, and saving an entity
     // that still carries those stale relation objects alongside a
@@ -105,6 +120,15 @@ export class PageImagesService {
         { slotKey },
         { mobileMediaAssetId: dto.mobileMediaAssetId },
       );
+    }
+    if (dto.heading !== undefined) {
+      await this.repo.update({ slotKey }, { heading: dto.heading });
+    }
+    if (dto.subtitle !== undefined) {
+      await this.repo.update({ slotKey }, { subtitle: dto.subtitle });
+    }
+    if (dto.imageOnly !== undefined) {
+      await this.repo.update({ slotKey }, { imageOnly: dto.imageOnly });
     }
 
     await this.cache.bust();

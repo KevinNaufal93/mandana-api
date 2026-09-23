@@ -26,6 +26,9 @@ function makeSlot(overrides: Partial<PageImage> = {}): PageImage {
     mediaAssetId: null,
     mobileMediaAsset: null,
     mobileMediaAssetId: null,
+    heading: null,
+    subtitle: null,
+    imageOnly: false,
     ...overrides,
   };
 }
@@ -281,6 +284,115 @@ describe('PageImagesService', () => {
         { mobileMediaAssetId: null },
       );
     });
+
+    // ABOUT_HERO has supportsHeading: true; ABOUT_STORY doesn't — see
+    // PAGE_IMAGE_SLOTS in page-image-slot.enum.ts.
+    it('sets heading/subtitle/imageOnly via raw column updates on a slot that supports heading', async () => {
+      repo.findOne.mockResolvedValue(
+        makeSlot({ slotKey: PageImageSlot.ABOUT_HERO }),
+      );
+      repo.findOneOrFail.mockResolvedValue(
+        makeSlot({
+          slotKey: PageImageSlot.ABOUT_HERO,
+          heading: 'Judul baru',
+          subtitle: 'Subjudul baru',
+          imageOnly: true,
+        }),
+      );
+
+      const result = await service.updateSlot(PageImageSlot.ABOUT_HERO, {
+        heading: 'Judul baru',
+        subtitle: 'Subjudul baru',
+        imageOnly: true,
+      });
+
+      expect(repo.update).toHaveBeenCalledWith(
+        { slotKey: PageImageSlot.ABOUT_HERO },
+        { heading: 'Judul baru' },
+      );
+      expect(repo.update).toHaveBeenCalledWith(
+        { slotKey: PageImageSlot.ABOUT_HERO },
+        { subtitle: 'Subjudul baru' },
+      );
+      expect(repo.update).toHaveBeenCalledWith(
+        { slotKey: PageImageSlot.ABOUT_HERO },
+        { imageOnly: true },
+      );
+      expect(result.imageOnly).toBe(true);
+    });
+
+    it('clears heading/subtitle back to null and imageOnly back to false when explicitly sent', async () => {
+      repo.findOne.mockResolvedValue(
+        makeSlot({
+          slotKey: PageImageSlot.ABOUT_HERO,
+          heading: 'Judul baru',
+          imageOnly: true,
+        }),
+      );
+      repo.findOneOrFail.mockResolvedValue(
+        makeSlot({ slotKey: PageImageSlot.ABOUT_HERO }),
+      );
+
+      await service.updateSlot(PageImageSlot.ABOUT_HERO, {
+        heading: null,
+        subtitle: null,
+        imageOnly: false,
+      });
+
+      expect(repo.update).toHaveBeenCalledWith(
+        { slotKey: PageImageSlot.ABOUT_HERO },
+        { heading: null },
+      );
+      expect(repo.update).toHaveBeenCalledWith(
+        { slotKey: PageImageSlot.ABOUT_HERO },
+        { imageOnly: false },
+      );
+    });
+
+    it('rejects a non-empty heading on a slot without supportsHeading', async () => {
+      repo.findOne.mockResolvedValue(
+        makeSlot({ slotKey: PageImageSlot.ABOUT_STORY }),
+      );
+
+      await expect(
+        service.updateSlot(PageImageSlot.ABOUT_STORY, { heading: 'Nope' }),
+      ).rejects.toThrow(BadRequestException);
+      expect(repo.update).not.toHaveBeenCalled();
+    });
+
+    it('rejects imageOnly: true on a slot without supportsHeading', async () => {
+      repo.findOne.mockResolvedValue(
+        makeSlot({ slotKey: PageImageSlot.ABOUT_STORY }),
+      );
+
+      await expect(
+        service.updateSlot(PageImageSlot.ABOUT_STORY, { imageOnly: true }),
+      ).rejects.toThrow(BadRequestException);
+      expect(repo.update).not.toHaveBeenCalled();
+    });
+
+    it('allows imageOnly: false and null heading/subtitle (a no-op clear) even on a slot without supportsHeading', async () => {
+      repo.findOne.mockResolvedValue(
+        makeSlot({ slotKey: PageImageSlot.ABOUT_STORY }),
+      );
+      repo.findOneOrFail.mockResolvedValue(
+        makeSlot({ slotKey: PageImageSlot.ABOUT_STORY }),
+      );
+
+      await service.updateSlot(PageImageSlot.ABOUT_STORY, {
+        heading: null,
+        imageOnly: false,
+      });
+
+      expect(repo.update).toHaveBeenCalledWith(
+        { slotKey: PageImageSlot.ABOUT_STORY },
+        { heading: null },
+      );
+      expect(repo.update).toHaveBeenCalledWith(
+        { slotKey: PageImageSlot.ABOUT_STORY },
+        { imageOnly: false },
+      );
+    });
   });
 
   describe('getPublicPayload', () => {
@@ -309,6 +421,9 @@ describe('PageImagesService', () => {
           slotKey,
           image: null,
           mobileImage: null,
+          heading: null,
+          subtitle: null,
+          imageOnly: false,
         })),
       );
       expect(cache.set).toHaveBeenCalledWith(result);

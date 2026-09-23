@@ -6,6 +6,9 @@ export type PageImagePayload = {
   slotKey: string;
   image: MediaImageDto | null;
   mobileImage: MediaImageDto | null;
+  heading: string | null;
+  subtitle: string | null;
+  imageOnly: boolean;
 };
 
 /** Same reasoning as SeoMapper/ContentBlocksMapper: entities carry a raw
@@ -24,6 +27,9 @@ export class PageImagesMapper {
       mobileImage: row.mobileMediaAsset
         ? this.mediaService.buildImageDto(row.mobileMediaAsset)
         : null,
+      heading: row.heading,
+      subtitle: row.subtitle,
+      imageOnly: row.imageOnly,
     };
   }
 }

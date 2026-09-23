@@ -28,6 +28,14 @@ export class PageImageDto {
    *  (PageImageSlotMeta) — and null there too until an admin uploads one. */
   @ApiPropertyOptional({ nullable: true, type: PageImageImageDto })
   mobileImage!: PageImageImageDto | null;
+  /** Only ever set on the slot(s) with supportsHeading: true
+   *  (currently `about_hero`) — null means "use the web component's own
+   *  hardcoded copy". */
+  @ApiPropertyOptional({ nullable: true, type: String })
+  heading!: string | null;
+  @ApiPropertyOptional({ nullable: true, type: String })
+  subtitle!: string | null;
+  @ApiProperty() imageOnly!: boolean;
 }
 
 export class PageImageListResponseDto {

@@ -37,6 +37,18 @@ export interface PageImageSlotMeta {
    *  enforcement (`page_images.slot_key` is `varchar`, not an enum, so
    *  this flag — not a DB CHECK — is the single source of truth). */
   supportsMobileImage?: boolean;
+  /** Whether this slot's web component renders an admin-configurable
+   *  heading/subtitle over the photo, with an `imageOnly` toggle to
+   *  suppress them — currently `about_hero` only, the one slot whose
+   *  component (`components/about/about-hero.tsx`) has always shown a
+   *  hardcoded H1 + paragraph, with no way to change the words or to
+   *  hide them for a banner-style upload with its own baked-in text
+   *  (the exact problem `content_blocks` hero slides solved with
+   *  `imageOnly`). The other four slots' web components have no
+   *  equivalent hardcoded text to make configurable. Defaults to false —
+   *  see `PageImagesService.updateSlot()` for the enforcement, same
+   *  application-level-flag reasoning as `supportsMobileImage`. */
+  supportsHeading?: boolean;
 }
 
 export const PAGE_IMAGE_SLOTS: PageImageSlotMeta[] = [
@@ -46,6 +58,7 @@ export const PAGE_IMAGE_SLOTS: PageImageSlotMeta[] = [
     label: 'Gambar hero',
     path: '/tentang-kami',
     supportsMobileImage: true,
+    supportsHeading: true,
   },
   {
     key: PageImageSlot.ABOUT_STORY,
@@ -81,6 +94,10 @@ export function slotSupportsMobileImage(key: PageImageSlot): boolean {
   return (
     PAGE_IMAGE_SLOTS.find((s) => s.key === key)?.supportsMobileImage ?? false
   );
+}
+
+export function slotSupportsHeading(key: PageImageSlot): boolean {
+  return PAGE_IMAGE_SLOTS.find((s) => s.key === key)?.supportsHeading ?? false;
 }
 
 export const PAGE_IMAGE_SLOT_KEYS = PAGE_IMAGE_SLOTS.map((s) => s.key);

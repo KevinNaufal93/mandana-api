@@ -38,4 +38,23 @@ export class PageImage extends BaseEntity {
 
   @Column({ name: 'mobile_media_asset_id', nullable: true, type: 'uuid' })
   mobileMediaAssetId!: string | null;
+
+  /** Admin-configurable headline text, only meaningful when this slot's
+   *  `PageImageSlotMeta.supportsHeading` is true (currently `about_hero`
+   *  only) — its web component has a hardcoded H1/paragraph over the
+   *  photo; `null` keeps rendering that hardcoded copy. Mirrors
+   *  `ContentBlock.title`/`subtitle`. */
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  heading!: string | null;
+
+  @Column({ type: 'varchar', length: 500, nullable: true })
+  subtitle!: string | null;
+
+  /** When true, suppress the heading/subtitle HTML overlay entirely —
+   *  for a banner-style upload that already has its own text baked into
+   *  the artwork. Mirrors `ContentBlock.imageOnly`. Defaults to false:
+   *  every existing row keeps showing the hardcoded copy until an admin
+   *  opts in. */
+  @Column({ name: 'image_only', type: 'boolean', default: false })
+  imageOnly!: boolean;
 }
