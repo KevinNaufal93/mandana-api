@@ -37,7 +37,9 @@ export class CreateContentBlockDto {
   @ApiPropertyOptional({
     example: 'Lihat Properti',
     description:
-      "Hero or promo card: the CTA button's label. Ignored for service_card.",
+      "Hero or promo card: the CTA button's label. Ignored for service_card. " +
+      'Only shown as a button when `link` is also set AND the block is not ' +
+      '`imageOnly` — see `link`.',
   })
   @IsOptional()
   @IsString()
@@ -47,7 +49,12 @@ export class CreateContentBlockDto {
   @ApiPropertyOptional({
     example: '/properties?listingType=sale',
     description:
-      'Hero: the CTA target. Service card: its href. Promo card: its CTA target. Same field.',
+      'Hero: the CTA target. Service card: its href. Promo card: its CTA ' +
+      'target. Same field. Resolution on the public site: no `link` → ' +
+      'nothing is clickable; `link` set and (`ctaText` empty or ' +
+      '`imageOnly` true) → the whole image/card is clickable; `link` and ' +
+      '`ctaText` both set and `imageOnly` false → a button carries the ' +
+      'link and the image itself is not clickable.',
   })
   @IsOptional()
   @IsString()
@@ -98,7 +105,11 @@ export class CreateContentBlockDto {
   @ApiPropertyOptional({
     default: false,
     description:
-      'Hero, service card, or promo card: when true, the public site renders just the image (the artwork already has the title/description baked in) and skips the text overlay. Requires mediaAssetId.',
+      'Hero, service card, or promo card: when true, the public site renders ' +
+      'just the image (the artwork already has the title/description baked ' +
+      'in) and skips the title/subtitle text overlay. Requires mediaAssetId. ' +
+      "Does NOT suppress the CTA link — see `link`'s description for how " +
+      'imageOnly affects whether the image or a button ends up clickable.',
   })
   @IsOptional()
   @IsBoolean()

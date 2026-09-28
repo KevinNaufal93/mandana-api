@@ -57,6 +57,13 @@ is **no** `/properties/featured` endpoint — use this instead.
         }
       ]
     },
+    // CTA resolution (client-side — the API just returns the three fields
+    // as stored, and never nulls one out because of another):
+    //   no ctaLink                                  → nothing clickable, no button
+    //   ctaLink set, ctaText blank OR imageOnly true → whole slide is clickable
+    //   ctaLink set, ctaText set, imageOnly false    → a button carries ctaLink
+    // imageOnly only ever hides the title/subtitle text — it never hides
+    // the CTA. See docs/content-blocks-admin-integration.md §2a.
     "collections": [
       {
         "id": "uuid", "slug": "bsd-city", "name": "BSD City", "description": "string | null",

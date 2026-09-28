@@ -168,6 +168,49 @@ describe('ContentBlocksService', () => {
     });
   });
 
+  describe('create — subtitle/ctaText/link normalization', () => {
+    const baseDto = (
+      overrides: Partial<CreateContentBlockDto> = {},
+    ): CreateContentBlockDto => ({
+      type: ContentBlockType.HERO,
+      title: 'Slide',
+      mediaAssetId: 'asset-1',
+      ...overrides,
+    });
+
+    it('trims whitespace around a link', async () => {
+      const saved = await service.create(baseDto({ link: '  /x  ' }));
+      expect(saved.link).toBe('/x');
+    });
+
+    it.each([
+      ['subtitle' as const, undefined],
+      ['subtitle' as const, ''],
+      ['subtitle' as const, '   '],
+      ['ctaText' as const, undefined],
+      ['ctaText' as const, ''],
+      ['ctaText' as const, '   '],
+      ['link' as const, undefined],
+      ['link' as const, ''],
+      ['link' as const, '   '],
+    ])('normalizes %s=%p to null', async (field, value) => {
+      const saved = await service.create(baseDto({ [field]: value }));
+      expect(saved[field]).toBeNull();
+    });
+
+    it('keeps ctaText and link on an imageOnly block', async () => {
+      const saved = await service.create(
+        baseDto({
+          imageOnly: true,
+          ctaText: 'Lihat Properti',
+          link: '/properties',
+        }),
+      );
+      expect(saved.ctaText).toBe('Lihat Properti');
+      expect(saved.link).toBe('/properties');
+    });
+  });
+
   describe('create — mobileMediaAssetId', () => {
     const baseDto = (
       overrides: Partial<CreateContentBlockDto> = {},
@@ -262,6 +305,65 @@ describe('ContentBlocksService', () => {
         title: 'New title',
       });
       expect(saved.listingTypeScope).toEqual([ListingType.SALE]);
+    });
+  });
+
+  describe('update — subtitle/ctaText/link normalization', () => {
+    it.each([[null], [''], ['   ']])(
+      'clears link when patched with %p',
+      async (value) => {
+        repo.findOne.mockResolvedValue(
+          makeBlock({ link: '/old-link', ctaText: 'Old' }),
+        );
+
+        const saved = await service.update('block-1', { link: value });
+        expect(saved.link).toBeNull();
+        expect(repo.update).toHaveBeenCalledWith(
+          'block-1',
+          expect.objectContaining({ link: null }),
+        );
+      },
+    );
+
+    it('trims ctaText on update', async () => {
+      repo.findOne.mockResolvedValue(makeBlock());
+
+      const saved = await service.update('block-1', {
+        ctaText: '  Lihat Properti  ',
+      });
+      expect(saved.ctaText).toBe('Lihat Properti');
+    });
+
+    it('leaves subtitle, ctaText and link untouched when the keys are omitted', async () => {
+      repo.findOne.mockResolvedValue(
+        makeBlock({
+          subtitle: 'Existing subtitle',
+          ctaText: 'Existing CTA',
+          link: '/existing-link',
+        }),
+      );
+
+      const saved = await service.update('block-1', { title: 'New title' });
+      expect(saved.subtitle).toBe('Existing subtitle');
+      expect(saved.ctaText).toBe('Existing CTA');
+      expect(saved.link).toBe('/existing-link');
+    });
+
+    it('keeps ctaText and link when only imageOnly is patched to true', async () => {
+      repo.findOne.mockResolvedValue(
+        makeBlock({
+          type: ContentBlockType.HERO,
+          mediaAssetId: 'asset-1',
+          ctaText: 'Lihat Properti',
+          link: '/properties',
+          imageOnly: false,
+        }),
+      );
+
+      const saved = await service.update('block-1', { imageOnly: true });
+      expect(saved.imageOnly).toBe(true);
+      expect(saved.ctaText).toBe('Lihat Properti');
+      expect(saved.link).toBe('/properties');
     });
   });
 

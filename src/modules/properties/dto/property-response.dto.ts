@@ -82,17 +82,31 @@ export class PropertyPromoCardDto {
     description: "The card's body copy (renamed from the admin's `subtitle`).",
   })
   body!: string | null;
-  @ApiPropertyOptional({ nullable: true, type: String }) ctaText!:
-    string | null;
   @ApiPropertyOptional({
     nullable: true,
     type: String,
-    description: "The card's CTA target (renamed from the admin's `link`).",
+    description:
+      "The CTA button's label. Shown as a button only when `ctaLink` is " +
+      'also set AND `imageOnly` is false — see `ctaLink`.',
+  })
+  ctaText!: string | null;
+  @ApiPropertyOptional({
+    nullable: true,
+    type: String,
+    description:
+      "The card's CTA target (renamed from the admin's `link`). " +
+      'Resolution: no `ctaLink` → nothing is clickable; `ctaLink` set and ' +
+      '(`ctaText` blank or `imageOnly` true) → the whole card is clickable; ' +
+      '`ctaLink` and `ctaText` both set and `imageOnly` false → a button ' +
+      'carries the link and the card itself is not clickable.',
   })
   ctaLink!: string | null;
   @ApiProperty({
     description:
-      'When true, the artwork already carries the copy — render the image alone, no title/body/button overlay.',
+      'When true, the artwork already carries the title/body copy — render ' +
+      'the image alone, no title/body/button overlay. Does NOT suppress ' +
+      "`ctaLink`: when set, the whole image becomes clickable — see ctaLink's " +
+      'description.',
   })
   imageOnly!: boolean;
   @ApiProperty() sortOrder!: number;

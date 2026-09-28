@@ -39,10 +39,36 @@ several, whichever reads better; every write just needs the right
 | `ctaText` | CTA button label | *unused — omit it* | CTA button label |
 | `link` | CTA target, e.g. `/properties?listingType=sale` | Card href, e.g. `/moving` | CTA target — internal path, `https://`, or `wa.me/...` |
 | `mediaAssetId` | **Required** — a hero with no image is invalid | Optional — the 4 seeded cards ship with none | Optional |
-| `imageOnly` | Optional, default `false`. When `true`, the public homepage renders just the slide's image and skips the title/subtitle/CTA text overlay — the artwork already has that copy baked in. Requires `mediaAssetId` (already required for hero, so this only matters if you're also clearing the image). | Optional, default `false`. When `true`, the public homepage renders just the card's image and skips the title/description text overlay. Requires `mediaAssetId`. | Optional, default `false`. Same rule — requires `mediaAssetId`. |
+| `imageOnly` | Optional, default `false`. When `true`, the public site renders just the slide's image and skips the title/subtitle text overlay — the artwork already has that copy baked in. Requires `mediaAssetId` (already required for hero, so this only matters if you're also clearing the image). **Does not suppress the CTA link — see §2a.** | Optional, default `false`. When `true`, the public site renders just the card's image and skips the title/description text overlay. Requires `mediaAssetId`. | Optional, default `false`. Same rule — requires `mediaAssetId`. Also does not suppress the CTA link — see §2a. |
 | `listingTypeScope` | *unused — 400 if set* | *unused — 400 if set* | Optional — see §4b |
 
 `sortOrder` and `isActive` apply to all three — see §6.
+
+### 2a. How the public site resolves the CTA (hero & promo card)
+
+`ctaText`, `link`, and `imageOnly` are independent fields — the backend
+stores and returns exactly what you send, and never nulls one out because
+of another. `imageOnly` only ever affects the *title/subtitle* overlay.
+The public site (mandana-web) resolves the three into one of three
+outcomes, after trimming both strings:
+
+1. **`link` blank/absent → nothing is clickable.** No button, no
+   whole-image link, regardless of `ctaText` or `imageOnly`.
+2. **`link` set, and (`ctaText` blank OR `imageOnly` true) → the whole
+   image (hero slide / promo card) is clickable**, linking to `link`. This
+   is the case that used to be broken for image-only hero slides — it now
+   works the same way an image-only promo card already did.
+3. **`link` set, `ctaText` set, `imageOnly` false → a button** labeled
+   `ctaText` carries the link; the image itself is not a separate link.
+
+So: to make an image-only slide clickable, set `link` and leave `ctaText`
+empty (or set it — either way it renders as a whole-image link, not a
+button, since `imageOnly` is true). To clear a slide's CTA entirely on an
+existing row, `PATCH` with `link: null` (or `""` — both collapse to NULL
+server-side; see §3).
+
+Service cards have no `ctaText` field at all, so they always follow rule
+2: a `link` makes the whole card clickable, and there's never a button.
 
 ## 3. Endpoints
 
@@ -98,6 +124,12 @@ card's icon (rejected with 400 on a hero — see §4). `type` itself is
 patchable, but converting a card into a hero (or back) is rarely what
 you actually want — the hero-requires-image rule is checked against the
 row's *resulting* state, whichever fields the request included.
+
+**Clearing `subtitle`/`ctaText`/`link`:** pass `null` or `""` explicitly
+— either clears the field (both collapse to NULL server-side, after
+trimming). As with every other field, *omitting* the key entirely leaves
+the current value untouched; it is not a way to clear it. Whichever of
+`null`/`""` you send, the value round-trips as `null` in the response.
 
 `DELETE /:id` → **204**. This removes the content-block row only — the
 underlying media asset is untouched and stays in the library (§7).

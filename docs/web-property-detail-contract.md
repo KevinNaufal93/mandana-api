@@ -262,8 +262,13 @@ separate "has promo" flag exists or is needed.
   failed to build server-side; a card is simply omitted from the array in the latter
   case if `imageOnly` is true (an image-only card with no image would render as
   nothing at all).
-- `imageOnly: true` means the artwork already carries the title/body/button copy —
-  render just the `image`, no text overlay.
+- `imageOnly: true` means the artwork already carries the title/body copy —
+  render just the `image`, no title/body text overlay. It does **not** suppress
+  `ctaLink`: CTA resolution is the same on a promo card as on a hero slide (see
+  docs/content-blocks-admin-integration.md §2a) — no `ctaLink` → nothing
+  clickable; `ctaLink` set and (`ctaText` blank or `imageOnly` true) → the whole
+  card links to `ctaLink`; `ctaLink` and `ctaText` both set and `imageOnly`
+  false → a button carries the link instead.
 - Same `image` shape as everywhere else in this response (`agent.photo`, `images[]`).
 - Not a breaking change — ships independently of when you start rendering it; type
   the field optional on your side if you want to deploy before or after this lands.

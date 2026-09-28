@@ -76,12 +76,26 @@ export class ContentBlock extends BaseEntity {
   subtitle!: string | null;
 
   /** Hero or promo-card CTA button label. Unused (and ignored by the FE)
-   * for `service_card`. */
+   * for `service_card`. Trimmed and collapsed to NULL when blank by
+   * ContentBlocksService.normalizeText() — never stored as `""`. Whether
+   * this renders as a button depends on `link` and `imageOnly` too — see
+   * `link`'s doc comment for the full resolution. */
   @Column({ name: 'cta_text', type: 'varchar', length: 100, nullable: true })
   ctaText!: string | null;
 
   /** Hero's CTA target, a service card's href, or a promo card's CTA
-   * target — same role. */
+   * target — same role. Trimmed and collapsed to NULL when blank (same
+   * normalizeText() as ctaText above) — a blank link is never treated as
+   * "has a link".
+   *
+   * Client-side resolution (hero and promo card; a service card has no
+   * `ctaText` so it always falls in the "whole image" case): no `link` →
+   * nothing clickable; `link` set and (`ctaText` blank OR `imageOnly`
+   * true) → the whole image/card is clickable; `link` and `ctaText` both
+   * set and `imageOnly` false → a button carries the link instead. The
+   * backend does not enforce this resolution — it always returns whatever
+   * `ctaText`/`link`/`imageOnly` are stored, and mandana-web decides which
+   * of the three to render. */
   @Column({ type: 'varchar', length: 500, nullable: true })
   link!: string | null;
 
@@ -93,10 +107,13 @@ export class ContentBlock extends BaseEntity {
 
   /** Hero, service card, or promo card: when true, the public site renders
    *  just the image — no title/subtitle text overlay — because the artwork
-   *  already has that copy baked in. Enforced (alongside `mediaAssetId`) by
-   *  the DB CHECK constraint `chk_content_blocks_image_only_requires_media`
-   *  in the owning migration: an image-only block with no image would
-   *  render as nothing at all. For a hero row this is redundant with
+   *  already has that copy baked in. It does NOT suppress the CTA link:
+   *  see `link`'s doc comment for how this flag interacts with `ctaText`
+   *  to decide whether the whole image ends up clickable or a button does.
+   *  Enforced (alongside `mediaAssetId`) by the DB CHECK constraint
+   *  `chk_content_blocks_image_only_requires_media` in the owning
+   *  migration: an image-only block with no image would render as nothing
+   *  at all. For a hero row this is redundant with
    *  `chk_content_blocks_hero_requires_media` (a hero always has
    *  `mediaAssetId` set), but keeping the check type-agnostic avoids two
    *  near-identical constraints. */

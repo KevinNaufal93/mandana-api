@@ -4,21 +4,26 @@ import {
   IsArray,
   IsEnum,
   IsOptional,
+  IsString,
   IsUUID,
+  MaxLength,
 } from 'class-validator';
 import { CreateContentBlockDto } from './create-content-block.dto';
 import { ListingType } from '../../properties/enums/listing-type.enum';
 
-// mediaAssetId, mobileMediaAssetId, and listingTypeScope are omitted from
-// the base before PartialType so each can be redeclared below as
-// nullable (a plain `Partial<Create...>` only widens required ->
-// optional, not optional-X -> optional-nullable — TypeScript rejects
-// redeclaring an inherited property with a wider type).
+// mediaAssetId, mobileMediaAssetId, listingTypeScope, subtitle, ctaText and
+// link are omitted from the base before PartialType so each can be
+// redeclared below as nullable (a plain `Partial<Create...>` only widens
+// required -> optional, not optional-X -> optional-nullable — TypeScript
+// rejects redeclaring an inherited property with a wider type).
 export class UpdateContentBlockDto extends PartialType(
   OmitType(CreateContentBlockDto, [
     'mediaAssetId',
     'mobileMediaAssetId',
     'listingTypeScope',
+    'subtitle',
+    'ctaText',
+    'link',
   ] as const),
 ) {
   // `null` is accepted to explicitly clear an existing block's image.
@@ -52,4 +57,26 @@ export class UpdateContentBlockDto extends PartialType(
   @ArrayUnique()
   @IsEnum(ListingType, { each: true })
   listingTypeScope?: ListingType[] | null;
+
+  // `null` (like `""`, which the service also collapses to NULL —
+  // ContentBlocksService.normalizeText()) explicitly clears an existing
+  // block's subtitle/ctaText/link. Omitting the key entirely leaves the
+  // current value untouched — same convention as mediaAssetId above.
+  @ApiPropertyOptional({ nullable: true, type: String, maxLength: 500 })
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  subtitle?: string | null;
+
+  @ApiPropertyOptional({ nullable: true, type: String, maxLength: 100 })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  ctaText?: string | null;
+
+  @ApiPropertyOptional({ nullable: true, type: String, maxLength: 500 })
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  link?: string | null;
 }

@@ -91,6 +91,16 @@ export class ContentBlocksService {
     return scope;
   }
 
+  /** `subtitle`/`ctaText`/`link`: trim, then collapse blank to NULL — an
+   *  admin-submitted `""` or whitespace-only value should never count as
+   *  "set" any more than an omitted field does. Caller is responsible for
+   *  the `!== undefined` "was this key even sent" check, same division of
+   *  labor as normalizeScope. */
+  private normalizeText(value: string | null | undefined): string | null {
+    const trimmed = value?.trim();
+    return trimmed ? trimmed : null;
+  }
+
   async create(dto: CreateContentBlockDto): Promise<ContentBlock> {
     // Belt-and-suspenders with the DTO's @ValidateIf + the DB CHECK
     // constraint (chk_content_blocks_hero_requires_media): catching it
@@ -134,9 +144,9 @@ export class ContentBlocksService {
       mediaAssetId: dto.mediaAssetId ?? null,
       mobileMediaAssetId: dto.mobileMediaAssetId ?? null,
       title: dto.title,
-      subtitle: dto.subtitle ?? null,
-      ctaText: dto.ctaText ?? null,
-      link: dto.link ?? null,
+      subtitle: this.normalizeText(dto.subtitle),
+      ctaText: this.normalizeText(dto.ctaText),
+      link: this.normalizeText(dto.link),
       sortOrder: dto.sortOrder ?? 0,
       isActive: dto.isActive ?? true,
       imageOnly: dto.imageOnly ?? false,
@@ -205,9 +215,13 @@ export class ContentBlocksService {
         mobileMediaAssetId: dto.mobileMediaAssetId ?? null,
       }),
       ...(dto.title !== undefined && { title: dto.title }),
-      ...(dto.subtitle !== undefined && { subtitle: dto.subtitle ?? null }),
-      ...(dto.ctaText !== undefined && { ctaText: dto.ctaText ?? null }),
-      ...(dto.link !== undefined && { link: dto.link ?? null }),
+      ...(dto.subtitle !== undefined && {
+        subtitle: this.normalizeText(dto.subtitle),
+      }),
+      ...(dto.ctaText !== undefined && {
+        ctaText: this.normalizeText(dto.ctaText),
+      }),
+      ...(dto.link !== undefined && { link: this.normalizeText(dto.link) }),
       ...(dto.sortOrder !== undefined && { sortOrder: dto.sortOrder }),
       ...(dto.isActive !== undefined && { isActive: dto.isActive }),
       ...(dto.imageOnly !== undefined && { imageOnly: dto.imageOnly }),

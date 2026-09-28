@@ -150,3 +150,45 @@ describe('UpdateContentBlockDto — mobileMediaAssetId validation', () => {
     expect(errors.some((e) => e.property === 'mobileMediaAssetId')).toBe(true);
   });
 });
+
+describe('UpdateContentBlockDto — subtitle/ctaText/link validation', () => {
+  function buildUpdate(
+    overrides: Record<string, unknown> = {},
+  ): UpdateContentBlockDto {
+    return plainToInstance(UpdateContentBlockDto, { ...overrides });
+  }
+
+  it.each(['subtitle', 'ctaText', 'link'])(
+    'accepts null (explicit clear) for %s',
+    async (field) => {
+      const errors = await validate(buildUpdate({ [field]: null }));
+      expect(errors.some((e) => e.property === field)).toBe(false);
+    },
+  );
+
+  it.each(['subtitle', 'ctaText', 'link'])(
+    'accepts an empty string for %s',
+    async (field) => {
+      const errors = await validate(buildUpdate({ [field]: '' }));
+      expect(errors.some((e) => e.property === field)).toBe(false);
+    },
+  );
+
+  it.each(['subtitle', 'ctaText', 'link'])(
+    'rejects a non-string value for %s',
+    async (field) => {
+      const errors = await validate(buildUpdate({ [field]: 42 }));
+      expect(errors.some((e) => e.property === field)).toBe(true);
+    },
+  );
+
+  it('rejects a ctaText longer than 100 characters', async () => {
+    const errors = await validate(buildUpdate({ ctaText: 'x'.repeat(101) }));
+    expect(errors.some((e) => e.property === 'ctaText')).toBe(true);
+  });
+
+  it('accepts a ctaText at exactly 100 characters', async () => {
+    const errors = await validate(buildUpdate({ ctaText: 'x'.repeat(100) }));
+    expect(errors.some((e) => e.property === 'ctaText')).toBe(false);
+  });
+});
