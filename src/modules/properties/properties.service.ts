@@ -302,6 +302,12 @@ export class PropertiesService {
           ? (dto.constructionStatus ?? null)
           : null,
       status: dto.status,
+      // Set once, on creation, same rule update() uses below: null unless
+      // the row starts out public.
+      publishedAt:
+        dto.status !== undefined && this.isPublicStatus(dto.status)
+          ? new Date()
+          : null,
       price: dto.price,
       currency: dto.currency ?? 'IDR',
       bedrooms: dto.bedrooms ?? null,
@@ -383,6 +389,13 @@ export class PropertiesService {
           }
         : { handoverDate: null, constructionStatus: null }),
       ...(dto.status !== undefined && { status: dto.status }),
+      // Stamped once, the first time the listing goes public — never
+      // overwritten by a later unpublish/republish. Mirrors
+      // ArticlesService.update()'s identical rule for Article.publishedAt.
+      ...(property.publishedAt === null &&
+        this.isPublicStatus(dto.status ?? property.status) && {
+          publishedAt: new Date(),
+        }),
       ...(dto.price !== undefined && { price: dto.price }),
       ...(dto.currency !== undefined && { currency: dto.currency }),
       ...(dto.bedrooms !== undefined && { bedrooms: dto.bedrooms ?? null }),
@@ -409,6 +422,7 @@ export class PropertiesService {
     if (dto.images === undefined) {
       Object.assign(property, fieldChanges);
       await this.propertiesRepo.save(property);
+      await this.touchUpdatedAt(this.propertiesRepo, id);
       await this.cache?.bust();
       return this.adminFindOne(id);
     }
@@ -428,6 +442,7 @@ export class PropertiesService {
       const propertyRepo = queryRunner.manager.getRepository(Property);
       Object.assign(property, fieldChanges);
       await propertyRepo.save(property);
+      await this.touchUpdatedAt(propertyRepo, id);
       await this.applyImageReconcile(queryRunner.manager, id, imagePlan);
       await queryRunner.commitTransaction();
     } catch (err) {
@@ -502,6 +517,7 @@ export class PropertiesService {
     });
 
     const saved = await this.propertyImagesRepo.save(image);
+    await this.touchUpdatedAt(this.propertiesRepo, propertyId);
     await this.cache?.bust();
     return this.toImageResponse({ ...saved, mediaAsset: asset });
   }
@@ -524,6 +540,7 @@ export class PropertiesService {
     });
 
     const saved = await this.propertyImagesRepo.save(image);
+    await this.touchUpdatedAt(this.propertiesRepo, propertyId);
     await this.cache?.bust();
 
     const withAsset = await this.propertyImagesRepo.findOne({
@@ -538,6 +555,7 @@ export class PropertiesService {
     const mediaAssetId = image.mediaAssetId;
 
     await this.propertyImagesRepo.remove(image);
+    await this.touchUpdatedAt(this.propertiesRepo, propertyId);
 
     if (mediaAssetId) {
       await this.mediaService.delete(mediaAssetId);
@@ -547,6 +565,29 @@ export class PropertiesService {
   }
 
   // ─── Private helpers ─────────────────────────────────────────────────────────
+
+  private isPublicStatus(status: PropertyStatus): boolean {
+    return (PUBLIC_PROPERTY_STATUSES as readonly PropertyStatus[]).includes(
+      status,
+    );
+  }
+
+  /**
+   * Bumps `properties.updatedAt` via the DB clock (not a JS `Date`, so it
+   * lands exactly as `@UpdateDateColumn` itself would write it), regardless
+   * of whether the save that triggered it actually changed a column on the
+   * `properties` row. An amenities-only edit (a join table) or an
+   * images-only edit (`property_images`) leaves every `properties` column
+   * unchanged, so TypeORM's change-detection inside `save()` would
+   * otherwise skip the UPDATE and leave "Tanggal diperbaharui" stale on the
+   * web even though the admin really did save something.
+   */
+  private async touchUpdatedAt(
+    repo: Repository<Property>,
+    id: string,
+  ): Promise<void> {
+    await repo.update(id, { updatedAt: () => 'CURRENT_TIMESTAMP' });
+  }
 
   private async adminFindOneRaw(id: string): Promise<Property> {
     const property = await this.propertiesRepo.findOne({ where: { id } });

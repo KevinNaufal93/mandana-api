@@ -67,6 +67,8 @@ interface PropertyDetailBase extends PropertyCard {
   } | null;
   createdAt: Date;
   updatedAt: Date;
+  /** Null until the listing's first publish — see Property.publishedAt. */
+  publishedAt: Date | null;
 }
 
 /**
@@ -217,6 +219,7 @@ export class PropertyMapper {
         : null,
       createdAt: p.createdAt,
       updatedAt: p.updatedAt,
+      publishedAt: p.publishedAt,
     };
 
     if (opts.exact) {

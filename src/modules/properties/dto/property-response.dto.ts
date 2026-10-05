@@ -215,6 +215,15 @@ export class PropertyDetailDto {
 
   @ApiProperty() createdAt!: Date;
   @ApiProperty() updatedAt!: Date;
+  @ApiProperty({
+    type: String,
+    format: 'date-time',
+    nullable: true,
+    description:
+      "Null until the listing's first publish. Stable across an " +
+      'unpublish/republish cycle, unlike `updatedAt`.',
+  })
+  publishedAt!: Date | null;
 }
 
 export class PropertyDetailResponseDto {

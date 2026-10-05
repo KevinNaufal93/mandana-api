@@ -66,6 +66,16 @@ export class Property extends BaseEntity {
   })
   status!: PropertyStatus;
 
+  /**
+   * First time this listing went public (status moved into
+   * PUBLIC_PROPERTY_STATUSES). Set once and left alone across an
+   * unpublish/republish cycle — unlike `updatedAt`, which moves on every
+   * save. Null for a property that has never been public. Mirrors
+   * `Article.publishedAt`.
+   */
+  @Column({ name: 'published_at', type: 'timestamptz', nullable: true })
+  publishedAt!: Date | null;
+
   @Column({ type: 'numeric', precision: 15, scale: 2 })
   price!: number;
 
