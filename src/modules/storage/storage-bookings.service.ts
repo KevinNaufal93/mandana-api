@@ -74,11 +74,38 @@ export class StorageBookingsService {
   async findOneOrFail(id: string): Promise<StorageBooking> {
     const booking = await this.bookingRepo.findOne({
       where: { id },
-      relations: { facility: true, unitType: true, confirmedBy: true },
+      relations: {
+        facility: true,
+        unitType: true,
+        confirmedBy: true,
+        primaryBooking: true,
+      },
     });
     if (!booking)
       throw new NotFoundException(`Storage booking ${id} not found`);
     return booking;
+  }
+
+  /**
+   * Every other booking from the same cart (see entities/storage-booking
+   * .entity.ts's `primaryBooking` doc) — the root (primary) booking plus
+   * every sibling pointing at it, minus `booking` itself. `unitType` is the
+   * only relation loaded besides the booking's own columns — just enough
+   * for StorageLinkedBookingDto.
+   *
+   * Only called from the single-booking admin endpoints (GET :id and the
+   * four transition endpoints) — the admin bookings LIST never calls this,
+   * an extra query per row would make a page of bookings expensive for a
+   * marker nobody's asked to see there.
+   */
+  async findLinked(booking: StorageBooking): Promise<StorageBooking[]> {
+    const rootId = booking.primaryBookingId ?? booking.id;
+    const group = await this.bookingRepo.find({
+      where: [{ id: rootId }, { primaryBookingId: rootId }],
+      relations: { unitType: true },
+      order: { createdAt: 'ASC' },
+    });
+    return group.filter((b) => b.id !== booking.id);
   }
 
   /**
@@ -163,11 +190,43 @@ export class StorageBookingsService {
    * against overselling lives entirely in confirm() below.
    */
   async create(dto: CreateStorageBookingDto): Promise<StorageBooking> {
+    if (
+      dto.declaredValue !== undefined &&
+      dto.primaryBookingReference !== undefined
+    ) {
+      throw new BadRequestException(
+        'Provide at most one of declaredValue or primaryBookingReference, not both',
+      );
+    }
+
     const { facility, unitType, inventory, totalUnits } =
       await this.storageService.resolveBookableInventory(
         dto.facilitySlug,
         dto.unitTypeSlug,
       );
+
+    // A multi-size cart becomes several sibling booking requests — the
+    // first carries declaredValue (below), every later one links back here
+    // via primaryBookingReference instead of declaring its own value. See
+    // entities/storage-booking.entity.ts's primaryBooking doc.
+    let primaryBookingId: string | null = null;
+    if (dto.primaryBookingReference) {
+      const primary = await this.bookingRepo.findOne({
+        where: { reference: dto.primaryBookingReference },
+      });
+      const isValidPrimary =
+        primary != null &&
+        primary.email.toLowerCase() === dto.email.toLowerCase() &&
+        primary.facilityId === facility.id &&
+        primary.status === StorageBookingStatus.PENDING &&
+        primary.primaryBookingId === null;
+      if (!isValidPrimary) {
+        throw new BadRequestException(
+          'primaryBookingReference must be an existing pending booking at the same facility, under the same email, that is not itself linked to another booking',
+        );
+      }
+      primaryBookingId = primary.id;
+    }
 
     const quantity = dto.quantity ?? 1;
     if (quantity > totalUnits) {
@@ -203,9 +262,12 @@ export class StorageBookingsService {
       );
     }
 
-    const { insurancePct } = await this.settingsService.get();
+    const { insuranceBps } = await this.settingsService.get();
     const priced = storageQuote(rates, quantity, duration, durationUnit, {
-      insurancePct,
+      insuranceBps,
+      // A sibling booking (primaryBookingId set) never carries its own
+      // declaredValue — its insurance was already charged on the primary.
+      declaredValue: primaryBookingId ? undefined : dto.declaredValue,
     });
     const endDate =
       durationUnit === StorageDurationUnit.WEEK
@@ -231,8 +293,14 @@ export class StorageBookingsService {
         monthlyRate: rates.monthlyRate,
         subtotal: priced.subtotal,
         discountAmount: priced.discountAmount,
-        insurancePct: priced.insurancePct,
+        declaredValue: priced.declaredValue,
+        // Stored directly from the settings read above rather than derived
+        // back from priced.insurancePct (a percent) — priced.insurancePct
+        // is insuranceBps / 100, and multiplying a float back by 100 to
+        // recover an exact integer bps risks floating-point drift.
+        insuranceBps,
         insuranceAmount: priced.insuranceAmount,
+        primaryBookingId,
         total: priced.total,
       });
 

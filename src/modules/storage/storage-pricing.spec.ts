@@ -15,8 +15,8 @@ const rateWithWeekly = {
 
 describe('storageQuote — rent math (no duration discount)', () => {
   it('matches the original 4-arg (rate, quantity, durationMonths) call shape, with no insurance by default', () => {
-    // The 4th positional arg (`unit`) defaults to 'month'; insurancePct
-    // defaults to 0 via STORAGE_DEFAULTS, so total === subtotal here.
+    // The 4th positional arg (`unit`) defaults to 'month'; insuranceBps
+    // defaults to 0 and no declaredValue is passed, so total === subtotal.
     expect(storageQuote(rate, 1, 6)).toEqual({
       monthlyRate: 650_000,
       quantity: 1,
@@ -28,6 +28,7 @@ describe('storageQuote — rent math (no duration discount)', () => {
       subtotal: 3_900_000,
       discountPct: 0,
       discountAmount: 0,
+      declaredValue: null,
       insurancePct: 0,
       insuranceAmount: 0,
       total: 3_900_000,
@@ -58,45 +59,109 @@ describe('storageQuote — rent math (no duration discount)', () => {
   });
 });
 
-describe('storageQuote — insurance', () => {
-  it('adds nothing to the total when insurancePct is 0 (the default)', () => {
-    const result = storageQuote(rate, 2, 2, 'month', { insurancePct: 0 });
+describe('storageQuote — insurance (on declared goods value, not rent)', () => {
+  it('adds nothing to the total when insuranceBps is 0 (the default), even with a declaredValue', () => {
+    const result = storageQuote(rate, 2, 2, 'month', {
+      insuranceBps: 0,
+      declaredValue: 50_000_000,
+    });
     expect(result.insuranceAmount).toBe(0);
     expect(result.total).toBe(result.subtotal);
   });
 
-  it('matches the worked example: 2 units x 2 months at a rate totalling 1,000,000, 20% insurance', () => {
-    // unitRate * quantity * duration = 250_000 * 2 * 2 = 1,000,000 exactly.
+  it('adds nothing to the total when declaredValue is absent, even with insuranceBps set', () => {
+    const result = storageQuote(rate, 2, 2, 'month', { insuranceBps: 2000 });
+    expect(result.declaredValue).toBeNull();
+    expect(result.insuranceAmount).toBe(0);
+    expect(result.total).toBe(result.subtotal);
+  });
+
+  it('matches the worked example: 50,000,000 declared value at 20% (2000 bps)', () => {
     const result = storageQuote({ monthlyRate: 250_000 }, 2, 2, 'month', {
-      insurancePct: 20,
+      insuranceBps: 2000,
+      declaredValue: 50_000_000,
     });
     expect(result.subtotal).toBe(1_000_000);
+    expect(result.declaredValue).toBe(50_000_000);
     expect(result.insurancePct).toBe(20);
-    expect(result.insuranceAmount).toBe(200_000);
-    expect(result.total).toBe(1_200_000);
+    expect(result.insuranceAmount).toBe(10_000_000);
+    expect(result.total).toBe(11_000_000);
+  });
+
+  it('supports a fractional percent rate (50 bps = 0.5%)', () => {
+    const result = storageQuote({ monthlyRate: 250_000 }, 1, 1, 'month', {
+      insuranceBps: 50,
+      declaredValue: 50_000_000,
+    });
+    expect(result.insurancePct).toBe(0.5);
+    expect(result.insuranceAmount).toBe(250_000);
+  });
+
+  it('does not scale with quantity or duration — a one-time premium on declaredValue', () => {
+    const base = storageQuote({ monthlyRate: 250_000 }, 1, 1, 'month', {
+      insuranceBps: 2000,
+      declaredValue: 50_000_000,
+    });
+    const moreQuantity = storageQuote({ monthlyRate: 250_000 }, 5, 1, 'month', {
+      insuranceBps: 2000,
+      declaredValue: 50_000_000,
+    });
+    const moreDuration = storageQuote(
+      { monthlyRate: 250_000 },
+      1,
+      12,
+      'month',
+      {
+        insuranceBps: 2000,
+        declaredValue: 50_000_000,
+      },
+    );
+    expect(moreQuantity.insuranceAmount).toBe(base.insuranceAmount);
+    expect(moreDuration.insuranceAmount).toBe(base.insuranceAmount);
   });
 
   it('rounds insuranceAmount to roundToIdr', () => {
     const result = storageQuote({ monthlyRate: 333_333 }, 1, 1, 'month', {
-      insurancePct: 20,
+      insuranceBps: 2000,
+      declaredValue: 12_345_678,
     });
     expect(result.insuranceAmount % STORAGE_DEFAULTS.roundToIdr).toBe(0);
   });
 
-  it('applies insurance on weekly quotes too', () => {
+  it('applies insurance on weekly quotes too, same declared-value math', () => {
     const result = storageQuote(rateWithWeekly, 1, 3, 'week', {
-      insurancePct: 10,
+      insuranceBps: 1000,
+      declaredValue: 6_000_000,
     });
     expect(result.subtotal).toBe(600_000);
-    expect(result.insuranceAmount).toBe(60_000);
-    expect(result.total).toBe(660_000);
+    expect(result.insuranceAmount).toBe(600_000);
+    expect(result.total).toBe(1_200_000);
   });
 
-  it('produces zero insurance on the zero-quantity/zero-duration clamp', () => {
-    const result = storageQuote(rate, 0, 6, 'month', { insurancePct: 20 });
+  it('produces zero insurance on the zero-quantity/zero-duration clamp, but still reports declaredValue/insurancePct', () => {
+    const result = storageQuote(rate, 0, 6, 'month', {
+      insuranceBps: 2000,
+      declaredValue: 50_000_000,
+    });
+    expect(result.declaredValue).toBe(50_000_000);
     expect(result.insurancePct).toBe(20);
     expect(result.insuranceAmount).toBe(0);
     expect(result.total).toBe(0);
+  });
+
+  it('treats a zero or negative declaredValue the same as absent', () => {
+    expect(
+      storageQuote(rate, 1, 1, 'month', {
+        insuranceBps: 2000,
+        declaredValue: 0,
+      }).declaredValue,
+    ).toBeNull();
+    expect(
+      storageQuote(rate, 1, 1, 'month', {
+        insuranceBps: 2000,
+        declaredValue: -5,
+      }).declaredValue,
+    ).toBeNull();
   });
 });
 

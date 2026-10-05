@@ -97,21 +97,56 @@ export class StorageBooking extends BaseEntity {
 
   // Deprecated — the duration-discount tiers were removed. Never written
   // non-zero again; the column stays because existing rows carry real
-  // history. See insurancePct/insuranceAmount below for what replaced it.
+  // history. See insuranceBps/insuranceAmount below for what replaced it.
   @Column({ name: 'discount_amount', type: 'int', default: 0 })
   discountAmount!: number;
 
-  // Insurance premium snapshotted at booking time — whole-percent rate
-  // (from the storage_settings singleton) and the Rupiah amount it
-  // produced. total = subtotal + insuranceAmount.
-  @Column({ name: 'insurance_pct', type: 'int', default: 0 })
-  insurancePct!: number;
+  // Customer-declared value of the goods being stored, the base insurance
+  // is computed against (NOT the rent — see storage-pricing.ts). Only ever
+  // set on the "primary" booking of a cart — see primaryBooking below; a
+  // sibling booking from the same cart carries this as null. `numeric`
+  // (not `int`) because a declared value can exceed int4's ~2.1B range —
+  // comes back from `pg` as a string, mapped through toNumber() in
+  // storage.mapper.ts, same convention as every other money column here.
+  @Column({
+    name: 'declared_value',
+    type: 'numeric',
+    precision: 14,
+    scale: 0,
+    nullable: true,
+  })
+  declaredValue!: number | null;
+
+  // Insurance premium snapshotted at booking time — basis-point rate (from
+  // the storage_settings singleton; renamed from the whole-percent
+  // insurance_pct by StorageInsuranceOnDeclaredValue1790400000000) and the
+  // Rupiah amount it produced against declaredValue.
+  // total = subtotal + insuranceAmount.
+  @Column({ name: 'insurance_bps', type: 'int', default: 0 })
+  insuranceBps!: number;
 
   @Column({ name: 'insurance_amount', type: 'int', default: 0 })
   insuranceAmount!: number;
 
   @Column({ type: 'int' })
   total!: number;
+
+  // Self-reference linking the sibling bookings a multi-size cart produces
+  // (the storage API has no batch booking endpoint — see
+  // storage-bookings.service.ts#create). The first booking created from a
+  // cart is the "primary" (primaryBooking === null on it — it IS the
+  // primary) and is the only one carrying declaredValue/insurance; every
+  // other size from the same cart sets primaryBookingId to point at it, so
+  // admin/export/PDF can show they belong together. ON DELETE SET NULL
+  // (not RESTRICT, unlike facility/unitType above) — a sibling losing its
+  // link if the primary is ever hard-deleted is acceptable; it must never
+  // block that delete.
+  @ManyToOne(() => StorageBooking, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'primary_booking_id' })
+  primaryBooking!: StorageBooking | null;
+
+  @Column({ name: 'primary_booking_id', nullable: true, type: 'uuid' })
+  primaryBookingId!: string | null;
 
   @Column({ name: 'admin_note', type: 'text', nullable: true })
   adminNote!: string | null;

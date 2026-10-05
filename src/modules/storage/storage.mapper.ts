@@ -20,6 +20,7 @@ import {
   StorageFacilityDto,
   StorageImageDto,
   StorageInventoryDto,
+  StorageLinkedBookingDto,
   StorageSettingsDto,
   StorageUnitDto,
   StorageUnitTypeDto,
@@ -228,7 +229,10 @@ export class StorageMapper {
 
   toSettingsDto(settings: StorageSettings): StorageSettingsDto {
     return {
-      insurancePct: settings.insurancePct,
+      // Stored as whole basis points; the API reports/accepts a percent —
+      // same bps-to-percent convention as property-settings.service.ts's
+      // kprAnnualRateBps.
+      insurancePct: settings.insuranceBps / 100,
       whatsappNumber: settings.whatsappNumber,
     };
   }
@@ -240,9 +244,40 @@ export class StorageMapper {
    * lib/moving/whatsapp.ts's buildMovingWaMessage() in the frontend repo.
    * Plain text, not URL-encoded — the FE combines it with its own
    * Mandana Space number from GET /site-config (see StorageBookingDto.whatsappMessage).
+   *
+   * Three insurance cases, in priority order:
+   *  1. `declaredValue` set — this IS the cart's primary booking. Shows the
+   *     declared value and the insurance computed from it.
+   *  2. `primaryBookingId` set (and no declaredValue) — this is a sibling
+   *     from a multi-size cart; its insurance was charged on the primary
+   *     booking instead. Points the reader at that booking's reference
+   *     (requires `booking.primaryBooking` to be loaded).
+   *  3. Neither, but `insuranceAmount > 0` — a pre-migration booking,
+   *     priced as a percent of rent (declaredValue never existed then).
+   *  4. None of the above — no insurance line at all.
    */
   buildWhatsAppMessage(booking: StorageBooking): string {
     const money = (n: number) => `Rp${n.toLocaleString('id-ID')}`;
+    const pct = (bps: number) => (bps / 100).toLocaleString('id-ID');
+    const insuranceLines = (() => {
+      if (booking.declaredValue != null) {
+        return [
+          `Nilai barang: ${money(booking.declaredValue)}`,
+          `Asuransi (${pct(booking.insuranceBps)}% dari nilai barang): ${money(booking.insuranceAmount)}`,
+        ];
+      }
+      if (booking.primaryBookingId) {
+        const ref =
+          booking.primaryBooking?.reference ?? booking.primaryBookingId;
+        return [`Satu pesanan dengan ${ref} — asuransi tercatat di sana.`];
+      }
+      if (booking.insuranceAmount > 0) {
+        return [
+          `Asuransi (${pct(booking.insuranceBps)}%): ${money(booking.insuranceAmount)}`,
+        ];
+      }
+      return [];
+    })();
     const lines = [
       'Halo Mandana, saya baru saja mengajukan booking Smart Storage.',
       '',
@@ -251,11 +286,7 @@ export class StorageMapper {
       `Ukuran: ${booking.unitType.name} x${booking.quantity}`,
       `Mulai: ${booking.startDate} (${booking.durationUnits} ${UNIT_LABELS[booking.durationUnit]})`,
       `Subtotal: ${money(booking.subtotal)}`,
-      ...(booking.insuranceAmount > 0
-        ? [
-            `Asuransi (${booking.insurancePct}%): ${money(booking.insuranceAmount)}`,
-          ]
-        : []),
+      ...insuranceLines,
       `Total: ${money(booking.total)}`,
       '',
       'Mohon konfirmasi ketersediaan dan langkah selanjutnya.',
@@ -286,16 +317,33 @@ export class StorageMapper {
       monthlyRate: booking.monthlyRate,
       subtotal: booking.subtotal,
       discountAmount: booking.discountAmount,
-      insurancePct: booking.insurancePct,
+      declaredValue: booking.declaredValue,
+      insurancePct: booking.insuranceBps / 100,
       insuranceAmount: booking.insuranceAmount,
       total: booking.total,
+      primaryBookingReference: booking.primaryBooking?.reference ?? null,
       currency: 'IDR',
       createdAt: booking.createdAt,
       whatsappMessage: this.buildWhatsAppMessage(booking),
     };
   }
 
-  toAdminBookingDto(booking: StorageBooking): StorageBookingAdminDto {
+  /** `linked` — every sibling (plus the primary, if `booking` itself is a
+   *  sibling) from the same cart, minus `booking`. Pass `[]` (the default)
+   *  from a list context where fetching it per row would be an N+1 query —
+   *  see StorageBookingsService.findLinked()'s doc comment. */
+  toAdminBookingDto(
+    booking: StorageBooking,
+    linked: StorageBooking[] = [],
+  ): StorageBookingAdminDto {
+    const linkedBookings: StorageLinkedBookingDto[] = linked.map((b) => ({
+      id: b.id,
+      reference: b.reference,
+      status: b.status,
+      unitTypeName: b.unitType.name,
+      quantity: b.quantity,
+      isPrimary: b.primaryBookingId === null,
+    }));
     return {
       id: booking.id,
       reference: booking.reference,
@@ -319,9 +367,12 @@ export class StorageMapper {
       monthlyRate: booking.monthlyRate,
       subtotal: booking.subtotal,
       discountAmount: booking.discountAmount,
-      insurancePct: booking.insurancePct,
+      declaredValue: booking.declaredValue,
+      insurancePct: booking.insuranceBps / 100,
       insuranceAmount: booking.insuranceAmount,
       total: booking.total,
+      primaryBookingReference: booking.primaryBooking?.reference ?? null,
+      linkedBookings,
       adminNote: booking.adminNote,
       confirmedAt: booking.confirmedAt
         ? booking.confirmedAt.toISOString()

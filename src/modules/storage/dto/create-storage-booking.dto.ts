@@ -13,6 +13,7 @@ import {
 } from 'class-validator';
 import { StorageDurationUnit } from '../enums/storage-duration-unit.enum';
 import { ValidStorageDuration } from './storage-duration.validator';
+import { MAX_DECLARED_VALUE } from './quote-storage.dto';
 
 export class CreateStorageBookingDto {
   @ApiProperty({ example: 'Budi Santoso' })
@@ -91,4 +92,27 @@ export class CreateStorageBookingDto {
   })
   @ValidStorageDuration()
   duration?: number;
+
+  @ApiPropertyOptional({
+    example: 50_000_000,
+    minimum: 1,
+    maximum: MAX_DECLARED_VALUE,
+    description:
+      'Customer-declared value (Rupiah) of the goods being stored — insurance is a percentage of THIS, not of the rent. A cart with several sizes becomes several sibling booking requests (see primaryBookingReference); send this ONLY on the first one — it becomes the "primary" booking and carries the insurance for the whole cart. Mutually exclusive with primaryBookingReference.',
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(MAX_DECLARED_VALUE)
+  declaredValue?: number;
+
+  @ApiPropertyOptional({
+    example: 'MDN-STG-A1B2C3',
+    description:
+      'Reference of an already-created PENDING booking from the same cart (same email, same facility) to link this one to as a sibling — see declaredValue above. That booking carries the declaredValue/insurance for the cart; this one is priced with no insurance of its own. Mutually exclusive with declaredValue.',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(20)
+  primaryBookingReference?: string;
 }

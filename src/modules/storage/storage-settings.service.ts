@@ -7,9 +7,11 @@ import { STORAGE_DEFAULTS } from './storage-pricing';
 import { SiteConfigCacheService } from '../site-config/site-config-cache.service';
 
 /**
- * Reads/writes the Smart Storage pricing-policy singleton (insurancePct).
+ * Reads/writes the Smart Storage pricing-policy singleton (insuranceBps).
  * See storage-settings.entity.ts and storage-pricing.ts. Mirrors
- * MovingSettingsService exactly.
+ * MovingSettingsService exactly, except for the pct<->bps conversion on
+ * update()/the mapper — same convention as PropertySettingsService's
+ * kprAnnualRateBps.
  */
 @Injectable()
 export class StorageSettingsService {
@@ -28,7 +30,7 @@ export class StorageSettingsService {
 
     const created = this.repo.create({
       singleton: true,
-      insurancePct: STORAGE_DEFAULTS.insurancePct,
+      insuranceBps: STORAGE_DEFAULTS.insuranceBps,
       whatsappNumber: null,
     });
     return this.repo.save(created);
@@ -38,8 +40,11 @@ export class StorageSettingsService {
     const settings = await this.get();
 
     Object.assign(settings, {
+      // dto.insurancePct is a percent (may carry up to 2 decimals, e.g.
+      // 0.5); stored as whole basis points — same conversion as
+      // PropertySettingsService.update()'s kprAnnualRateBps.
       ...(dto.insurancePct !== undefined && {
-        insurancePct: dto.insurancePct,
+        insuranceBps: Math.round(dto.insurancePct * 100),
       }),
       ...(dto.whatsappNumber !== undefined && {
         whatsappNumber: dto.whatsappNumber.trim() || null,

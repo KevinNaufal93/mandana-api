@@ -466,9 +466,10 @@ export class StorageService {
     }
 
     const quantity = dto.quantity ?? 1;
-    const { insurancePct } = await this.settingsService.get();
+    const { insuranceBps } = await this.settingsService.get();
     const result = storageQuote(rates, quantity, duration, durationUnit, {
-      insurancePct,
+      insuranceBps,
+      declaredValue: dto.declaredValue,
     });
 
     return {

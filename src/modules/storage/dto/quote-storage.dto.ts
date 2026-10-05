@@ -3,6 +3,12 @@ import { IsEnum, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
 import { StorageDurationUnit } from '../enums/storage-duration-unit.enum';
 import { ValidStorageDuration } from './storage-duration.validator';
 
+/** Sanity ceiling for a declared goods value — well inside
+ *  storage_bookings.declared_value's `numeric(14,0)` precision, which is
+ *  only there to rule out a fat-fingered extra digit or two, not to cap a
+ *  legitimate declaration. */
+export const MAX_DECLARED_VALUE = 10_000_000_000; // Rp 10 miliar
+
 export class QuoteStorageDto {
   @ApiProperty({ example: 'bsd-city', description: 'StorageFacility.slug' })
   @IsString()
@@ -49,4 +55,17 @@ export class QuoteStorageDto {
   })
   @ValidStorageDuration()
   duration?: number;
+
+  @ApiPropertyOptional({
+    example: 50_000_000,
+    minimum: 1,
+    maximum: MAX_DECLARED_VALUE,
+    description:
+      'Customer-declared value (Rupiah) of the goods being stored — insurance is a percentage of THIS, not of the rent. Omit to quote with no insurance line regardless of the configured rate.',
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(MAX_DECLARED_VALUE)
+  declaredValue?: number;
 }

@@ -102,8 +102,7 @@ export class StorageFacilityDto {
     number | null;
   @ApiPropertyOptional({ nullable: true, type: String }) openingHours!:
     string | null;
-  @ApiPropertyOptional({ nullable: true, type: String }) phone!:
-    string | null;
+  @ApiPropertyOptional({ nullable: true, type: String }) phone!: string | null;
   @ApiPropertyOptional({ nullable: true, type: String }) metaTitle!:
     string | null;
   @ApiPropertyOptional({ nullable: true, type: String }) metaDescription!:
@@ -274,7 +273,7 @@ export class StorageAvailabilityResponseDto {
 export class StorageSettingsDto {
   @ApiProperty({
     description:
-      'Whole-percent insurance premium applied to every quote/booking subtotal — 20 means 20%. 0 disables the insurance line.',
+      'Insurance premium as a percent of the customer-DECLARED GOODS VALUE, not the rent — 0.5 means 0.5%, may carry decimals. 0 disables the insurance line.',
   })
   insurancePct!: number;
   @ApiProperty({
@@ -340,13 +339,21 @@ export class StorageQuoteDto {
   discountPct!: number;
   @ApiProperty({ description: 'Deprecated — always 0. See discountPct.' })
   discountAmount!: number;
+  @ApiPropertyOptional({
+    nullable: true,
+    type: Number,
+    description:
+      'Customer-declared value (Rupiah) of the goods being stored, echoed back from the request — the base insurance is computed against. Null when not provided on the request (insurance is then 0 regardless of insurancePct).',
+  })
+  declaredValue!: number | null;
   @ApiProperty({
     description:
-      'Whole-percent insurance rate applied to subtotal, from the storage_settings singleton.',
+      'Insurance rate (percent, may carry decimals, e.g. 0.5) applied to declaredValue — NOT to subtotal/rent — from the storage_settings singleton.',
   })
   insurancePct!: number;
   @ApiProperty({
-    description: 'Rupiah — round(subtotal * insurancePct / 100).',
+    description:
+      'Rupiah — round(declaredValue * insurancePct / 100), or 0 when declaredValue is absent.',
   })
   insuranceAmount!: number;
   @ApiProperty({ description: 'Rupiah — subtotal + insuranceAmount' })
@@ -395,17 +402,32 @@ export class StorageBookingDto {
       'Deprecated — the duration-discount tiers were removed. Always 0.',
   })
   discountAmount!: number;
+  @ApiPropertyOptional({
+    nullable: true,
+    type: Number,
+    description:
+      'Customer-declared value (Rupiah) of the goods being stored, at booking time. Set only on a "primary" booking (see primaryBookingReference) — null on a sibling booking from the same cart.',
+  })
+  declaredValue!: number | null;
   @ApiProperty({
     description:
-      'Whole-percent insurance rate applied to subtotal, at booking time.',
+      'Insurance rate (percent, may carry decimals) applied to declaredValue — NOT to subtotal/rent — at booking time.',
   })
   insurancePct!: number;
   @ApiProperty({
-    description: 'Rupiah — round(subtotal * insurancePct / 100).',
+    description:
+      'Rupiah — round(declaredValue * insurancePct / 100), or 0 when declaredValue is null.',
   })
   insuranceAmount!: number;
   @ApiProperty({ description: 'Rupiah — subtotal + insuranceAmount' })
   total!: number;
+  @ApiPropertyOptional({
+    nullable: true,
+    type: String,
+    description:
+      'Reference of this cart\'s "primary" booking (see declaredValue) — null when THIS booking IS the primary. A multi-size cart books one request per size; every sibling after the first points back at the first via this field.',
+  })
+  primaryBookingReference!: string | null;
   @ApiProperty({ example: 'IDR' }) currency!: string;
   @ApiProperty() createdAt!: Date;
   @ApiProperty({
@@ -418,6 +440,22 @@ export class StorageBookingDto {
 export class StorageBookingResponseDto {
   @ApiProperty({ type: StorageBookingDto })
   data!: StorageBookingDto;
+}
+
+/** One row of StorageBookingAdminDto.linkedBookings — a sibling (or the
+ *  primary) from the same multi-size cart. See declaredValue/
+ *  primaryBookingReference on StorageBookingAdminDto. */
+export class StorageLinkedBookingDto {
+  @ApiProperty() id!: string;
+  @ApiProperty() reference!: string;
+  @ApiProperty({ enum: StorageBookingStatus }) status!: StorageBookingStatus;
+  @ApiProperty() unitTypeName!: string;
+  @ApiProperty() quantity!: number;
+  @ApiProperty({
+    description:
+      'True for the one booking in the group carrying declaredValue/insurance.',
+  })
+  isPrimary!: boolean;
 }
 
 export class StorageBookingAdminDto {
@@ -455,17 +493,38 @@ export class StorageBookingAdminDto {
       'Deprecated — the duration-discount tiers were removed. Always 0.',
   })
   discountAmount!: number;
+  @ApiPropertyOptional({
+    nullable: true,
+    type: Number,
+    description:
+      'Customer-declared value (Rupiah) of the goods being stored, at booking time. Set only on a "primary" booking (see primaryBookingReference/linkedBookings) — null on a sibling booking from the same cart.',
+  })
+  declaredValue!: number | null;
   @ApiProperty({
     description:
-      'Whole-percent insurance rate applied to subtotal, at booking time.',
+      'Insurance rate (percent, may carry decimals) applied to declaredValue — NOT to subtotal/rent — at booking time.',
   })
   insurancePct!: number;
   @ApiProperty({
-    description: 'Rupiah — round(subtotal * insurancePct / 100).',
+    description:
+      'Rupiah — round(declaredValue * insurancePct / 100), or 0 when declaredValue is null.',
   })
   insuranceAmount!: number;
   @ApiProperty({ description: 'Rupiah — subtotal + insuranceAmount' })
   total!: number;
+  @ApiPropertyOptional({
+    nullable: true,
+    type: String,
+    description:
+      'Reference of this cart\'s "primary" booking (see declaredValue) — null when THIS booking IS the primary.',
+  })
+  primaryBookingReference!: string | null;
+  @ApiProperty({
+    type: [StorageLinkedBookingDto],
+    description:
+      'Every other booking from the same cart (the primary plus its siblings, minus this one) — empty when this booking was never part of a multi-size cart.',
+  })
+  linkedBookings!: StorageLinkedBookingDto[];
   @ApiPropertyOptional({ nullable: true, type: String }) adminNote!:
     string | null;
   @ApiPropertyOptional({ nullable: true, type: String }) confirmedAt!:

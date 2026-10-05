@@ -215,8 +215,8 @@ never computes storage money client-side — every price shown to a customer
 comes from this endpoint or a booking response.
 
 ```jsonc
-// Request — monthly (unchanged, still accepted)
-{ "facilitySlug": "bsd-city", "unitTypeSlug": "medium", "quantity": 1, "durationMonths": 6 }
+// Request — monthly (unchanged, still accepted), with a declared goods value
+{ "facilitySlug": "bsd-city", "unitTypeSlug": "medium", "quantity": 1, "durationMonths": 6, "declaredValue": 50000000 }
 
 // 200 response
 {
@@ -233,16 +233,17 @@ comes from this endpoint or a booking response.
     "subtotal": 3900000,
     "discountPct": 0,
     "discountAmount": 0,
-    "insurancePct": 20,
-    "insuranceAmount": 780000,
-    "total": 4680000,
+    "declaredValue": 50000000,
+    "insurancePct": 0.5,
+    "insuranceAmount": 250000,
+    "total": 4150000,
     "currency": "IDR"
   }
 }
 ```
 
 ```jsonc
-// Request — weekly (new)
+// Request — weekly (new), no declaredValue
 { "facilitySlug": "bsd-city", "unitTypeSlug": "medium", "quantity": 1, "durationUnit": "week", "duration": 3 }
 
 // 200 response
@@ -260,13 +261,19 @@ comes from this endpoint or a booking response.
     "subtotal": 600000,
     "discountPct": 0,
     "discountAmount": 0,
-    "insurancePct": 20,
-    "insuranceAmount": 120000,
-    "total": 720000,
+    "declaredValue": null,
+    "insurancePct": 0.5,
+    "insuranceAmount": 0,
+    "total": 600000,
     "currency": "IDR"
   }
 }
 ```
+
+No `declaredValue` on the request → `null` on the response and
+`insuranceAmount: 0`, regardless of the configured rate — there's nothing to
+insure. Insurance never scales with `quantity`/`duration`, unlike `subtotal`
+— it's a one-time premium on the declared value.
 
 **Additive, not breaking.** `durationMonths` still works exactly as before
 and is equivalent to `durationUnit: "month"` — provide exactly one of
@@ -281,17 +288,23 @@ with no inventory row at all → `404`. Out-of-range `quantity`/`duration`, or
 sending both/neither of `durationMonths`/`duration` → `400` (global
 `ValidationPipe`, `forbidNonWhitelisted: true`).
 
-**No more duration discount; insurance replaced it.** There used to be a
+**No more duration discount; insurance replaced it — and insurance prices
+off the DECLARED GOODS VALUE, not the rent.** There used to be a
 duration-based discount tier (0% under 3mo, 5% at 3mo+, 10% at 6mo+, 15% at
 12mo+) — it has been removed. `discountPct`/`discountAmount` stay on the
 response, always `0`, so an existing client that only renders its "Diskon
 durasi" row when `discountAmount > 0` needs no change. In its place, every
-quote now carries `insurancePct` (whole-percent, e.g. `20` means 20%) and
-`insuranceAmount` (Rupiah), both computed from the `storage_settings`
-singleton — see `docs/storage-admin-integration.md` §4. `total = subtotal +
-insuranceAmount`; `subtotal` remains rent only. There is still no
-client-side pricing mirror to keep in sync — this endpoint is the only
-source of the numbers.
+quote carries `declaredValue` (Rupiah, echoed back from the optional
+request field — `null` when omitted), `insurancePct` (percent, may carry
+decimals, e.g. `0.5` means 0.5%) and `insuranceAmount` (Rupiah), computed as
+`round(declaredValue * insurancePct / 100)` against the `storage_settings`
+singleton's rate — see `docs/storage-admin-integration.md` §4.
+`total = subtotal + insuranceAmount`; `subtotal` remains rent only.
+`insuranceAmount` is **not** a percentage of `subtotal` — a bigger storage
+unit doesn't mean more valuable goods inside it, and `insuranceAmount` is
+`0` whenever `declaredValue` is omitted, even with a configured rate. There
+is still no client-side pricing mirror to keep in sync — this endpoint is
+the only source of the numbers.
 
 ### `POST /storage/bookings`
 
@@ -310,7 +323,8 @@ reserve a unit** — only a confirmed booking (admin action) takes stock, so
   "unitTypeSlug": "medium",
   "quantity": 1,
   "startDate": "2026-09-01",
-  "durationMonths": 6
+  "durationMonths": 6,
+  "declaredValue": 50000000
 }
 
 // 201 response
@@ -337,9 +351,11 @@ reserve a unit** — only a confirmed booking (admin action) takes stock, so
     "monthlyRate": 650000,
     "subtotal": 3900000,
     "discountAmount": 0,
-    "insurancePct": 20,
-    "insuranceAmount": 780000,
-    "total": 4680000,
+    "declaredValue": 50000000,
+    "insurancePct": 0.5,
+    "insuranceAmount": 250000,
+    "total": 4150000,
+    "primaryBookingReference": null,
     "currency": "IDR",
     "createdAt": "2026-08-13T09:20:00.000Z",
     "whatsappMessage": "Halo Mandana, saya baru saja mengajukan booking Smart Storage.\n\nNo. Referensi: MDN-STG-7K3XQP\n..."
@@ -351,6 +367,21 @@ A weekly booking (`{ "durationUnit": "week", "duration": 3, ... }`) returns
 `"durationMonths": null`, `"endDate"` computed as exactly `7 × duration` days
 after `startDate` (no calendar-month clamping — a week is a fixed-length
 unit), and a `whatsappMessage` reading e.g. `"Mulai: 2026-09-01 (3 minggu)"`.
+
+**Multi-size cart = multiple sibling booking requests, linked.** The storage
+API has no batch booking endpoint — a customer booking two sizes in one
+visit sends two `POST /storage/bookings` requests. Send `declaredValue`
+(and nothing else insurance-related) on the **first** one only; it becomes
+the group's "primary" booking (`primaryBookingReference: null` on itself,
+as above) and carries the whole group's insurance. On every request after
+that, send `primaryBookingReference` set to the first booking's `reference`
+instead of `declaredValue` — that booking is priced with no insurance of
+its own (`declaredValue: null`, `insuranceAmount: 0`) and its response's
+`primaryBookingReference` points back at the first. `primaryBookingReference`
+must name an existing **pending** booking, under the **same email**, at the
+**same facility**, that is not itself linked to another booking — anything
+else is a `400`. `declaredValue` and `primaryBookingReference` are mutually
+exclusive on a single request — sending both is also a `400`.
 
 **`whatsappMessage` is plain text, not a URL.** The API has no business
 WhatsApp number of its own — `NEXT_PUBLIC_MANDANA_WHATSAPP` is (and stays)

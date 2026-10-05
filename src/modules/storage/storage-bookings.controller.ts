@@ -85,7 +85,8 @@ export class StorageBookingsAdminController {
   @ApiOkResponse({ type: StorageBookingAdminResponseDto })
   async findOne(@Param('id', ParseUUIDPipe) id: string) {
     const booking = await this.bookingsService.findOneOrFail(id);
-    return this.mapper.toAdminBookingDto(booking);
+    const linked = await this.bookingsService.findLinked(booking);
+    return this.mapper.toAdminBookingDto(booking, linked);
   }
 
   @Patch(':id/confirm')
@@ -100,7 +101,8 @@ export class StorageBookingsAdminController {
     @CurrentUser() admin: User,
   ) {
     const booking = await this.bookingsService.confirm(id, dto, admin);
-    return this.mapper.toAdminBookingDto(booking);
+    const linked = await this.bookingsService.findLinked(booking);
+    return this.mapper.toAdminBookingDto(booking, linked);
   }
 
   @Patch(':id/reject')
@@ -111,7 +113,8 @@ export class StorageBookingsAdminController {
     @Body() dto: TransitionStorageBookingDto,
   ) {
     const booking = await this.bookingsService.reject(id, dto);
-    return this.mapper.toAdminBookingDto(booking);
+    const linked = await this.bookingsService.findLinked(booking);
+    return this.mapper.toAdminBookingDto(booking, linked);
   }
 
   @Patch(':id/cancel')
@@ -125,7 +128,8 @@ export class StorageBookingsAdminController {
     @Body() dto: TransitionStorageBookingDto,
   ) {
     const booking = await this.bookingsService.cancel(id, dto);
-    return this.mapper.toAdminBookingDto(booking);
+    const linked = await this.bookingsService.findLinked(booking);
+    return this.mapper.toAdminBookingDto(booking, linked);
   }
 
   @Patch(':id/complete')
@@ -139,6 +143,7 @@ export class StorageBookingsAdminController {
     @Body() dto: TransitionStorageBookingDto,
   ) {
     const booking = await this.bookingsService.complete(id, dto);
-    return this.mapper.toAdminBookingDto(booking);
+    const linked = await this.bookingsService.findLinked(booking);
+    return this.mapper.toAdminBookingDto(booking, linked);
   }
 }

@@ -178,7 +178,7 @@ against `startDate`/`endDate` — a booking that started last month still
 matches a `startFrom` in the current month if it hasn't ended yet.
 
 ```jsonc
-// GET /bookings/:id →
+// GET /bookings/:id → the PRIMARY booking of a two-size cart
 { "data": {
   "id": "uuid", "reference": "MDN-STG-7K3XQP", "status": "pending",
   "customerName": "Budi Santoso", "email": "budi@example.com", "phone": "+628123456789",
@@ -188,7 +188,12 @@ matches a `startFrom` in the current month if it hasn't ended yet.
   "startDate": "2026-09-01", "durationMonths": null, "endDate": "2026-09-22",
   "durationUnit": "week", "duration": 3, "unitRate": 200000, "unitLabel": "minggu",
   "monthlyRate": 650000, "subtotal": 600000, "discountAmount": 0,
-  "insurancePct": 20, "insuranceAmount": 120000, "total": 720000,
+  "declaredValue": 50000000, "insurancePct": 0.5, "insuranceAmount": 250000,
+  "total": 850000, "primaryBookingReference": null,
+  "linkedBookings": [
+    { "id": "uuid-2", "reference": "MDN-STG-9Q2WZX", "status": "pending",
+      "unitTypeName": "Small", "quantity": 2, "isPrimary": false }
+  ],
   "adminNote": null, "confirmedAt": null, "confirmedByName": null,
   "createdAt": "...", "updatedAt": "..." } }
 ```
@@ -200,6 +205,17 @@ here — it's the *reference* monthly rate at booking time, not what was
 billed (`unitRate` is what was billed). A monthly booking has
 `durationUnit: "month"`, a real `durationMonths`, and `duration ===
 durationMonths`.
+
+**`linkedBookings` is only on the single-booking endpoints** (`GET
+/bookings/:id` and the four transition endpoints below) — `GET /bookings`
+(the list) always returns `linkedBookings: []`, an N+1 query per row for a
+marker the list view doesn't show. A booking from a multi-size cart has
+`declaredValue`/insurance on exactly one booking in the group (`isPrimary:
+true`, `primaryBookingReference: null` on itself); every other booking in
+`linkedBookings` has `declaredValue: null`, `insuranceAmount: 0`, and its own
+`primaryBookingReference` pointing at the primary's reference. A booking
+that was never part of a multi-size cart has `linkedBookings: []` and
+behaves exactly like a single-booking request always has.
 
 ### Status transitions
 
@@ -231,12 +247,12 @@ Support's `/admin/event-support/settings`.
 
 ```jsonc
 // GET → 200 / PATCH → 200 (body: any subset of these fields)
-{ "data": { "insurancePct": 20 } }
+{ "data": { "insurancePct": 0.5 } }
 ```
 
 | Field | Meaning |
 |---|---|
-| `insurancePct` | Insurance premium as a whole percentage of the rent subtotal — `20` means 20%, **not** basis points (unlike Moving's `MovingAddon.percentBps`, which uses basis points for its own insurance add-on — don't share a formatter between the two). `0` disables the insurance line entirely. |
+| `insurancePct` | Insurance premium as a percentage of the customer-**DECLARED GOODS VALUE**, not the rent — `0.5` means 0.5%, may carry up to 2 decimal places. Stored internally as basis points (`insuranceBps`, rounded: `0.5` → `50`) — same convention as Property's `kprAnnualRateBps`, not the same convention as Moving's `MovingAddon.percentBps` (which prices off its own declared value field, not a singleton rate — don't share a formatter between the two). `0` disables the insurance line entirely. |
 
 This row **auto-seeds** the first time it's read if missing (from
 `insurancePct: 0`) — `GET /admin/storage/settings` can never 404.
@@ -249,10 +265,15 @@ unlike Moving/Event Support, `mandana-web` never computes storage money
 client-side, so there's no client-side estimate that needs these numbers
 ahead of a quote call.
 
-**Insurance is off (`0`) until ops turns it on.** The migration that added
-this table seeds `insurancePct: 0` so deploying the feature changes no
-existing price — someone has to open this page and set a real percentage
-(e.g. `20`) for the insurance line to appear on quotes and bookings.
+**Insurance is off (`0`) until ops turns it on — and the rate RESET TO 0 on
+this feature's migration, even if it was already nonzero.** The old value
+meant "percent of rent"; applying it unchanged to a declared goods value
+would be a nonsensical rate (and likely a much bigger number), so
+`StorageInsuranceOnDeclaredValue1790400000000` resets it to `0` regardless
+of what it was before. Someone has to open this page and set a real
+percentage (e.g. `0.5`) for the insurance line to reappear on quotes and
+bookings — until then, every quote/booking's `declaredValue` is still
+accepted and echoed back, but `insuranceAmount` stays `0`.
 
 ## 8. Money
 
@@ -263,11 +284,15 @@ integers — the same convention as everywhere else in this API, avoiding the
 `formatIDRShort` (or your local equivalent) for display, never `Number()`
 coercion.
 
-A booking's `subtotal`/`discountAmount`/`insurancePct`/`insuranceAmount`/
-`total` are snapshotted at creation time and never recomputed — a later rate
-or settings change never rewrites a historical booking. `subtotal` is rent
-only (`unitRate * quantity * duration`); `total = subtotal +
-insuranceAmount`. **`discountAmount` is deprecated** — the old duration-based
+A booking's `subtotal`/`discountAmount`/`declaredValue`/`insurancePct`/
+`insuranceAmount`/`total` are snapshotted at creation time and never
+recomputed — a later rate or settings change never rewrites a historical
+booking. `subtotal` is rent only (`unitRate * quantity * duration`);
+`total = subtotal + insuranceAmount`, where `insuranceAmount = round(
+declaredValue * insurancePct / 100)` — **against `declaredValue`, never
+`subtotal`**. `declaredValue` is `null` on every booking except the primary
+of a multi-size cart (§6) and on every booking created before this feature
+shipped. **`discountAmount` is deprecated** — the old duration-based
 discount tiers were removed, so it is always `0` on every booking created
 from now on (older bookings keep their real historical value). It stays on
 every response only so an existing client that renders a "Diskon durasi" row

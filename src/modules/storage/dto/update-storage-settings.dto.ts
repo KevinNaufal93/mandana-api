@@ -1,7 +1,7 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
 import {
-  IsInt,
+  IsNumber,
   IsOptional,
   IsString,
   Matches,
@@ -18,14 +18,14 @@ import {
 
 export class UpdateStorageSettingsDto {
   @ApiPropertyOptional({
-    example: 20,
+    example: 0.5,
     minimum: 0,
     maximum: 100,
     description:
-      'Insurance premium as a whole percentage of the rent subtotal — 20 means 20%, not basis points. total = subtotal + round(subtotal * insurancePct / 100). 0 disables the insurance line entirely.',
+      'Insurance premium as a percentage of the customer-DECLARED GOODS VALUE, not the rent — 0.5 means 0.5%, at most 2 decimal places. Stored internally as basis points (rounded: 0.5 -> 50 bps). total = subtotal + round(declaredValue * insurancePct / 100). 0 disables the insurance line entirely.',
   })
   @IsOptional()
-  @IsInt()
+  @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0)
   @Max(100)
   insurancePct?: number;
