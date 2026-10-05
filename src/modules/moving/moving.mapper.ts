@@ -91,6 +91,7 @@ export class MovingMapper {
       roundToIdr: s.roundToIdr,
       bandPct: s.bandPct,
       defaultIncludedKm: s.defaultIncludedKm,
+      whatsappNumber: s.whatsappNumber,
     };
   }
 

@@ -227,7 +227,10 @@ export class StorageMapper {
   // ─── Settings ─────────────────────────────────────────────────────────────
 
   toSettingsDto(settings: StorageSettings): StorageSettingsDto {
-    return { insurancePct: settings.insurancePct };
+    return {
+      insurancePct: settings.insurancePct,
+      whatsappNumber: settings.whatsappNumber,
+    };
   }
 
   // ─── Bookings ─────────────────────────────────────────────────────────────
@@ -236,7 +239,7 @@ export class StorageMapper {
    * Indonesian confirmation message, styled after
    * lib/moving/whatsapp.ts's buildMovingWaMessage() in the frontend repo.
    * Plain text, not URL-encoded — the FE combines it with its own
-   * NEXT_PUBLIC_MANDANA_WHATSAPP number (see StorageBookingDto.whatsappMessage).
+   * Mandana Space number from GET /site-config (see StorageBookingDto.whatsappMessage).
    */
   buildWhatsAppMessage(booking: StorageBooking): string {
     const money = (n: number) => `Rp${n.toLocaleString('id-ID')}`;

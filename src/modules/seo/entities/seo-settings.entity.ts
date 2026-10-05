@@ -103,4 +103,18 @@ export class SeoSettings extends BaseEntity {
 
   @Column({ name: 'default_og_media_asset_id', nullable: true, type: 'uuid' })
   defaultOgMediaAssetId!: string | null;
+
+  /**
+   * Admin-entered WhatsApp number for the General line: Beranda, Tentang
+   * Kami, Artikel, and the fallback for any business whose own number is
+   * empty. Exactly as typed (the website normalizes it for wa.me). Null =
+   * not set; the website then uses its NEXT_PUBLIC_MANDANA_WHATSAPP env value.
+   */
+  @Column({
+    name: 'whatsapp_number',
+    type: 'varchar',
+    length: 32,
+    nullable: true,
+  })
+  whatsappNumber!: string | null;
 }

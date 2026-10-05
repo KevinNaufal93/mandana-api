@@ -1,12 +1,21 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
+import { Transform } from 'class-transformer';
 import {
   IsEmail,
   IsObject,
   IsOptional,
   IsString,
   IsUUID,
+  Matches,
   MaxLength,
+  ValidateIf,
 } from 'class-validator';
+import {
+  WHATSAPP_NUMBER_MAX_LENGTH,
+  WHATSAPP_NUMBER_MESSAGE,
+  WHATSAPP_NUMBER_PATTERN,
+  trimWhatsappNumber,
+} from '../../../common/validation/whatsapp-number';
 
 export class UpdateSeoSettingsDto {
   @ApiPropertyOptional({ example: 'Mandana Property' })
@@ -21,7 +30,22 @@ export class UpdateSeoSettingsDto {
   @MaxLength(32)
   contactPhone?: string;
 
+  @ApiPropertyOptional({
+    example: '+6281234567890',
+    description:
+      'WhatsApp number for the General line (Beranda, Tentang Kami, Artikel, and the fallback for any business left empty). Exactly as typed (the website normalizes it). An empty string clears it, which makes the website fall back to the General number.',
+  })
+  @Transform(trimWhatsappNumber)
+  @IsOptional()
+  @IsString()
+  @MaxLength(WHATSAPP_NUMBER_MAX_LENGTH)
+  @Matches(WHATSAPP_NUMBER_PATTERN, { message: WHATSAPP_NUMBER_MESSAGE })
+  whatsappNumber?: string;
+
   @ApiPropertyOptional({ example: 'hello@mandana.id' })
+  // An empty string means "clear it" (SeoService maps it to null), and the
+  // admin form sends one whenever the box is blank, so it must skip IsEmail.
+  @ValidateIf((o: UpdateSeoSettingsDto) => o.contactEmail !== '')
   @IsOptional()
   @IsEmail()
   @MaxLength(255)

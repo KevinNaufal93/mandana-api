@@ -21,6 +21,7 @@ import {
 } from './moving-bookings.controller';
 import { MediaModule } from '../media/media.module';
 import { NotificationsModule } from '../notifications/notifications.module';
+import { SiteConfigCacheModule } from '../site-config/site-config-cache.module';
 
 @Module({
   imports: [
@@ -35,6 +36,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
     ]),
     MediaModule,
     NotificationsModule,
+    SiteConfigCacheModule,
   ],
   providers: [
     MovingService,

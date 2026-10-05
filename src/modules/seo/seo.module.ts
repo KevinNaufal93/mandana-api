@@ -8,10 +8,17 @@ import { SeoCacheService } from './seo-cache.service';
 import { SeoController } from './seo.controller';
 import { SeoAdminController } from './seo-admin.controller';
 import { MediaModule } from '../media/media.module';
+import { SiteConfigCacheModule } from '../site-config/site-config-cache.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([SeoSettings, PageSeo]), MediaModule],
+  imports: [
+    TypeOrmModule.forFeature([SeoSettings, PageSeo]),
+    MediaModule,
+    SiteConfigCacheModule,
+  ],
   providers: [SeoService, SeoMapper, SeoCacheService],
   controllers: [SeoController, SeoAdminController],
+  // SiteConfigService reads the General WhatsApp number through getSettings().
+  exports: [SeoService],
 })
 export class SeoModule {}

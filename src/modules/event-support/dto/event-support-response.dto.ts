@@ -179,6 +179,13 @@ export class EventSupportSettingsDto {
   priceIncludesJabodetabekDelivery!: boolean;
   @ApiPropertyOptional({ nullable: true, type: String })
   outsideJabodetabekNote!: string | null;
+  @ApiProperty({
+    nullable: true,
+    type: String,
+    description:
+      'WhatsApp number for Mandana Living (Event Support), as typed by an admin. Null = not set.',
+  })
+  whatsappNumber!: string | null;
 }
 
 export class EventSupportSettingsResponseDto {
@@ -229,7 +236,7 @@ export class EventQuoteDto {
   @ApiProperty({ example: 'IDR' }) currency!: string;
   @ApiProperty({
     description:
-      'Prefilled Indonesian WhatsApp message; the FE appends its own number',
+      'Prefilled Indonesian WhatsApp message; the FE appends the Mandana Living number from GET /site-config',
   })
   whatsappMessage!: string;
 }
@@ -351,7 +358,7 @@ export class EventBookingPublicDto {
   @ApiProperty() createdAt!: Date;
   @ApiProperty({
     description:
-      'Prefilled Indonesian WhatsApp message, including the booking reference; the FE appends its own number',
+      'Prefilled Indonesian WhatsApp message, including the booking reference; the FE appends the Mandana Living number from GET /site-config',
   })
   whatsappMessage!: string;
 }

@@ -28,6 +28,7 @@ import { ArticlesModule } from './modules/articles/articles.module';
 import { SeoModule } from './modules/seo/seo.module';
 import { LegalModule } from './modules/legal/legal.module';
 import { PageImagesModule } from './modules/page-images/page-images.module';
+import { SiteConfigModule } from './modules/site-config/site-config.module';
 
 @Module({
   imports: [
@@ -80,6 +81,7 @@ import { PageImagesModule } from './modules/page-images/page-images.module';
     SeoModule,
     LegalModule,
     PageImagesModule,
+    SiteConfigModule,
   ],
   providers: [
     // Global JWT guard: all routes protected by default; @Public() opts out

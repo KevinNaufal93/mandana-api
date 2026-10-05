@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { EventSupportSettings } from './entities/event-support-settings.entity';
 import { UpdateEventSupportSettingsDto } from './dto/update-event-support-settings.dto';
+import { SiteConfigCacheService } from '../site-config/site-config-cache.service';
 
 /**
  * Reads/writes the Event Support settings singleton. Once also served the
@@ -17,6 +18,7 @@ export class EventSupportSettingsService {
   constructor(
     @InjectRepository(EventSupportSettings)
     private readonly repo: Repository<EventSupportSettings>,
+    private readonly siteConfigCache: SiteConfigCacheService,
   ) {}
 
   /** Loads the singleton row, seeding it on first read if the migration's
@@ -30,6 +32,7 @@ export class EventSupportSettingsService {
       singleton: true,
       priceIncludesJabodetabekDelivery: true,
       outsideJabodetabekNote: null,
+      whatsappNumber: null,
     });
     return this.repo.save(created);
   }
@@ -46,8 +49,13 @@ export class EventSupportSettingsService {
       ...(dto.outsideJabodetabekNote !== undefined && {
         outsideJabodetabekNote: dto.outsideJabodetabekNote ?? null,
       }),
+      ...(dto.whatsappNumber !== undefined && {
+        whatsappNumber: dto.whatsappNumber.trim() || null,
+      }),
     });
 
-    return this.repo.save(settings);
+    const saved = await this.repo.save(settings);
+    await this.siteConfigCache.bust();
+    return saved;
   }
 }

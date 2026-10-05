@@ -6,6 +6,7 @@ import { PageSeo } from './entities/page-seo.entity';
 export type SeoSettingsPayload = {
   organizationName: string;
   contactPhone: string | null;
+  whatsappNumber: string | null;
   contactEmail: string | null;
   streetAddress: string | null;
   addressLocality: string | null;
@@ -37,6 +38,7 @@ export class SeoMapper {
     return {
       organizationName: settings.organizationName,
       contactPhone: settings.contactPhone,
+      whatsappNumber: settings.whatsappNumber,
       contactEmail: settings.contactEmail,
       streetAddress: settings.streetAddress,
       addressLocality: settings.addressLocality,

@@ -141,6 +141,13 @@ export class MovingSettingsDto {
     description: 'Fallback included-km when a truck class sets none',
   })
   defaultIncludedKm!: number;
+  @ApiProperty({
+    nullable: true,
+    type: String,
+    description:
+      'WhatsApp number for Mandana Move, as typed by an admin. Null = not set.',
+  })
+  whatsappNumber!: string | null;
 }
 
 export class MovingSettingsResponseDto {

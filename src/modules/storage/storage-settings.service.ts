@@ -4,6 +4,7 @@ import { Repository } from 'typeorm';
 import { StorageSettings } from './entities/storage-settings.entity';
 import { UpdateStorageSettingsDto } from './dto/update-storage-settings.dto';
 import { STORAGE_DEFAULTS } from './storage-pricing';
+import { SiteConfigCacheService } from '../site-config/site-config-cache.service';
 
 /**
  * Reads/writes the Smart Storage pricing-policy singleton (insurancePct).
@@ -15,6 +16,7 @@ export class StorageSettingsService {
   constructor(
     @InjectRepository(StorageSettings)
     private readonly repo: Repository<StorageSettings>,
+    private readonly siteConfigCache: SiteConfigCacheService,
   ) {}
 
   /** Loads the singleton row, seeding it on first read if the migration's
@@ -27,6 +29,7 @@ export class StorageSettingsService {
     const created = this.repo.create({
       singleton: true,
       insurancePct: STORAGE_DEFAULTS.insurancePct,
+      whatsappNumber: null,
     });
     return this.repo.save(created);
   }
@@ -38,8 +41,13 @@ export class StorageSettingsService {
       ...(dto.insurancePct !== undefined && {
         insurancePct: dto.insurancePct,
       }),
+      ...(dto.whatsappNumber !== undefined && {
+        whatsappNumber: dto.whatsappNumber.trim() || null,
+      }),
     });
 
-    return this.repo.save(settings);
+    const saved = await this.repo.save(settings);
+    await this.siteConfigCache.bust();
+    return saved;
   }
 }

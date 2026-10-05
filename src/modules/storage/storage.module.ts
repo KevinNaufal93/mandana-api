@@ -27,6 +27,7 @@ import { StorageSettingsAdminController } from './storage-settings.controller';
 import { MediaModule } from '../media/media.module';
 import { AuthModule } from '../auth/auth.module';
 import { NotificationsModule } from '../notifications/notifications.module';
+import { SiteConfigCacheModule } from '../site-config/site-config-cache.module';
 
 @Module({
   imports: [
@@ -42,6 +43,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
     // For AuthService.issueStreamTicket() — see POST /admin/storage/stream-ticket.
     AuthModule,
     NotificationsModule,
+    SiteConfigCacheModule,
   ],
   providers: [
     StorageService,
@@ -61,6 +63,6 @@ import { NotificationsModule } from '../notifications/notifications.module';
     StorageBookingsAdminController,
     StorageSettingsAdminController,
   ],
-  exports: [StorageService],
+  exports: [StorageService, StorageSettingsService],
 })
 export class StorageModule {}

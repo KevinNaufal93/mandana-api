@@ -277,6 +277,13 @@ export class StorageSettingsDto {
       'Whole-percent insurance premium applied to every quote/booking subtotal — 20 means 20%. 0 disables the insurance line.',
   })
   insurancePct!: number;
+  @ApiProperty({
+    nullable: true,
+    type: String,
+    description:
+      'WhatsApp number for Mandana Space, as typed by an admin. Null = not set.',
+  })
+  whatsappNumber!: string | null;
 }
 
 export class StorageSettingsResponseDto {
@@ -403,7 +410,7 @@ export class StorageBookingDto {
   @ApiProperty() createdAt!: Date;
   @ApiProperty({
     description:
-      "Pre-built Indonesian message text (not yet URL-encoded). The API has no business WhatsApp number of its own — combine this with the FE's existing NEXT_PUBLIC_MANDANA_WHATSAPP the same way lib/moving/whatsapp.ts's buildMovingWaLink() does: `https://wa.me/<number>?text=${encodeURIComponent(whatsappMessage)}`.",
+      "Pre-built Indonesian message text (not yet URL-encoded). Combine this with the Mandana Space number from GET /site-config (whatsapp.storage) the same way lib/moving/whatsapp.ts's buildMovingWaLink() does: `https://wa.me/<number>?text=${encodeURIComponent(whatsappMessage)}`.",
   })
   whatsappMessage!: string;
 }

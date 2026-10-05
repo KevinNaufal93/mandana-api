@@ -28,4 +28,17 @@ export class MovingSettings extends BaseEntity {
 
   @Column({ name: 'default_included_km', type: 'int', default: 5 })
   defaultIncludedKm!: number;
+
+  /**
+   * Admin-entered WhatsApp number for Mandana Move, exactly as typed (the website
+   * normalizes it for wa.me). Null = not set; the website then falls back to
+   * the General number, then to its NEXT_PUBLIC_MANDANA_WHATSAPP env value.
+   */
+  @Column({
+    name: 'whatsapp_number',
+    type: 'varchar',
+    length: 32,
+    nullable: true,
+  })
+  whatsappNumber!: string | null;
 }

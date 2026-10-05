@@ -47,6 +47,7 @@ const settings: MovingSettings = {
   roundToIdr: 10_000,
   bandPct: 10,
   defaultIncludedKm: 5,
+  whatsappNumber: null,
   createdAt: new Date(),
   updatedAt: new Date(),
 };

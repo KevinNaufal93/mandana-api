@@ -117,6 +117,7 @@ export class EventSupportMapper {
       priceIncludesJabodetabekDelivery:
         settings.priceIncludesJabodetabekDelivery,
       outsideJabodetabekNote: settings.outsideJabodetabekNote,
+      whatsappNumber: settings.whatsappNumber,
     };
   }
 
@@ -126,7 +127,7 @@ export class EventSupportMapper {
    * Indonesian cart-confirmation message, styled after
    * StorageMapper.buildWhatsAppMessage() / lib/moving/whatsapp.ts in the
    * frontend repo. Plain text, not URL-encoded — the FE combines it with
-   * its own NEXT_PUBLIC_MANDANA_WHATSAPP number.
+   * the Mandana Living number from GET /site-config.
    *
    * `reference` is only passed for a booking that has already been
    * persisted (toBookingPublicDto below) — its presence swaps the greeting

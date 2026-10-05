@@ -12,6 +12,7 @@ import { SeoSettings } from './entities/seo-settings.entity';
 import { PageSeo } from './entities/page-seo.entity';
 import { SeoMapper } from './seo.mapper';
 import { SeoCacheService } from './seo-cache.service';
+import { SiteConfigCacheService } from '../site-config/site-config-cache.service';
 import { SeoPageKey, SEO_PAGE_KEYS } from './enums/seo-page-key.enum';
 
 function makeSettings(overrides: Partial<SeoSettings> = {}): SeoSettings {
@@ -22,6 +23,7 @@ function makeSettings(overrides: Partial<SeoSettings> = {}): SeoSettings {
     singleton: true,
     organizationName: 'Mandana Property',
     contactPhone: null,
+    whatsappNumber: null,
     contactEmail: null,
     streetAddress: null,
     addressLocality: null,
@@ -72,6 +74,7 @@ describe('SeoService', () => {
     findOneOrFail: jest.Mock<Promise<PageSeo>, [unknown?]>;
   };
   let cache: { get: jest.Mock; set: jest.Mock; bust: jest.Mock };
+  let siteConfigCache: { bust: jest.Mock };
 
   beforeEach(async () => {
     settingsRepo = {
@@ -93,6 +96,7 @@ describe('SeoService', () => {
       set: jest.fn(),
       bust: jest.fn(),
     };
+    siteConfigCache = { bust: jest.fn() };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -109,6 +113,7 @@ describe('SeoService', () => {
           },
         },
         { provide: SeoCacheService, useValue: cache },
+        { provide: SiteConfigCacheService, useValue: siteConfigCache },
       ],
     }).compile();
 
@@ -148,6 +153,7 @@ describe('SeoService', () => {
       });
 
       expect(cache.bust).toHaveBeenCalled();
+      expect(siteConfigCache.bust).toHaveBeenCalled();
       expect(settingsRepo.findOneOrFail).toHaveBeenCalledWith(
         expect.objectContaining({ relations: { defaultOgMediaAsset: true } }),
       );
@@ -158,14 +164,44 @@ describe('SeoService', () => {
       settingsRepo.findOne.mockResolvedValue(
         makeSettings({ contactPhone: '+6281234567890' }),
       );
-      settingsRepo.findOneOrFail.mockImplementation(
-        async () => settingsRepo.save.mock.calls[0][0],
+      settingsRepo.findOneOrFail.mockImplementation(() =>
+        Promise.resolve(settingsRepo.save.mock.calls[0][0]),
       );
 
       await service.updateSettings({ contactPhone: '' });
 
       const saved = settingsRepo.save.mock.calls[0][0];
       expect(saved.contactPhone).toBeNull();
+    });
+
+    it('stores the General WhatsApp number trimmed, and an empty string clears it to null', async () => {
+      settingsRepo.findOne.mockResolvedValue(makeSettings());
+      settingsRepo.findOneOrFail.mockImplementation(() =>
+        Promise.resolve(settingsRepo.save.mock.calls[0][0]),
+      );
+
+      await service.updateSettings({ whatsappNumber: '  +6281234567890 ' });
+      expect(settingsRepo.save.mock.calls[0][0].whatsappNumber).toBe(
+        '+6281234567890',
+      );
+
+      await service.updateSettings({ whatsappNumber: '' });
+      expect(settingsRepo.save.mock.calls[1][0].whatsappNumber).toBeNull();
+    });
+
+    it('leaves the WhatsApp number alone when the field is not in the patch', async () => {
+      settingsRepo.findOne.mockResolvedValue(
+        makeSettings({ whatsappNumber: '+6281234567890' }),
+      );
+      settingsRepo.findOneOrFail.mockImplementation(() =>
+        Promise.resolve(settingsRepo.save.mock.calls[0][0]),
+      );
+
+      await service.updateSettings({ organizationName: 'Renamed' });
+
+      expect(settingsRepo.save.mock.calls[0][0].whatsappNumber).toBe(
+        '+6281234567890',
+      );
     });
   });
 

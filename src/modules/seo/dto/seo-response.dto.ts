@@ -20,6 +20,7 @@ export class SeoImageDto {
 export class SeoSettingsDto {
   @ApiProperty() organizationName!: string;
   @ApiProperty({ nullable: true, type: String }) contactPhone!: string | null;
+  @ApiProperty({ nullable: true, type: String }) whatsappNumber!: string | null;
   @ApiProperty({ nullable: true, type: String }) contactEmail!: string | null;
   @ApiProperty({ nullable: true, type: String }) streetAddress!: string | null;
   @ApiProperty({ nullable: true, type: String }) addressLocality!:

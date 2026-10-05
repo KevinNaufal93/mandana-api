@@ -15,6 +15,7 @@ import {
 import { UpdateSeoSettingsDto } from './dto/update-seo-settings.dto';
 import { UpdatePageSeoDto } from './dto/update-page-seo.dto';
 import { SeoCacheService } from './seo-cache.service';
+import { SiteConfigCacheService } from '../site-config/site-config-cache.service';
 import { SeoMapper, SeoSettingsPayload, PageSeoPayload } from './seo.mapper';
 
 export interface SeoPublicPayload {
@@ -43,6 +44,7 @@ export class SeoService {
     private readonly pageRepo: Repository<PageSeo>,
     private readonly mapper: SeoMapper,
     private readonly cache: SeoCacheService,
+    private readonly siteConfigCache: SiteConfigCacheService,
   ) {}
 
   async getSettings(): Promise<SeoSettings> {
@@ -65,6 +67,9 @@ export class SeoService {
       }),
       ...(dto.contactPhone !== undefined && {
         contactPhone: dto.contactPhone || null,
+      }),
+      ...(dto.whatsappNumber !== undefined && {
+        whatsappNumber: dto.whatsappNumber.trim() || null,
       }),
       ...(dto.contactEmail !== undefined && {
         contactEmail: dto.contactEmail || null,
@@ -95,6 +100,7 @@ export class SeoService {
 
     const saved = await this.settingsRepo.save(settings);
     await this.cache.bust();
+    await this.siteConfigCache.bust();
 
     // Re-fetch: `settings.defaultOgMediaAsset` is stale after changing
     // `defaultOgMediaAssetId` above (still the pre-save relation, or

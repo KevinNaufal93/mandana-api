@@ -4,6 +4,7 @@ import { Repository } from 'typeorm';
 import { MovingSettings } from './entities/moving-settings.entity';
 import { UpdateMovingSettingsDto } from './dto/update-moving-settings.dto';
 import { MOVING_DEFAULTS } from './moving-pricing';
+import { SiteConfigCacheService } from '../site-config/site-config-cache.service';
 
 /**
  * Reads/writes the Moving Support pricing-policy singleton (roundToIdr,
@@ -15,6 +16,7 @@ export class MovingSettingsService {
   constructor(
     @InjectRepository(MovingSettings)
     private readonly repo: Repository<MovingSettings>,
+    private readonly siteConfigCache: SiteConfigCacheService,
   ) {}
 
   /** Loads the singleton row, seeding it on first read if the migration's
@@ -29,6 +31,7 @@ export class MovingSettingsService {
       roundToIdr: MOVING_DEFAULTS.roundToIdr,
       bandPct: MOVING_DEFAULTS.bandPct,
       defaultIncludedKm: MOVING_DEFAULTS.includedKm,
+      whatsappNumber: null,
     });
     return this.repo.save(created);
   }
@@ -42,8 +45,13 @@ export class MovingSettingsService {
       ...(dto.defaultIncludedKm !== undefined && {
         defaultIncludedKm: dto.defaultIncludedKm,
       }),
+      ...(dto.whatsappNumber !== undefined && {
+        whatsappNumber: dto.whatsappNumber.trim() || null,
+      }),
     });
 
-    return this.repo.save(settings);
+    const saved = await this.repo.save(settings);
+    await this.siteConfigCache.bust();
+    return saved;
   }
 }
