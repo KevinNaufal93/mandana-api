@@ -24,14 +24,19 @@ export class HomepageAdminController {
   ) {}
 
   @Get('recommendations')
-  @ApiOperation({ summary: 'List current homepage recommendations (admin)' })
+  @ApiOperation({
+    summary:
+      'List current homepage recommendations (admin) — the public Unggulan (isFeatured) properties',
+  })
   getRecommendations() {
     return this.homepageService.getRecommendations();
   }
 
   @Post('recommendations')
   @ApiOperation({
-    summary: 'Set homepage recommendations (replaces entire list)',
+    summary:
+      'Deprecated, no effect on the site: the homepage now shows Unggulan (isFeatured) properties',
+    deprecated: true,
   })
   setRecommendations(@Body() dto: SetRecommendationsDto) {
     return this.homepageService.setRecommendations(dto);

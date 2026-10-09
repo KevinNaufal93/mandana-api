@@ -233,8 +233,9 @@ images are a single `url` string.
 ## 7. Prerequisites & known gaps
 
 - **API returns empty arrays until content is entered manually** — there is no
-  seed. Insert at least one media asset, property, hero slide, and recommendation
-  row directly in the DB to develop against. Handle empty/loading/error states in
+  seed. Insert at least one media asset, property and hero slide directly in the
+  DB to develop against; `recommendations` lists the public properties with
+  `isFeatured = true` (Unggulan), most recently published first, max 12. Handle empty/loading/error states in
   all components.
 - **Admin user must be created via DB insert** — no public registration endpoint
   exists. Hash the password with bcrypt (rounds=10) and insert into the `users`

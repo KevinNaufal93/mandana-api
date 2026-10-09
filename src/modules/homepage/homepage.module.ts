@@ -9,10 +9,11 @@ import { ContentBlocksModule } from '../content-blocks/content-blocks.module';
 import { CollectionsModule } from '../collections/collections.module';
 import { MediaModule } from '../media/media.module';
 import { PropertiesModule } from '../properties/properties.module';
+import { Property } from '../properties/entities/property.entity';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([HomepageRecommendation]),
+    TypeOrmModule.forFeature([HomepageRecommendation, Property]),
     // Previously this module provided its own HomepageCacheService instance
     // instead of importing the shared module — harmless (the underlying
     // Cache is the app's single global CacheModule singleton either way,

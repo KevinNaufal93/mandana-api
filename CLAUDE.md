@@ -26,7 +26,7 @@ NestJS + TypeORM + Postgres + Redis. It is one of three repos: `mandana-web` (pu
 
 - **Cache the mapped payload, never the entity.** A cache hit comes back through JSON, which turns a `Date` into a string. A cached entity crashed `.toISOString()` on the second read of a legal page, and no unit test noticed.
 - When several unrelated modules bust the same key, put the cache service in its own tiny module (`HomepageCacheModule`, `SiteConfigCacheModule`) to avoid circular imports.
-- Bump the key version (`site-config:v1`, `homepage:v3`) whenever the payload shape changes.
+- Bump the key version (`site-config:v1`, `homepage:v4`) whenever the payload shape changes.
 - Public controllers that serve a cached payload (`/seo`, `/site-config`, `/homepage`) write the response themselves with an ETag/304. Do not `return` it through the interceptor.
 
 ## Migrations

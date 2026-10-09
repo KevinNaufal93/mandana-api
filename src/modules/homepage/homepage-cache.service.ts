@@ -7,8 +7,10 @@ import type { Cache } from 'cache-manager';
 // otherwise keep serving the old shape (missing those fields) for up to
 // its full TTL after deploy, silently, since a missing field doesn't
 // error, it just renders as if the feature isn't live. Bump this again
-// any time the payload's shape changes.
-export const HOMEPAGE_CACHE_KEY = 'homepage:v3';
+// any time the payload's shape changes. v4: recommendations switched from
+// the hand-picked table to Unggulan properties (same shape, new source) —
+// bumped so the switch is live on deploy, not up to a TTL later.
+export const HOMEPAGE_CACHE_KEY = 'homepage:v4';
 
 @Injectable()
 export class HomepageCacheService {
