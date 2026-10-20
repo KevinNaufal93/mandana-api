@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { FindOptionsWhere, In, Repository } from 'typeorm';
 import { StorageUnit } from './entities/storage-unit.entity';
@@ -139,8 +143,23 @@ export class StorageUnitsService {
     return this.findOneOrFail(id);
   }
 
+  /** A unit is "in use" while a booking holds it — status `occupied` with a
+   * `bookingId` (set by StorageBookingsService.confirm, cleared on cancel/
+   * complete). Deleting it would leave a confirmed booking with no unit and
+   * silently drop the facility's counts, so both delete paths refuse. */
+  private isInUse(unit: StorageUnit): boolean {
+    return (
+      unit.status === StorageUnitStatus.OCCUPIED || unit.bookingId !== null
+    );
+  }
+
   async remove(id: string): Promise<void> {
     const unit = await this.findOneOrFail(id);
+    if (this.isInUse(unit)) {
+      throw new ConflictException(
+        `Unit ${unit.code} is occupied by an active booking and cannot be deleted`,
+      );
+    }
     await this.unitRepo.remove(unit);
     await this.availability.publish();
   }
@@ -186,9 +205,10 @@ export class StorageUnitsService {
   }
 
   /** Row-select counterpart to bulkCreate() — atomic: every id must exist
-   * or nothing is deleted, so a caller never has to reconcile a partial
-   * result. Same "name what's missing" shape as findOneOrFail(), just for
-   * a set instead of one id. No occupied-unit guard, same as remove(). */
+   * and none may be occupied, or nothing is deleted, so a caller never has
+   * to reconcile a partial result. Same "name what's missing" shape as
+   * findOneOrFail(), just for a set instead of one id; an occupied unit is a
+   * 409 naming its code(s), like remove(). */
   async bulkRemove(dto: BulkDeleteStorageUnitsDto): Promise<void> {
     const units = await this.unitRepo.find({
       where: { id: In(dto.ids) },
@@ -199,6 +219,15 @@ export class StorageUnitsService {
     if (missing.length > 0) {
       throw new NotFoundException(
         `Storage unit(s) not found: ${missing.join(', ')}`,
+      );
+    }
+
+    const inUse = units.filter((u) => this.isInUse(u));
+    if (inUse.length > 0) {
+      throw new ConflictException(
+        `Unit(s) occupied by an active booking, nothing deleted: ${inUse
+          .map((u) => u.code)
+          .join(', ')}`,
       );
     }
 

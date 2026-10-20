@@ -101,7 +101,7 @@ export class StorageUnitsController {
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({
     summary:
-      'Delete multiple storage units by id. Atomic — 404 naming any id(s) not found, nothing is deleted unless all exist.',
+      'Delete multiple storage units by id. Atomic — 404 naming any id(s) not found, 409 naming any occupied unit(s); nothing is deleted unless all exist and none is occupied.',
   })
   async bulkRemove(@Body() dto: BulkDeleteStorageUnitsDto) {
     await this.unitsService.bulkRemove(dto);
@@ -109,7 +109,10 @@ export class StorageUnitsController {
 
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
-  @ApiOperation({ summary: 'Delete a storage unit' })
+  @ApiOperation({
+    summary:
+      'Delete a storage unit — 409 while it is occupied by an active booking',
+  })
   async remove(@Param('id', ParseUUIDPipe) id: string) {
     await this.unitsService.remove(id);
   }
