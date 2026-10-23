@@ -1,18 +1,18 @@
 # ─── Stage 1: Install deps ────────────────────────────────────────────────────
-FROM node:22-alpine AS deps
+FROM node:22.23.4-alpine AS deps
 WORKDIR /app
 COPY package*.json ./
 RUN npm install --legacy-peer-deps
 
 # ─── Stage 2: Build ───────────────────────────────────────────────────────────
-FROM node:22-alpine AS build
+FROM node:22.23.4-alpine AS build
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 RUN npm run build
 
 # ─── Stage 3: Runtime (slim) ──────────────────────────────────────────────────
-FROM node:22-alpine AS runtime
+FROM node:22.23.4-alpine AS runtime
 WORKDIR /app
 
 # Non-root user for least-privilege

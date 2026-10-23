@@ -73,7 +73,7 @@ Pick a region near the Amplify app, e.g. `ap-southeast-3` (Jakarta) or
     `t4g.small` for the same 2 GB, and switching to it is a cross-architecture
     rebuild, not a resize — the console's "change instance type" won't even
     offer x86 types against an ARM64 AMI. [Dockerfile](../Dockerfile) uses
-    `node:22-alpine` with no arch pinning, and `bcrypt`/`sharp` both ship
+    `node:22.23.4-alpine` with no arch pinning, and `bcrypt`/`sharp` both ship
     ARM64 prebuilds, so there's no compatibility reason to leave Graviton.
   - **Don't "upgrade" to `t4g.medium`** without a measured reason. Measured on
     this deployment, the full stack (API + Postgres + Redis) idles at
@@ -138,6 +138,23 @@ openssl rand -hex 32   # JWT_ACCESS_SECRET / JWT_REFRESH_SECRET (run twice)
 ```
 
 Health check locally on the box: `curl localhost:3000/api/v1/homepage`.
+
+### Updating Node
+
+The [Dockerfile](../Dockerfile) pins an exact Node version (`node:22.23.4-alpine`) in all
+three stages. A floating tag such as `node:22-alpine` is not enough: `up -d --build`
+reuses the base image already cached on the box and never pulls a newer one. To take a
+Node security release, bump the tag in the Dockerfile, commit, push, then on the box:
+
+```bash
+git pull
+docker compose -f docker-compose.prod.yml build --pull api
+docker compose -f docker-compose.prod.yml up -d api
+docker compose -f docker-compose.prod.yml exec api node --version   # expect the pinned version
+```
+
+The API is down for a few seconds while the container is recreated; Postgres and Redis
+are not touched and no migration is needed.
 
 ## 3. CloudFront distribution
 
